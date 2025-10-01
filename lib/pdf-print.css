@@ -1,0 +1,8 @@
+@media print {
+  @page { margin: 16mm; }
+  body { font: 12pt/1.35 system-ui, sans-serif; color: #111; }
+  .no-print { display: none !important; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #ccc; padding: 6px; }
+  h1, h2, h3 { margin: 0 0 8px; }
+}
