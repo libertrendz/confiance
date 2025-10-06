@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import CameraPunch, { type PunchPayload } from "@/components/CameraPunch";
+import CameraPunch, { type PunchPayload } from "../../components/CameraPunch";
 import { createClient } from "@supabase/supabase-js";
 
 // ======= CONFIG =======
@@ -154,7 +154,7 @@ export default function PontoPage() {
         const id = crypto.randomUUID();
         fotoPath = `${empresaId}/${userId}/${id}_${payload.tipo}.jpg`;
         const up = await supabase.storage
-          .from(STORAGE_BUCKET)
+          .from("pontos-fotos")
           .upload(fotoPath, blob, { upsert: false });
         if (up.error) throw up.error;
       }
@@ -173,7 +173,7 @@ export default function PontoPage() {
       if (insertRes.error) {
         // Se falhar no insert, e havia foto, tentamos apagar o upload para não deixar lixo
         if (fotoPath) {
-          await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
+          await supabase.storage.from("pontos-fotos").remove([fotoPath]).catch(() => {});
         }
         throw insertRes.error;
       }
@@ -231,7 +231,7 @@ export default function PontoPage() {
           const id = crypto.randomUUID();
           fotoPath = `${empresaId}/${userId}/${id}_${p.tipo}.jpg`;
           const up = await supabase.storage
-            .from(STORAGE_BUCKET)
+            .from("pontos-fotos")
             .upload(fotoPath, blob, { upsert: false });
           if (up.error) throw up.error;
         }
@@ -248,7 +248,7 @@ export default function PontoPage() {
         });
         if (ins.error) {
           if (fotoPath) {
-            await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
+            await supabase.storage.from("pontos-fotos").remove([fotoPath]).catch(() => {});
           }
           throw ins.error;
         }
@@ -384,7 +384,7 @@ export default function PontoPage() {
         style={{
           marginTop: 16,
           padding: 12,
-          border: "1px solid #eee",
+          border: "1px solid "#eee",
           borderRadius: 8,
         }}
       >
@@ -429,4 +429,3 @@ function thTd(header = true) {
     fontWeight: header ? 600 : 400,
   } as const;
 }
-
