@@ -1,14 +1,25 @@
-export default function Home() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1>CONFIANCE</h1>
-      <p>Escolha:</p>
-      <ul>
-        <li><a href="/login">Login</a></li>
-        <li><a href="/ponto">Ponto</a></li>
-        <li><a href="/adm/pendencias">Pendências (ADM)</a></li>
-        <li><a href="/adm/orcamentos">Orçamentos (ADM)</a></li>
-      </ul>
-    </div>
-  );
+"use client";
+
+import { useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: true, autoRefreshToken: true } }
+);
+
+export default function HomeRedirect() {
+  const router = useRouter();
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) router.replace("/menu");
+      else router.replace("/login");
+    })();
+  }, [router]);
+
+  return <div style={{ padding: 24, fontFamily: "system-ui" }}>A carregar…</div>;
 }
