@@ -1,92 +1,432 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useEffect, useMemo, useState } from "react";
+import CameraPunch, { type PunchPayload } from "@/components/CameraPunch";
+import { createClient } from "@supabase/supabase-js";
 
+// ======= CONFIG =======
+const STORAGE_BUCKET = "pontos-fotos";
+const OFFLINE_KEY = "confiance_pendentes_v1";
+type TipoPonto = "entrada" | "pausa" | "retorno" | "saida";
+
+// ======= SUPABASE CLIENT =======
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
-function useGeolocation() {
-  const [state, setState] = useState<{lat?: number; lon?: number; accuracy?: number; error?: string}>({});
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setState(s => ({ ...s, error: 'Geolocation não suportada' }));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      pos => setState({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }),
-      err => setState({ error: err.message }),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  }, []);
-  return state;
+// ======= TIPOS =======
+type Pendencia = {
+  idLocal: string; // uuid local para controle na fila
+  tipo: TipoPonto;
+  capturado_em: string;
+  geo: { lat: number; lon: number; accuracy: number };
+  // guardamos como dataURL para persistir mesmo após fechar a página
+  fotoDataUrl?: string;
+};
+
+type PontoRow = {
+  id: string;
+  tipo: TipoPonto;
+  created_at: string;
+  capturado_em: string | null;
+  foto_url: string | null;
+  geo_lat: number | null;
+  geo_lon: number | null;
+  geo_accuracy: number | null;
+};
+
+// ======= HELPERS =======
+function readQueue(): Pendencia[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_KEY);
+    return raw ? (JSON.parse(raw) as Pendencia[]) : [];
+  } catch {
+    return [];
+  }
+}
+function writeQueue(list: Pendencia[]) {
+  localStorage.setItem(OFFLINE_KEY, JSON.stringify(list));
+}
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, base64] = dataUrl.split(",");
+  const mime = meta.match(/data:(.*);base64/)?.[1] || "image/jpeg";
+  const bin = atob(base64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+function tipoLabel(t: TipoPonto) {
+  switch (t) {
+    case "entrada":
+      return "Entrada";
+    case "pausa":
+      return "Pausa";
+    case "retorno":
+      return "Retorno";
+    case "saida":
+      return "Saída";
+  }
 }
 
+// ======= PÁGINA =======
 export default function PontoPage() {
-  const geo = useGeolocation();
-  const [foto, setFoto] = useState<File | null>(null);
-  const [empresaId, setEmpresaId] = useState('');
-  const [funcionarioId, setFuncionarioId] = useState('');
+  const [tipo, setTipo] = useState<TipoPonto>("entrada");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [history, setHistory] = useState<PontoRow[]>([]);
+  const [queue, setQueue] = useState<Pendencia[]>([]);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  async function uploadFoto(path: string, file: File) {
-    const { data, error } = await supabase.storage.from('pontos-fotos').upload(path, file, { upsert: true });
-    if (error) throw error;
-    return data?.path;
+  // Carregar sessão e empresa via RPC my_role()
+  useEffect(() => {
+    (async () => {
+      setError(null);
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        if (!u.user) {
+          setError("Sem sessão. Por favor, autentique-se em /login.");
+          return;
+        }
+        setUserId(u.user.id);
+
+        // my_role() retorna o profile do utilizador logado
+        const { data: role, error: roleErr } = await supabase.rpc("my_role");
+        if (roleErr) throw roleErr;
+        if (!role || !role.empresa_id) {
+          setError(
+            "Perfil incompleto. Contacte o administrador para associar a sua conta a uma empresa."
+          );
+          return;
+        }
+        setEmpresaId(role.empresa_id as string);
+      } catch (e: any) {
+        setError(e.message || "Falha ao carregar sessão/perfil.");
+      }
+    })();
+  }, []);
+
+  // Carregar fila offline + histórico
+  useEffect(() => {
+    setQueue(readQueue());
+  }, []);
+  useEffect(() => {
+    if (!userId) return;
+    // histórico dos últimos 7 dias
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    (async () => {
+      const { data, error } = await supabase
+        .from("pontos")
+        .select("id,tipo,created_at,capturado_em,foto_url,geo_lat,geo_lon,geo_accuracy")
+        .eq("user_id", userId)
+        .gte("created_at", since)
+        .order("created_at", { ascending: false });
+      if (!error && data) setHistory(data as PontoRow[]);
+    })();
+  }, [userId]);
+
+  const requirePhoto = useMemo(
+    () => tipo === "entrada" || tipo === "saida",
+    [tipo]
+  );
+
+  // Enviar uma batida (com foto/geo)
+  async function enviarPonto(payload: PunchPayload) {
+    if (!empresaId || !userId) {
+      setError("Sessão ou empresa em falta.");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    setSending(true);
+    try {
+      // 1) preparar imagem (se obrigatória)
+      let fotoPath: string | null = null;
+      if (requirePhoto) {
+        const blob =
+          payload.fotoBlob ||
+          (payload.fotoDataUrl ? dataUrlToBlob(payload.fotoDataUrl) : null);
+        if (!blob) throw new Error("Falha ao preparar fotografia.");
+        const id = crypto.randomUUID();
+        fotoPath = `${empresaId}/${userId}/${id}_${payload.tipo}.jpg`;
+        const up = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(fotoPath, blob, { upsert: false });
+        if (up.error) throw up.error;
+      }
+
+      // 2) inserir na tabela pontos
+      const insertRes = await supabase.from("pontos").insert({
+        empresa_id: empresaId,
+        user_id: userId,
+        tipo: payload.tipo,
+        foto_url: fotoPath,
+        geo_lat: payload.geo.lat,
+        geo_lon: payload.geo.lon,
+        geo_accuracy: payload.geo.accuracy,
+        capturado_em: payload.capturado_em,
+      });
+      if (insertRes.error) {
+        // Se falhar no insert, e havia foto, tentamos apagar o upload para não deixar lixo
+        if (fotoPath) {
+          await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
+        }
+        throw insertRes.error;
+      }
+
+      setMessage("Registo enviado com sucesso.");
+      // refresh rápido do histórico
+      const { data: fresh, error: hErr } = await supabase
+        .from("pontos")
+        .select("id,tipo,created_at,capturado_em,foto_url,geo_lat,geo_lon,geo_accuracy")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (!hErr && fresh) setHistory(fresh as PontoRow[]);
+    } catch (e: any) {
+      // sem drama: guarda na fila offline
+      const pend: Pendencia = {
+        idLocal: crypto.randomUUID(),
+        tipo: payload.tipo,
+        capturado_em: payload.capturado_em,
+        geo: payload.geo,
+        fotoDataUrl: payload.fotoDataUrl,
+      };
+      const updated = [pend, ...readQueue()];
+      writeQueue(updated);
+      setQueue(updated);
+      setError(
+        "Sem ligação ou erro no envio. O registo foi guardado em pendentes."
+      );
+    } finally {
+      setSending(false);
+    }
   }
 
-  async function registrar(tipo: 'entrada'|'pausa'|'retorno'|'saida') {
-    const payload: any = {
-      p_empresa_id: empresaId,
-      p_funcionario_id: funcionarioId,
-      p_tipo: tipo,
-      p_lat: geo.lat ?? null,
-      p_lon: geo.lon ?? null,
-      p_accuracy: geo.accuracy ?? null,
-      p_foto_path: null,
-      p_origem: navigator.onLine ? 'online' : 'offline'
-    };
-
-    try {
-      if ((tipo === 'entrada' || tipo === 'saida') && !foto) {
-        alert('Foto é obrigatória para entrada/saída.');
-        return;
-      }
-
-      if (navigator.onLine && foto) {
-        const path = `${empresaId}/${funcionarioId}/${Date.now()}-${tipo}.jpg`;
-        payload.p_foto_path = await uploadFoto(path, foto);
-      }
-
-      const { data, error } = await supabase.rpc('ponto_registrar', payload);
-      if (error) throw error;
-      alert('Ponto registado.');
-    } catch (e: any) {
-      alert(e.message);
+  // Enviar pendentes
+  async function enviarPendentes() {
+    if (!empresaId || !userId) {
+      setError("Sessão ou empresa em falta.");
+      return;
     }
+    setError(null);
+    setMessage(null);
+    const current = readQueue();
+    if (!current.length) {
+      setMessage("Não existem registos pendentes.");
+      return;
+    }
+    const successIds: string[] = [];
+    for (const p of current) {
+      try {
+        let fotoPath: string | null = null;
+        const precisaFoto = p.tipo === "entrada" || p.tipo === "saida";
+        if (precisaFoto) {
+          if (!p.fotoDataUrl) throw new Error("Pendência sem foto.");
+          const blob = dataUrlToBlob(p.fotoDataUrl);
+          const id = crypto.randomUUID();
+          fotoPath = `${empresaId}/${userId}/${id}_${p.tipo}.jpg`;
+          const up = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .upload(fotoPath, blob, { upsert: false });
+          if (up.error) throw up.error;
+        }
+
+        const ins = await supabase.from("pontos").insert({
+          empresa_id: empresaId,
+          user_id: userId,
+          tipo: p.tipo,
+          foto_url: fotoPath,
+          geo_lat: p.geo.lat,
+          geo_lon: p.geo.lon,
+          geo_accuracy: p.geo.accuracy,
+          capturado_em: p.capturado_em,
+        });
+        if (ins.error) {
+          if (fotoPath) {
+            await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
+          }
+          throw ins.error;
+        }
+
+        successIds.push(p.idLocal);
+      } catch {
+        // deixa na fila; passa para a próxima
+      }
+    }
+    // remover as que foram com sucesso
+    const left = readQueue().filter((x) => !successIds.includes(x.idLocal));
+    writeQueue(left);
+    setQueue(left);
+    if (successIds.length) setMessage(`${successIds.length} registo(s) enviado(s).`);
+    if (!successIds.length) setError("Não foi possível enviar os pendentes agora.");
+    // refresh histórico
+    const { data: fresh } = await supabase
+      .from("pontos")
+      .select("id,tipo,created_at,capturado_em,foto_url,geo_lat,geo_lon,geo_accuracy")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (fresh) setHistory(fresh as PontoRow[]);
   }
 
   return (
-    <div className="space-y-4 mt-6">
-      <h1 className="text-2xl font-semibold">Bater Ponto</h1>
-      <div className="grid grid-cols-2 gap-2">
-        <input className="border p-2 rounded" placeholder="empresa_id" value={empresaId} onChange={e=>setEmpresaId(e.target.value)} />
-        <input className="border p-2 rounded" placeholder="funcionario_id" value={funcionarioId} onChange={e=>setFuncionarioId(e.target.value)} />
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: 16, fontFamily: "system-ui" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Ponto</h1>
+
+      {/* Selector de tipo */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {(["entrada", "pausa", "retorno", "saida"] as TipoPonto[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTipo(t)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid",
+              borderColor: t === tipo ? "#111" : "#ddd",
+              background: t === tipo ? "#111" : "#fff",
+              color: t === tipo ? "#fff" : "#111",
+              cursor: "pointer",
+            }}
+          >
+            {tipoLabel(t)}
+          </button>
+        ))}
       </div>
 
-      <div className="text-sm">
-        Geo: {geo.lat?.toFixed(5)}, {geo.lon?.toFixed(5)} (±{geo.accuracy ?? '?'}m)
+      {/* Component de câmara e geo */}
+      <CameraPunch
+        tipo={tipo}
+        onConfirm={(payload) => enviarPonto(payload)}
+        maxAccuracyMeters={50}
+        captureWidth={960}
+      />
+
+      {/* Mensagens */}
+      {message && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #bbf7d0",
+            background: "#f0fdf4",
+            color: "#14532d",
+            borderRadius: 8,
+          }}
+        >
+          {message}
+        </div>
+      )}
+      {error && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #fecaca",
+            background: "#fef2f2",
+            color: "#7f1d1d",
+            borderRadius: 8,
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Fila offline */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 8,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <strong>Pendentes offline</strong>
+          <button
+            onClick={enviarPendentes}
+            disabled={sending || !queue.length}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #111",
+              background: queue.length ? "#111" : "#f3f4f6",
+              color: queue.length ? "#fff" : "#9ca3af",
+              cursor: queue.length ? "pointer" : "not-allowed",
+            }}
+          >
+            Enviar pendentes ({queue.length})
+          </button>
+        </div>
+        {queue.length ? (
+          <ul style={{ marginTop: 8, fontSize: 14, lineHeight: 1.4 }}>
+            {queue.map((p) => (
+              <li key={p.idLocal}>
+                {tipoLabel(p.tipo)} — {new Date(p.capturado_em).toLocaleString()} —{" "}
+                {Math.round(p.geo.accuracy)} m
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p style={{ marginTop: 8, color: "#666", fontSize: 14 }}>
+            Sem registos pendentes.
+          </p>
+        )}
       </div>
 
-      <input type="file" accept="image/*" capture="environment" onChange={(e)=>setFoto(e.target.files?.[0] || null)} />
-
-      <div className="flex gap-2">
-        <button className="border rounded px-3 py-2" onClick={()=>registrar('entrada')}>Entrada</button>
-        <button className="border rounded px-3 py-2" onClick={()=>registrar('pausa')}>Pausa</button>
-        <button className="border rounded px-3 py-2" onClick={()=>registrar('retorno')}>Retorno</button>
-        <button className="border rounded px-3 py-2" onClick={()=>registrar('saida')}>Saída</button>
+      {/* Histórico 7 dias */}
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          border: "1px solid #eee",
+          borderRadius: 8,
+        }}
+      >
+        <strong>Histórico (7 dias)</strong>
+        {history.length ? (
+          <table style={{ width: "100%", fontSize: 14, marginTop: 8, borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={thTd()}>Data</th>
+                <th style={thTd()}>Tipo</th>
+                <th style={thTd()}>Exactidão</th>
+                <th style={thTd()}>Foto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((h) => (
+                <tr key={h.id}>
+                  <td style={thTd(false)}>{new Date(h.created_at).toLocaleString()}</td>
+                  <td style={thTd(false)}>{tipoLabel(h.tipo)}</td>
+                  <td style={thTd(false)}>
+                    {h.geo_accuracy != null ? `${Math.round(h.geo_accuracy)} m` : "-"}
+                  </td>
+                  <td style={thTd(false)}>{h.foto_url ? "Sim" : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ marginTop: 8, color: "#666", fontSize: 14 }}>Sem registos.</p>
+        )}
       </div>
     </div>
   );
 }
+
+// estilos toscos mas honestos
+function thTd(header = true) {
+  return {
+    textAlign: "left",
+    padding: "6px 8px",
+    borderBottom: "1px solid #eee",
+    fontWeight: header ? 600 : 400,
+  } as const;
+}
+
