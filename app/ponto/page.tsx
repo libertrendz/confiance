@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import CameraPunch, { type PunchPayload } from "../../components/CameraPunch";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type Session } from "@supabase/supabase-js";
 
 // ======= CONFIG =======
 const STORAGE_BUCKET = "pontos-fotos";
-const OFFLINE_KEY = "confiance_pendentes_v1";
+const OFFLINE_KEY = "confiance_pendentes_v2"; // nova versão da fila
 type TipoPonto = "entrada" | "pausa" | "retorno" | "saida";
 
 // ======= SUPABASE CLIENT =======
@@ -23,6 +23,9 @@ type Pendencia = {
   capturado_em: string;
   geo: { lat: number; lon: number; accuracy: number };
   fotoDataUrl?: string;
+  // novo: guardamos contexto para reenviar com segurança
+  user_id?: string | null;
+  empresa_id?: string | null;
 };
 
 type PontoRow = {
@@ -74,6 +77,24 @@ function isMobileUA() {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
+// ======= Sessão/Perfil helpers =======
+async function ensureSessionAndProfile(): Promise<{
+  session: Session | null;
+  user_id: string | null;
+  empresa_id: string | null;
+}> {
+  const { data: sess } = await supabase.auth.getSession();
+  const user_id = sess.session?.user?.id ?? null;
+  if (!user_id) return { session: null, user_id: null, empresa_id: null };
+
+  const { data: role, error: roleErr } = await supabase.rpc("my_role");
+  if (roleErr) {
+    console.error("my_role error:", roleErr);
+    return { session: sess.session ?? null, user_id, empresa_id: null };
+  }
+  return { session: sess.session ?? null, user_id, empresa_id: (role?.empresa_id as string) ?? null };
+}
+
 // ======= PÁGINA =======
 export default function PontoPage() {
   const [tipo, setTipo] = useState<TipoPonto>("entrada");
@@ -90,14 +111,14 @@ export default function PontoPage() {
 
   // Carregar sessão e empresa via RPC my_role()
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       setError(null);
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) {
         setNeedsLogin(true);
         return;
       }
-      setUserId(u.user.id);
+      setUserId(data.user.id);
 
       const { data: role, error: roleErr } = await supabase.rpc("my_role");
       if (roleErr) {
@@ -109,8 +130,7 @@ export default function PontoPage() {
         return;
       }
       setEmpresaId(role.empresa_id as string);
-    };
-    load();
+    })();
   }, []);
 
   // Carregar fila offline + histórico
@@ -138,30 +158,36 @@ export default function PontoPage() {
 
   // Enviar uma batida
   async function enviarPonto(payload: PunchPayload) {
-    // guarda pendente e empurra para login se não tiver sessão/empresa
-    if (!userId || !empresaId) {
+    // Garante sessão válida
+    const info = await ensureSessionAndProfile();
+    if (!info.session || !info.user_id || !info.empresa_id) {
+      // guarda pendente com contexto conhecido (se houver)
       const pend: Pendencia = {
         idLocal: crypto.randomUUID(),
         tipo: payload.tipo,
         capturado_em: payload.capturado_em,
         geo: payload.geo,
         fotoDataUrl: payload.fotoDataUrl,
+        user_id: info.user_id,
+        empresa_id: info.empresa_id,
       };
       const updated = [pend, ...readQueue()];
       writeQueue(updated);
       setQueue(updated);
       setNeedsLogin(true);
       setError("Sessão inexistente. Por favor, inicie sessão para enviar o registo.");
-      // redirecionar para login
       if (typeof window !== "undefined") window.location.href = "/login";
       return;
     }
+
+    setUserId(info.user_id);
+    setEmpresaId(info.empresa_id);
 
     setError(null);
     setMessage(null);
     setSending(true);
     try {
-      // 1) preparar imagem (se obrigatória)
+      // 1) upload foto (se obrigatório)
       let fotoPath: string | null = null;
       if (requirePhoto) {
         const blob =
@@ -169,17 +195,17 @@ export default function PontoPage() {
           (payload.fotoDataUrl ? dataUrlToBlob(payload.fotoDataUrl) : null);
         if (!blob) throw new Error("Falha ao preparar fotografia.");
         const id = crypto.randomUUID();
-        fotoPath = `${empresaId}/${userId}/${id}_${payload.tipo}.jpg`;
+        fotoPath = `${info.empresa_id}/${info.user_id}/${id}_${payload.tipo}.jpg`;
         const up = await supabase.storage
           .from(STORAGE_BUCKET)
           .upload(fotoPath, blob, { upsert: false });
         if (up.error) throw up.error;
       }
 
-      // 2) inserir na tabela pontos
+      // 2) insert
       const insertRes = await supabase.from("pontos").insert({
-        empresa_id: empresaId,
-        user_id: userId,
+        empresa_id: info.empresa_id,
+        user_id: info.user_id,
         tipo: payload.tipo,
         foto_url: fotoPath,
         geo_lat: payload.geo.lat,
@@ -188,29 +214,30 @@ export default function PontoPage() {
         capturado_em: payload.capturado_em,
       });
       if (insertRes.error) {
-        if (fotoPath) {
-          await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
-        }
+        if (fotoPath) await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
         throw insertRes.error;
       }
 
       setMessage("Registo enviado com sucesso.");
-      // refresh rápido do histórico
-      const { data: fresh, error: hErr } = await supabase
+      // refresh histórico
+      const { data: fresh } = await supabase
         .from("pontos")
         .select("id,tipo,created_at,capturado_em,foto_url,geo_lat,geo_lon,geo_accuracy")
-        .eq("user_id", userId)
+        .eq("user_id", info.user_id)
         .order("created_at", { ascending: false })
         .limit(20);
-      if (!hErr && fresh) setHistory(fresh as PontoRow[]);
+      if (fresh) setHistory(fresh as PontoRow[]);
     } catch (e: any) {
-      // sem drama: guarda na fila offline
+      console.error("enviarPonto erro:", e?.message || e);
+      // guarda na fila
       const pend: Pendencia = {
         idLocal: crypto.randomUUID(),
         tipo: payload.tipo,
         capturado_em: payload.capturado_em,
         geo: payload.geo,
         fotoDataUrl: payload.fotoDataUrl,
+        user_id: info.user_id,
+        empresa_id: info.empresa_id,
       };
       const updated = [pend, ...readQueue()];
       writeQueue(updated);
@@ -223,20 +250,27 @@ export default function PontoPage() {
 
   // Enviar pendentes
   async function enviarPendentes() {
-    if (!empresaId || !userId) {
+    // garante sessão/empresa
+    const info = await ensureSessionAndProfile();
+    if (!info.session || !info.user_id || !info.empresa_id) {
       setNeedsLogin(true);
       setError("Sessão inexistente. Por favor, inicie sessão.");
       if (typeof window !== "undefined") window.location.href = "/login";
       return;
     }
+    setUserId(info.user_id);
+    setEmpresaId(info.empresa_id);
+
     setError(null);
     setMessage(null);
+
     const current = readQueue();
     if (!current.length) {
       setMessage("Não existem registos pendentes.");
       return;
     }
     const successIds: string[] = [];
+
     for (const p of current) {
       try {
         let fotoPath: string | null = null;
@@ -245,7 +279,10 @@ export default function PontoPage() {
           if (!p.fotoDataUrl) throw new Error("Pendência sem foto.");
           const blob = dataUrlToBlob(p.fotoDataUrl);
           const id = crypto.randomUUID();
-          fotoPath = `${empresaId}/${userId}/${id}_${p.tipo}.jpg`;
+          // usa contexto salvo, senão cai para o atual
+          const uid = p.user_id ?? info.user_id;
+          const eid = p.empresa_id ?? info.empresa_id;
+          fotoPath = `${eid}/${uid}/${id}_${p.tipo}.jpg`;
           const up = await supabase.storage
             .from(STORAGE_BUCKET)
             .upload(fotoPath, blob, { upsert: false });
@@ -253,8 +290,8 @@ export default function PontoPage() {
         }
 
         const ins = await supabase.from("pontos").insert({
-          empresa_id: empresaId,
-          user_id: userId,
+          empresa_id: p.empresa_id ?? info.empresa_id,
+          user_id: p.user_id ?? info.user_id,
           tipo: p.tipo,
           foto_url: fotoPath,
           geo_lat: p.geo.lat,
@@ -263,26 +300,28 @@ export default function PontoPage() {
           capturado_em: p.capturado_em,
         });
         if (ins.error) {
-          if (fotoPath) {
-            await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
-          }
+          if (fotoPath) await supabase.storage.from(STORAGE_BUCKET).remove([fotoPath]).catch(() => {});
           throw ins.error;
         }
 
         successIds.push(p.idLocal);
-      } catch {
-        // deixa na fila; passa para a próxima
+      } catch (e) {
+        console.error("enviarPendentes item falhou:", e);
+        // deixa na fila
       }
     }
+
     const left = readQueue().filter((x) => !successIds.includes(x.idLocal));
     writeQueue(left);
     setQueue(left);
+
     if (successIds.length) setMessage(`${successIds.length} registo(s) enviado(s).`);
     if (!successIds.length) setError("Não foi possível enviar os pendentes agora.");
+
     const { data: fresh } = await supabase
       .from("pontos")
       .select("id,tipo,created_at,capturado_em,foto_url,geo_lat,geo_lon,geo_accuracy")
-      .eq("user_id", userId)
+      .eq("user_id", info.user_id)
       .order("created_at", { ascending: false })
       .limit(20);
     if (fresh) setHistory(fresh as PontoRow[]);
