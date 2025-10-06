@@ -69,6 +69,10 @@ function tipoLabel(t: TipoPonto) {
       return "Saída";
   }
 }
+function isMobileUA() {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
 
 // ======= PÁGINA =======
 export default function PontoPage() {
@@ -80,32 +84,33 @@ export default function PontoPage() {
   const [queue, setQueue] = useState<Pendencia[]>([]);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
+
+  const maxAccuracy = useMemo(() => (isMobileUA() ? 50 : 75), []);
 
   // Carregar sessão e empresa via RPC my_role()
   useEffect(() => {
-    (async () => {
+    const load = async () => {
       setError(null);
-      try {
-        const { data: u } = await supabase.auth.getUser();
-        if (!u.user) {
-          setError("Sem sessão. Por favor, autentique-se em /login.");
-          return;
-        }
-        setUserId(u.user.id);
-
-        const { data: role, error: roleErr } = await supabase.rpc("my_role");
-        if (roleErr) throw roleErr;
-        if (!role || !role.empresa_id) {
-          setError(
-            "Perfil incompleto. Contacte o administrador para associar a sua conta a uma empresa."
-          );
-          return;
-        }
-        setEmpresaId(role.empresa_id as string);
-      } catch (e: any) {
-        setError(e.message || "Falha ao carregar sessão/perfil.");
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) {
+        setNeedsLogin(true);
+        return;
       }
-    })();
+      setUserId(u.user.id);
+
+      const { data: role, error: roleErr } = await supabase.rpc("my_role");
+      if (roleErr) {
+        setError("Falha ao carregar perfil/empresa.");
+        return;
+      }
+      if (!role || !role.empresa_id) {
+        setError("Perfil incompleto. Contacte o administrador para associar a sua conta a uma empresa.");
+        return;
+      }
+      setEmpresaId(role.empresa_id as string);
+    };
+    load();
   }, []);
 
   // Carregar fila offline + histórico
@@ -133,14 +138,30 @@ export default function PontoPage() {
 
   // Enviar uma batida
   async function enviarPonto(payload: PunchPayload) {
-    if (!empresaId || !userId) {
-      setError("Sessão ou empresa em falta.");
+    // guarda pendente e empurra para login se não tiver sessão/empresa
+    if (!userId || !empresaId) {
+      const pend: Pendencia = {
+        idLocal: crypto.randomUUID(),
+        tipo: payload.tipo,
+        capturado_em: payload.capturado_em,
+        geo: payload.geo,
+        fotoDataUrl: payload.fotoDataUrl,
+      };
+      const updated = [pend, ...readQueue()];
+      writeQueue(updated);
+      setQueue(updated);
+      setNeedsLogin(true);
+      setError("Sessão inexistente. Por favor, inicie sessão para enviar o registo.");
+      // redirecionar para login
+      if (typeof window !== "undefined") window.location.href = "/login";
       return;
     }
+
     setError(null);
     setMessage(null);
     setSending(true);
     try {
+      // 1) preparar imagem (se obrigatória)
       let fotoPath: string | null = null;
       if (requirePhoto) {
         const blob =
@@ -155,6 +176,7 @@ export default function PontoPage() {
         if (up.error) throw up.error;
       }
 
+      // 2) inserir na tabela pontos
       const insertRes = await supabase.from("pontos").insert({
         empresa_id: empresaId,
         user_id: userId,
@@ -173,6 +195,7 @@ export default function PontoPage() {
       }
 
       setMessage("Registo enviado com sucesso.");
+      // refresh rápido do histórico
       const { data: fresh, error: hErr } = await supabase
         .from("pontos")
         .select("id,tipo,created_at,capturado_em,foto_url,geo_lat,geo_lon,geo_accuracy")
@@ -181,6 +204,7 @@ export default function PontoPage() {
         .limit(20);
       if (!hErr && fresh) setHistory(fresh as PontoRow[]);
     } catch (e: any) {
+      // sem drama: guarda na fila offline
       const pend: Pendencia = {
         idLocal: crypto.randomUUID(),
         tipo: payload.tipo,
@@ -191,9 +215,7 @@ export default function PontoPage() {
       const updated = [pend, ...readQueue()];
       writeQueue(updated);
       setQueue(updated);
-      setError(
-        "Sem ligação ou erro no envio. O registo foi guardado em pendentes."
-      );
+      setError("Sem ligação ou erro no envio. O registo foi guardado em pendentes.");
     } finally {
       setSending(false);
     }
@@ -202,7 +224,9 @@ export default function PontoPage() {
   // Enviar pendentes
   async function enviarPendentes() {
     if (!empresaId || !userId) {
-      setError("Sessão ou empresa em falta.");
+      setNeedsLogin(true);
+      setError("Sessão inexistente. Por favor, inicie sessão.");
+      if (typeof window !== "undefined") window.location.href = "/login";
       return;
     }
     setError(null);
@@ -247,7 +271,7 @@ export default function PontoPage() {
 
         successIds.push(p.idLocal);
       } catch {
-        // deixa na fila
+        // deixa na fila; passa para a próxima
       }
     }
     const left = readQueue().filter((x) => !successIds.includes(x.idLocal));
@@ -262,6 +286,42 @@ export default function PontoPage() {
       .order("created_at", { ascending: false })
       .limit(20);
     if (fresh) setHistory(fresh as PontoRow[]);
+  }
+
+  // UI sem sessão
+  if (needsLogin) {
+    return (
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: 16, fontFamily: "system-ui" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Ponto</h1>
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            border: "1px solid #fecaca",
+            background: "#fef2f2",
+            color: "#7f1d1d",
+            borderRadius: 8,
+          }}
+        >
+          Sessão inexistente. Por favor, inicie sessão para registar o ponto.
+        </div>
+        <a
+          href="/login"
+          style={{
+            display: "inline-block",
+            marginTop: 12,
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid #111",
+            background: "#111",
+            color: "#fff",
+            textDecoration: "none",
+          }}
+        >
+          Iniciar sessão
+        </a>
+      </div>
+    );
   }
 
   return (
@@ -293,9 +353,12 @@ export default function PontoPage() {
       <CameraPunch
         tipo={tipo}
         onConfirm={(payload) => enviarPonto(payload)}
-        maxAccuracyMeters={50}
+        maxAccuracyMeters={maxAccuracy}
         captureWidth={960}
       />
+      <p style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+        Precisão exigida: ≤ {maxAccuracy} m {isMobileUA() ? "" : "(modo teste em desktop)"}.
+      </p>
 
       {/* Mensagens */}
       {message && (
