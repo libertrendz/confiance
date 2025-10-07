@@ -1,7 +1,7 @@
+"use client";
+
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-'use client';
 
 import { useQuery } from '@tanstack/react-query';
 import { createClient } from '@supabase/supabase-js';
