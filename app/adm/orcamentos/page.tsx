@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
