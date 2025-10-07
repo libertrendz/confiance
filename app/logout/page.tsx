@@ -15,7 +15,7 @@ export default function LogoutPage() {
   const router = useRouter();
   useEffect(() => {
     (async () => {
-      await supabase.auth.signOut().catch(() => {});
+      await supabase.auth.signOut({ scope: 'global' });
       router.replace("/login");
     })();
   }, [router]);
