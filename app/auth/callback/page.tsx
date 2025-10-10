@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -10,78 +10,74 @@ const supabase = createClient(
   { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
-function getQueryParam(name: string) {
-  if (typeof window === "undefined") return null;
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
-}
-
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const [status, setStatus] = useState("Confirmando o acesso...");
+  const qs = useSearchParams();
+  const [status, setStatus] = useState("Autenticando...");
 
   useEffect(() => {
-    const run = async () => {
+    (async () => {
       try {
-        // 1) Tenta fluxo PKCE (URL com ?code=)
-        const hasCode = typeof window !== "undefined" && new URL(window.location.href).searchParams.get("code");
-        if (hasCode) {
-          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (!error) {
-            setStatus("Login confirmado! Abrindo o menu...");
-            setTimeout(() => router.replace("/menu"), 600);
-            return;
-          }
-        }
-
-        // 2) Tenta fluxo com access_token no fragmento (#access_token=...)
-        // (alguns magic links antigos/variações usam isso)
-        const hasHash = typeof window !== "undefined" && window.location.hash.includes("access_token");
-        if (hasHash) {
-          const { error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
-          if (!error) {
-            setStatus("Login confirmado! Abrindo o menu...");
-            setTimeout(() => router.replace("/menu"), 600);
-            return;
-          }
-        }
-
-        // 3) Tenta verificação por token_hash (variante de magic link)
-        const tokenHash = getQueryParam("token_hash");
-        const type = getQueryParam("type") || "magiclink";
-        if (tokenHash) {
-          const { error } = await supabase.auth.verifyOtp({ type: type as any, token_hash: tokenHash });
-          if (!error) {
-            setStatus("Login confirmado! Abrindo o menu...");
-            setTimeout(() => router.replace("/menu"), 600);
-            return;
-          }
-        }
-
-        // 4) Se nada deu certo, checa se já tem sessão (às vezes já está logado)
-        const { data: sess } = await supabase.auth.getSession();
-        if (sess.session) {
+        // 0) Se já tem sessão, manda pro /menu
+        const { data: s0 } = await supabase.auth.getSession();
+        if (s0.session) {
           setStatus("Sessão já ativa. Abrindo o menu...");
+          setTimeout(() => router.replace("/menu"), 400);
+          return;
+        }
+
+        // 1) Tenta fluxo com fragmento (#access_token=...&refresh_token=...)
+        const hash = typeof window !== "undefined" ? window.location.hash : "";
+        if (hash && hash.includes("access_token")) {
+          const params = new URLSearchParams(hash.replace(/^#/, ""));
+          const access_token = params.get("access_token") || undefined;
+          const refresh_token = params.get("refresh_token") || undefined;
+
+          if (access_token && refresh_token) {
+            setStatus("Confirmando login (token no hash)...");
+            const { error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (error) throw error;
+
+            setStatus("Login confirmado! Abrindo o menu...");
+            setTimeout(() => router.replace("/menu"), 600);
+            return;
+          }
+        }
+
+        // 2) Tenta fluxo PKCE (?code=...)
+        const code = qs.get("code");
+        if (code) {
+          setStatus("Confirmando login (código PKCE)...");
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+
+          setStatus("Login confirmado! Abrindo o menu...");
           setTimeout(() => router.replace("/menu"), 600);
           return;
         }
 
-        // 5) Falhou tudo: volta para o login
-        setStatus("Sessão inválida ou expirada. Voltando ao login...");
-        setTimeout(() => router.replace("/login"), 1400);
-      } catch (err) {
-        console.warn(err);
-        setStatus("Erro inesperado. Voltando ao login...");
+        // 3) Se não tinha hash nem code, volta ao login
+        setStatus("Link inválido ou expirado. Voltando ao login...");
+        setTimeout(() => router.replace("/login"), 1000);
+      } catch (e: any) {
+        console.error(e);
+        setStatus(
+          e?.message ||
+            "Não foi possível confirmar o login. Voltando ao login..."
+        );
         setTimeout(() => router.replace("/login"), 1400);
       }
-    };
-
-    run();
-  }, [router]);
+    })();
+  }, [qs, router]);
 
   return (
-    <div style={{ fontFamily: "system-ui", padding: 24 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 8 }}>Autenticando...</h1>
+    <div style={{ padding: 24, fontFamily: "system-ui" }}>
+      <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+        Autenticação
+      </h1>
       <p>{status}</p>
     </div>
   );
