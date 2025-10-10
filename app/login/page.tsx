@@ -14,11 +14,7 @@ export default function LoginPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setLogged(!!data.user));
-  }, []);
-
-  async function enviarMagicLink(e: React.FormEvent) {
+   async function enviarMagicLink(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null); setErr(null);
     const { error } = await supabase.auth.signInWithOtp({
