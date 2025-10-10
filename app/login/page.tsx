@@ -26,9 +26,7 @@ export default function LoginPage() {
   // Redireciona se já estiver autenticado
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) window.location.replace("/menu");
-    })();
+     })();
   }, []);
 
   // Força logout quando o access token expirar (sem autoRefreshToken)
