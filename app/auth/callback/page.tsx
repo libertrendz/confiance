@@ -1,23 +1,50 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { supa } from '@/lib/supa';
+import { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-export default function Callback() {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: true, autoRefreshToken: true } }
+);
+
+export default function AuthCallback() {
+  const [status, setStatus] = useState<"loading"|"ok"|"error">("loading");
+  const [err, setErr] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
-        // troca o código do hash pela sessão persistida (localStorage)
-        const { error } = await supa.auth.exchangeCodeForSession(window.location.hash);
-        // se o login veio com ?next=/rota, respeita; senão vai pro /menu
-        const next = new URLSearchParams(window.location.search).get('next') ?? '/menu';
-        if (error) console.error(error);
-        window.location.replace(next);
-      } catch {
-        window.location.replace('/login');
+        // 1) tente trocar o código do magic link por sessão
+        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          // Se não houver code/token no URL, cai aqui também
+          setErr(error.message);
+          setStatus("error");
+          return;
+        }
+        setStatus("ok");
+        // 2) redireciona para o app após gravar a sessão
+        window.location.replace("/menu");
+      } catch (e: any) {
+        setErr(e?.message ?? "Erro inesperado");
+        setStatus("error");
       }
     })();
   }, []);
 
-  return <div style={{ padding: 24, fontFamily: 'system-ui' }}>Validando sessão…</div>;
+  return (
+    <div style={{ padding: 24, fontFamily: "system-ui" }}>
+      {status === "loading" && <p>A finalizar sessão…</p>}
+      {status === "error" && (
+        <div>
+          <p style={{ color: "#7f1d1d" }}>
+            Não foi possível confirmar o login: {err}
+          </p>
+          <a href="/login">Voltar ao login</a>
+        </div>
+      )}
+    </div>
+  );
 }
