@@ -12,24 +12,19 @@ export default function MenuPage() {
   const [fases, setFases] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supa.auth.getUser();
-        setUserEmail(data.user?.email ?? null);
+ useEffect(() => {
+  (async () => {
+    const { data } = await supa.auth.getUser();
+    if (!data.user) {
+      // opcional: mandar de volta para /login com next
+      const next = encodeURIComponent('/menu');
+      window.location.replace(`/login?next=${next}`);
+      return;
+    }
+    // ... segue carregando projeto/resumos
+  })();
+}, []);
 
-        const prj = await getProjetoPadrao();
-        setProjeto(prj);
-
-        const rf = await getResumoFases(prj.id);
-        setFases(rf);
-      } catch (e:any) {
-        setErr(e?.message ?? 'Erro ao carregar');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
 
   async function sair() {
     await supa.auth.signOut();
