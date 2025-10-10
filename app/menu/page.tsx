@@ -1,45 +1,84 @@
-"use client";
-export const dynamic = 'force-dynamic';
+// app/menu/page.tsx
+'use client';
 
-import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  { auth: { persistSession: true, autoRefreshToken: true } }
-);
+import { useEffect, useState } from 'react';
+import { supa } from '@/lib/supa';
+import { getProjetoPadrao, getResumoFases } from '@/lib/queries';
 
 export default function MenuPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [projeto, setProjeto] = useState<{id:string,nome:string} | null>(null);
+  const [fases, setFases] = useState<any[]>([]);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        router.replace("/login");
-        return;
+      try {
+        const { data } = await supa.auth.getUser();
+        setUserEmail(data.user?.email ?? null);
+
+        const prj = await getProjetoPadrao();
+        setProjeto(prj);
+
+        const rf = await getResumoFases(prj.id);
+        setFases(rf);
+      } catch (e:any) {
+        setErr(e?.message ?? 'Erro ao carregar');
+      } finally {
+        setLoading(false);
       }
-      setEmail(data.user.email ?? null);
     })();
-  }, [router]);
+  }, []);
+
+  async function sair() {
+    await supa.auth.signOut();
+    window.location.replace('/login');
+  }
+
+  if (loading) return <div style={{padding:24}}>A carregar…</div>;
+  if (err) return <div style={{padding:24, color:'#7f1d1d'}}>Erro: {err}</div>;
+
+  const totalPlaneado = fases.reduce((a,c)=>a+c.planeado,0);
+  const totalExec = fases.reduce((a,c)=>a+c.executado,0);
+  const perc = totalPlaneado>0 ? Math.round((totalExec/totalPlaneado)*100) : 0;
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: 16, fontFamily: "system-ui" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>CONFIANCE</h1>
-      <p style={{ marginBottom: 16, color: "#444" }}>
-        {email ? `Sessão: ${email}` : "A carregar utilizador…"}
-      </p>
-      <ul style={{ display: "grid", gap: 8, listStyle: "none", padding: 0 }}>
-        <li><Link href="/ponto">Ponto (Colaborador)</Link></li>
-        <li><Link href="/adm/pendencias">Pendências (ADM)</Link></li>
-        <li><Link href="/adm/orcamentos">Orçamentos (ADM)</Link></li>
-        <li><Link href="/perfil">Perfil</Link></li>
-        <li><Link href="/logout">Terminar sessão</Link></li>
-      </ul>
+    <div style={{ maxWidth: 920, margin:'0 auto', padding:24, fontFamily:'system-ui' }}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+        <h1 style={{fontSize:22, fontWeight:700}}>Menu</h1>
+        <div>
+          <span style={{marginRight:12}}>{userEmail}</span>
+          <button onClick={sair} style={{padding:'8px 12px', border:'1px solid #111', background:'#111', color:'#fff', borderRadius:8}}>Sair</button>
+        </div>
+      </div>
+
+      <div style={{marginTop:16, padding:16, border:'1px solid #eee', borderRadius:12}}>
+        <h2 style={{fontSize:18, fontWeight:700, marginBottom:8}}>{projeto?.nome ?? 'Projeto'}</h2>
+        <p><b>Planeado:</b> € {totalPlaneado.toFixed(2)} &nbsp;|&nbsp; <b>Executado:</b> € {totalExec.toFixed(2)} &nbsp;|&nbsp; <b>{perc}%</b></p>
+      </div>
+
+      <div style={{display:'grid', gap:12, marginTop:16}}>
+        {fases.map(f=>(
+          <div key={f.faseId} style={{padding:16, border:'1px solid #eee', borderRadius:12}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <h3 style={{fontSize:16, fontWeight:700}}>{f.fase}</h3>
+              {f.risco && <span style={{fontSize:12, color:'#7f1d1d'}}>⚠ perto do limite</span>}
+            </div>
+            <p style={{marginTop:4}}>
+              Planeado: € {f.planeado.toFixed(2)} &nbsp;|&nbsp; Executado: € {f.executado.toFixed(2)} &nbsp;|&nbsp; {f.perc}%
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{marginTop:20}}>
+        <a href="/adm/despesas/nova" style={{textDecoration:'none'}}>
+          <button style={{padding:'10px 14px', border:'1px solid #111', background:'#111', color:'#fff', borderRadius:8}}>
+            + Lançar Despesa
+          </button>
+        </a>
+      </div>
     </div>
   );
 }
