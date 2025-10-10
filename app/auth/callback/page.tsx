@@ -10,31 +10,73 @@ const supabase = createClient(
   { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
+function getQueryParam(name: string) {
+  if (typeof window === "undefined") return null;
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [status, setStatus] = useState("Confirmando o acesso...");
 
   useEffect(() => {
-    const confirmSession = async () => {
+    const run = async () => {
       try {
-        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-        if (error) {
-          console.warn(error);
-          setStatus("Sessão inválida ou expirada. Voltando ao login...");
-          setTimeout(() => router.replace("/login"), 1500);
+        // 1) Tenta fluxo PKCE (URL com ?code=)
+        const hasCode = typeof window !== "undefined" && new URL(window.location.href).searchParams.get("code");
+        if (hasCode) {
+          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (!error) {
+            setStatus("Login confirmado! Abrindo o menu...");
+            setTimeout(() => router.replace("/menu"), 600);
+            return;
+          }
+        }
+
+        // 2) Tenta fluxo com access_token no fragmento (#access_token=...)
+        // (alguns magic links antigos/variações usam isso)
+        const hasHash = typeof window !== "undefined" && window.location.hash.includes("access_token");
+        if (hasHash) {
+          const { error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
+          if (!error) {
+            setStatus("Login confirmado! Abrindo o menu...");
+            setTimeout(() => router.replace("/menu"), 600);
+            return;
+          }
+        }
+
+        // 3) Tenta verificação por token_hash (variante de magic link)
+        const tokenHash = getQueryParam("token_hash");
+        const type = getQueryParam("type") || "magiclink";
+        if (tokenHash) {
+          const { error } = await supabase.auth.verifyOtp({ type: type as any, token_hash: tokenHash });
+          if (!error) {
+            setStatus("Login confirmado! Abrindo o menu...");
+            setTimeout(() => router.replace("/menu"), 600);
+            return;
+          }
+        }
+
+        // 4) Se nada deu certo, checa se já tem sessão (às vezes já está logado)
+        const { data: sess } = await supabase.auth.getSession();
+        if (sess.session) {
+          setStatus("Sessão já ativa. Abrindo o menu...");
+          setTimeout(() => router.replace("/menu"), 600);
           return;
         }
 
-        setStatus("Login confirmado! Abrindo o menu...");
-        setTimeout(() => router.replace("/menu"), 800);
+        // 5) Falhou tudo: volta para o login
+        setStatus("Sessão inválida ou expirada. Voltando ao login...");
+        setTimeout(() => router.replace("/login"), 1400);
       } catch (err) {
-        console.error(err);
+        console.warn(err);
         setStatus("Erro inesperado. Voltando ao login...");
-        setTimeout(() => router.replace("/login"), 1500);
+        setTimeout(() => router.replace("/login"), 1400);
       }
     };
 
-    confirmSession();
+    run();
   }, [router]);
 
   return (
