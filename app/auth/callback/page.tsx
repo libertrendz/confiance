@@ -18,7 +18,7 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 0) Se já tem sessão, manda pro /menu
+        // 0) Já tem sessão? Vai pro /menu
         const { data: s0 } = await supabase.auth.getSession();
         if (s0.session) {
           setStatus("Sessão já ativa. Abrindo o menu...");
@@ -26,7 +26,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 1) Tenta fluxo com fragmento (#access_token=...&refresh_token=...)
+        // 1) Fluxo com fragmento (#access_token=&refresh_token=)
         const hash = typeof window !== "undefined" ? window.location.hash : "";
         if (hash && hash.includes("access_token")) {
           const params = new URLSearchParams(hash.replace(/^#/, ""));
@@ -40,33 +40,30 @@ export default function AuthCallbackPage() {
               refresh_token,
             });
             if (error) throw error;
-
             setStatus("Login confirmado! Abrindo o menu...");
             setTimeout(() => router.replace("/menu"), 600);
             return;
           }
         }
 
-        // 2) Tenta fluxo PKCE (?code=...)
+        // 2) Fluxo PKCE (?code=...)
         const code = qs.get("code");
         if (code) {
           setStatus("Confirmando login (código PKCE)...");
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-
           setStatus("Login confirmado! Abrindo o menu...");
           setTimeout(() => router.replace("/menu"), 600);
           return;
         }
 
-        // 3) Se não tinha hash nem code, volta ao login
+        // 3) Nada encontrado → volta ao login
         setStatus("Link inválido ou expirado. Voltando ao login...");
         setTimeout(() => router.replace("/login"), 1000);
       } catch (e: any) {
         console.error(e);
         setStatus(
-          e?.message ||
-            "Não foi possível confirmar o login. Voltando ao login..."
+          e?.message || "Não foi possível confirmar o login. Voltando ao login..."
         );
         setTimeout(() => router.replace("/login"), 1400);
       }
