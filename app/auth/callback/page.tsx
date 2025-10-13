@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
@@ -10,7 +10,7 @@ const supabase = createClient(
   { auth: { persistSession: true, autoRefreshToken: true } }
 );
 
-export default function AuthCallbackPage() {
+function CallbackInner() {
   const router = useRouter();
   const qs = useSearchParams();
   const [status, setStatus] = useState("Autenticando...");
@@ -18,7 +18,7 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 0) Já tem sessão? Vai pro /menu
+        // 0) Sessão já ativa
         const { data: s0 } = await supabase.auth.getSession();
         if (s0.session) {
           setStatus("Sessão já ativa. Abrindo o menu...");
@@ -26,7 +26,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 1) Fluxo com fragmento (#access_token=&refresh_token=)
+        // 1) Token no fragmento (#access_token)
         const hash = typeof window !== "undefined" ? window.location.hash : "";
         if (hash && hash.includes("access_token")) {
           const params = new URLSearchParams(hash.replace(/^#/, ""));
@@ -34,7 +34,7 @@ export default function AuthCallbackPage() {
           const refresh_token = params.get("refresh_token") || undefined;
 
           if (access_token && refresh_token) {
-            setStatus("Confirmando login (token no hash)...");
+            setStatus("Confirmando login...");
             const { error } = await supabase.auth.setSession({
               access_token,
               refresh_token,
@@ -46,10 +46,10 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // 2) Fluxo PKCE (?code=...)
+        // 2) PKCE (?code=)
         const code = qs.get("code");
         if (code) {
-          setStatus("Confirmando login (código PKCE)...");
+          setStatus("Confirmando login...");
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
           setStatus("Login confirmado! Abrindo o menu...");
@@ -57,13 +57,13 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 3) Nada encontrado → volta ao login
+        // 3) Fallback
         setStatus("Link inválido ou expirado. Voltando ao login...");
         setTimeout(() => router.replace("/login"), 1000);
       } catch (e: any) {
         console.error(e);
         setStatus(
-          e?.message || "Não foi possível confirmar o login. Voltando ao login..."
+          e?.message || "Erro ao confirmar login. Voltando ao login..."
         );
         setTimeout(() => router.replace("/login"), 1400);
       }
@@ -77,5 +77,13 @@ export default function AuthCallbackPage() {
       </h1>
       <p>{status}</p>
     </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<p>Carregando autenticação...</p>}>
+      <CallbackInner />
+    </Suspense>
   );
 }
