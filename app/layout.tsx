@@ -1,19 +1,11 @@
-import './globals.css';
-import { Providers } from './providers';
+// app/page.tsx
+import { redirect } from 'next/navigation'
+import { createClient } from '@/utils/supabase/server'
 
-export const metadata = {
-  title: 'CONFIANCE',
-  description: 'Ponto + Orçamentos',
-};
+export default async function Home() {
+  const supa = await createClient()
+  const { data } = await supa.auth.getUser()
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="pt">
-      <body className="min-h-screen bg-white text-gray-900">
-        <Providers>
-          <main className="max-w-3xl mx-auto p-4">{children}</main>
-        </Providers>
-      </body>
-    </html>
-  );
+  if (data?.user) redirect('/menu')
+  redirect('/login')
 }
