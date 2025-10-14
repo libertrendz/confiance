@@ -14,8 +14,23 @@ export default function AuthCallbackPage() {
 
     async function run() {
       try {
-        // Tenta trocar o código/token do link por sessão e salvar no storage
-        const { error } = await supa.auth.exchangeCodeForSession();
+        // Garante que veio de um magic link / PKCE
+        const hasTokenOrCode =
+          typeof window !== "undefined" &&
+          (window.location.hash.includes("access_token") ||
+            window.location.search.includes("code="));
+
+        if (!hasTokenOrCode) {
+          setStatus("Link inválido ou expirado. Voltando ao login…");
+          setTimeout(() => router.replace("/login"), 800);
+          return;
+        }
+
+        // ⚠️ Aqui estava o erro: precisa passar a URL atual
+        const { error } = await supa.auth.exchangeCodeForSession(
+          window.location.href
+        );
+
         if (error) {
           console.error("exchangeCodeForSession error:", error);
           setStatus("Não foi possível confirmar o login. Redirecionando…");
@@ -23,7 +38,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // Confirma se a sessão existe mesmo
+        // Confirma se a sessão foi salva
         const { data } = await supa.auth.getSession();
         if (!mounted) return;
 
