@@ -1,10 +1,9 @@
-// app/menu/page.tsx
+// app/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
-import MenuClient from "./MenuClient";
 
-export default async function MenuPage() {
+export default async function Home() {
   const cookieStore = cookies();
 
   const supa = createServerClient(
@@ -26,9 +25,7 @@ export default async function MenuPage() {
   );
 
   const { data } = await supa.auth.getUser();
-  if (!data?.user) {
-    redirect("/login");
-  }
 
-  return <MenuClient userEmail={data.user.email ?? ""} />;
+  // Se tiver sessão -> /menu ; senão -> /login
+  redirect(data.user ? "/menu" : "/login");
 }
