@@ -1,11 +1,12 @@
-// app/page.tsx
+// app/menu/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
+import MenuClient from "./MenuClient";
 
-export default async function Home() {
-  // Cria um client do Supabase com suporte a cookies no server
+export default async function MenuPage() {
   const cookieStore = cookies();
+
   const supa = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,12 +25,10 @@ export default async function Home() {
     }
   );
 
-  // Verifica sessão no server (sem “use client”)
   const { data } = await supa.auth.getUser();
-
-  if (data?.user) {
-    redirect("/menu"); // logado → menu
-  } else {
-    redirect("/login"); // sem sessão → login
+  if (!data?.user) {
+    redirect("/login");
   }
+
+  return <MenuClient userEmail={data.user.email ?? ""} />;
 }
