@@ -1,41 +1,82 @@
-'use client'
+// app/login/page.tsx
+'use client';
 
-import { useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+export const dynamic = 'force-dynamic'; // não pré-renderiza estaticamente
+export const revalidate = 0;
 
-const supa = createClient()
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getBrowserSupabase } from '@/lib/supa-browser';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [msg, setMsg] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const router = useRouter();
+  const params = useSearchParams();
+  const next = params.get('next') || '/menu';
 
-  async function sendMagicLink(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
-    setMsg(null)
-    setBusy(true)
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
 
-    // com templates ajustados, não precisa setar redirectTo aqui
-    const { error } = await supa.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        // se quiser forçar volta ao menu após login, pode passar um next:
-        // emailRedirectTo: `${window.location.origin}/auth/confirm?next=/menu`,
-        shouldCreateUser: true,
-      },
-    })
+  useEffect(() => {
+    (async () => {
+      try {
+        const supa = getBrowserSupabase();
 
-    setBusy(false)
-    if (error) setErr(error.message)
-    else setMsg('Enviámos um link de acesso para o seu e-mail.')
+        // 1) Se já tem sessão, pula pro menu
+        const { data: sess } = await supa.auth.getSession();
+        if (sess.session) {
+          router.replace(next);
+          return;
+        }
+
+        // 2) Se vier de magic link (hash na URL), troca por sessão e segue
+        if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+          const { error } = await supa.auth.getSessionFromUrl({ storeSession: true });
+          if (error) {
+            setErr(`Não foi possível confirmar o login: ${error.message}`);
+            setChecking(false);
+            return;
+          }
+          router.replace(next);
+          return;
+        }
+
+        setChecking(false);
+      } catch (e: any) {
+        setErr(e?.message ?? 'Erro inesperado ao preparar a tela de login.');
+        setChecking(false);
+      }
+    })();
+  }, [router, next]);
+
+  async function enviarMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    setErr(null);
+
+    try {
+      const supa = getBrowserSupabase();
+      const { error } = await supa.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
+      if (error) setErr(error.message);
+      else setMsg('Enviámos um link de acesso para o seu email.');
+    } catch (e: any) {
+      setErr(e?.message ?? 'Falha ao enviar magic link.');
+    }
   }
+
+  if (checking) return <div style={{ padding: 24, fontFamily: 'system-ui' }}>A preparar…</div>;
 
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 480, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
-      <form onSubmit={sendMagicLink} style={{ display: 'grid', gap: 8 }}>
+
+      <form onSubmit={enviarMagicLink} style={{ display: 'grid', gap: 8 }}>
         <label>
           Email
           <input
@@ -46,12 +87,17 @@ export default function LoginPage() {
             style={{ display: 'block', width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
           />
         </label>
-        <button type="submit" disabled={busy} style={{ padding: '10px 14px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}>
-          {busy ? 'A enviar…' : 'Enviar Magic Link'}
+
+        <button
+          type="submit"
+          style={{ padding: '10px 14px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
+        >
+          Enviar Magic Link
         </button>
       </form>
+
       {msg && <p style={{ marginTop: 8, color: '#14532d' }}>{msg}</p>}
       {err && <p style={{ marginTop: 8, color: '#7f1d1d' }}>{err}</p>}
     </div>
-  )
+  );
 }
