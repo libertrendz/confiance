@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supa } from '@/lib/supa';
+import { supa } from '../../../../lib/supa';
 
 type Fase = { id:string; nome:string };
 type Projeto = { id:string; nome:string };
