@@ -1,8 +1,0 @@
-export default function Home() {
-  return (
-    <div style={{ padding: 16 }}>
-      <h1>CONFIANCE</h1>
-      <p>Abra <code>/login</code> para entrar.</p>
-    </div>
-  );
-}
