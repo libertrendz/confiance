@@ -1,78 +1,59 @@
+// app/auth/callback/page.tsx
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supa } from "@/lib/supa";
 
-function CallbackInner() {
-  const qs = useSearchParams();
-  const [status, setStatus] = useState("Autenticando...");
+export default function AuthCallbackPage() {
+  const router = useRouter();
+  const [status, setStatus] = useState("A confirmar o login…");
 
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+
+    async function run() {
       try {
-        // 0) Já logado?
-        const { data: s0 } = await supabase.auth.getSession();
-        if (s0.session) {
-          setStatus("Sessão já ativa. Abrindo o menu...");
-          setTimeout(() => window.location.assign("/menu"), 300);
+        // Tenta trocar o código/token do link por sessão e salvar no storage
+        const { error } = await supa.auth.exchangeCodeForSession();
+        if (error) {
+          console.error("exchangeCodeForSession error:", error);
+          setStatus("Não foi possível confirmar o login. Redirecionando…");
+          setTimeout(() => router.replace("/login"), 800);
           return;
         }
 
-        // 1) Fragmento (#access_token)
-        const hash = typeof window !== "undefined" ? window.location.hash : "";
-        if (hash && hash.includes("access_token")) {
-          const params = new URLSearchParams(hash.replace(/^#/, ""));
-          const access_token = params.get("access_token") || undefined;
-          const refresh_token = params.get("refresh_token") || undefined;
+        // Confirma se a sessão existe mesmo
+        const { data } = await supa.auth.getSession();
+        if (!mounted) return;
 
-          if (access_token && refresh_token) {
-            setStatus("Confirmando login...");
-            const { error } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-            if (error) throw error;
-            setStatus("Login confirmado! Abrindo o menu...");
-            setTimeout(() => window.location.assign("/menu"), 400);
-            return;
-          }
+        if (data?.session) {
+          setStatus("Login confirmado! Abrindo o menu…");
+          setTimeout(() => router.replace("/menu"), 600);
+        } else {
+          setStatus("Sessão não encontrada. Voltando ao login…");
+          setTimeout(() => router.replace("/login"), 800);
         }
-
-        // 2) PKCE (?code=)
-        const code = qs.get("code");
-        if (code) {
-          setStatus("Confirmando login (PKCE)...");
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          setStatus("Login confirmado! Abrindo o menu...");
-          setTimeout(() => window.location.assign("/menu"), 400);
-          return;
-        }
-
-        // 3) Fallback
-        setStatus("Link inválido ou expirado. Voltando ao login...");
-        setTimeout(() => window.location.assign("/login"), 800);
-      } catch (e: any) {
+      } catch (e) {
         console.error(e);
-        setStatus(e?.message || "Erro ao confirmar login. Voltando ao login...");
-        setTimeout(() => window.location.assign("/login"), 1200);
+        if (!mounted) return;
+        setStatus("Erro durante a confirmação. Voltando ao login…");
+        setTimeout(() => router.replace("/login"), 800);
       }
-    })();
-  }, [qs]);
+    }
+
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   return (
     <div style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Autenticação</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+        Autenticando…
+      </h1>
       <p>{status}</p>
     </div>
-  );
-}
-
-export default function AuthCallbackPage() {
-  return (
-    <Suspense fallback={<p>Carregando autenticação...</p>}>
-      <CallbackInner />
-    </Suspense>
   );
 }
