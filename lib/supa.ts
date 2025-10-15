@@ -1,5 +1,7 @@
 // lib/supa.ts
 import { createClient } from '@supabase/supabase-js'
+import { getBrowserSupabase } from '../../../lib/supa';
+
 
 export const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
