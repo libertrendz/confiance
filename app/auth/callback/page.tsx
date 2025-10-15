@@ -19,7 +19,7 @@ function CallbackInner() {
       try {
         const supa = getBrowserSupabase();
 
-        // 1) Fluxo PKCE (OAuth / email OTP com ?code=...)
+        // Fluxo oficial (OTP/Magic Link via PKCE): vem ?code=...
         const code = searchParams.get('code');
         if (code) {
           const { error } = await supa.auth.exchangeCodeForSession(code);
@@ -31,23 +31,7 @@ function CallbackInner() {
           return;
         }
 
-        // 2) Fluxo Magic Link (hash com access_token)
-        const hasHash =
-          typeof window !== 'undefined' &&
-          window.location.hash &&
-          window.location.hash.includes('access_token');
-
-        if (hasHash) {
-          const { error } = await supa.auth.getSessionFromUrl({ storeSession: true });
-          if (error) throw error;
-          if (!cancelled) {
-            setStatus('Login confirmado! Redirecionando…');
-            router.replace(next);
-          }
-          return;
-        }
-
-        // 3) Se não veio nada, volta ao login
+        // Se não veio code, volta ao login
         setStatus('Não foi possível confirmar o login. Voltando ao início…');
         router.replace(`/login?next=${encodeURIComponent(next)}`);
       } catch (err) {
