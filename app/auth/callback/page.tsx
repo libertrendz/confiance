@@ -1,7 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supa } from '../../../lib/supa';
+import { supa } from '../../lib/supa';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
