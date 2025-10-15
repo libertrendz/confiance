@@ -1,57 +1,80 @@
 // app/auth/callback/page.tsx
-'use client'
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { getBrowserSupabase } from '../../../lib/supa'
+'use client';
 
-export default function CallbackPage() {
-  const router = useRouter()
-  const sp = useSearchParams()
-  const [status, setStatus] = useState('A confirmar o login…')
+import React, { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getBrowserSupabase } from '../../../lib/supa';
 
-  const next = useMemo(() => decodeURIComponent(sp.get('next') || '/menu'), [sp])
-  const code = sp.get('code')
+function CallbackInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState('Confirmando login…');
+
+  const next = searchParams.get('next') || '/menu';
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
+        const supa = getBrowserSupabase();
+
+        // 1) Fluxo PKCE (OAuth / email OTP com ?code=...)
+        const code = searchParams.get('code');
         if (code) {
-          // Fluxo PKCE/OAuth
-          const { error } = await supa.auth.exchangeCodeForSession(code)
-          if (error) throw error
-          setStatus('Login confirmado! Redirecionando…')
-          router.replace(next)
-          return
+          const { error } = await supa.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          if (!cancelled) {
+            setStatus('Login confirmado! Redirecionando…');
+            router.replace(next);
+          }
+          return;
         }
 
-        // Fluxo Magic Link: vem no hash (#access_token=...)
-        const hash = typeof window !== 'undefined' ? window.location.hash : ''
-        const params = new URLSearchParams(hash.replace(/^#/, ''))
-        const access_token = params.get('access_token')
-        const refresh_token = params.get('refresh_token')
+        // 2) Fluxo Magic Link (hash com access_token)
+        const hasHash =
+          typeof window !== 'undefined' &&
+          window.location.hash &&
+          window.location.hash.includes('access_token');
 
-        if (access_token && refresh_token) {
-          const { error } = await supa.auth.setSession({ access_token, refresh_token })
-          if (error) throw error
-          setStatus('Login confirmado! Redirecionando…')
-          router.replace(next)
-          return
+        if (hasHash) {
+          const { error } = await supa.auth.getSessionFromUrl({ storeSession: true });
+          if (error) throw error;
+          if (!cancelled) {
+            setStatus('Login confirmado! Redirecionando…');
+            router.replace(next);
+          }
+          return;
         }
 
-        // Se não veio nada utilizável, volta ao login
-        setStatus('Não foi possível confirmar o login. Redirecionando…')
-        router.replace('/login')
-      } catch (e) {
-        setStatus('Falha ao confirmar o login. Redirecionando…')
-        router.replace('/login')
+        // 3) Se não veio nada, volta ao login
+        setStatus('Não foi possível confirmar o login. Voltando ao início…');
+        router.replace(`/login?next=${encodeURIComponent(next)}`);
+      } catch (err) {
+        console.error('Auth callback error:', err);
+        setStatus('Não foi possível confirmar o login. Voltando ao início…');
+        router.replace(`/login?next=${encodeURIComponent(next)}`);
       }
-    })()
-  }, [code, next, router])
+    })();
+
+    return () => { cancelled = true; };
+  }, [router, searchParams, next]);
 
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1 style={{ fontSize: 18, fontWeight: 700 }}>Autenticando…</h1>
+    <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Autenticando…</h1>
       <p>{status}</p>
+      <p style={{ marginTop: 8 }}>
+        Se não avançar automaticamente, <a href={`/login?next=${encodeURIComponent(next)}`}>clique aqui</a>.
+      </p>
     </div>
-  )
+  );
+}
+
+export default function CallbackPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Carregando…</div>}>
+      <CallbackInner />
+    </Suspense>
+  );
 }
