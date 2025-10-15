@@ -1,6 +1,6 @@
 // lib/supa.ts
 import { createClient } from '@supabase/supabase-js'
-import { getBrowserSupabase } from '../../../lib/supa';
+import { getBrowserSupabase } from '../../../lib/supa'
 
 
 export const supa = createClient(
