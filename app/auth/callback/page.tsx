@@ -2,7 +2,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getBrowserSupabase } from '../../../lib/supa';
+import { getBrowserSupabase } from '../../../lib/supa'
 
 export default function CallbackPage() {
   const router = useRouter()
