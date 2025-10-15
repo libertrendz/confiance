@@ -1,34 +1,65 @@
-'use client'
+// app/menu/page.tsx
+'use client';
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supa } from '../../lib/supa'
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { getBrowserSupabase } from '@/lib/supa';
 
-export default function Menu() {
-  const router = useRouter()
-  const [email, setEmail] = useState<string | null>(null)
+export default function MenuPage() {
+  const router = useRouter();
+  const supa = useMemo(() => getBrowserSupabase(), []);
+  const [email, setEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const check = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (!data.user) router.replace('/login')
-      else setEmail(data.user.email)
-    }
-    check()
-  }, [router])
+    (async () => {
+      try {
+        const { data } = await supa.auth.getUser();
+        if (!data.user) {
+          // se não estiver logado, manda para o /login
+          router.replace('/login?next=/menu');
+          return;
+        }
+        setEmail(data.user.email ?? null);
+      } catch (e: any) {
+        setErr(e?.message ?? 'Erro ao verificar sessão');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [supa, router]);
 
   async function sair() {
-    await supabase.auth.signOut()
-    router.replace('/login')
+    await supa.auth.signOut();
+    router.replace('/login');
   }
 
+  if (loading) return <div style={{ padding: 24, fontFamily: 'system-ui' }}>A carregar…</div>;
+  if (err) return <div style={{ padding: 24, color: '#7f1d1d', fontFamily: 'system-ui' }}>Erro: {err}</div>;
+
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 720, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Menu</h1>
-      <p style={{ marginBottom: 12 }}>Sessão: {email}</p>
-      <button onClick={sair} style={{ padding: '8px 12px', background: '#111', color: '#fff', borderRadius: 8 }}>
-        Sair
-      </button>
+    <div style={{ maxWidth: 920, margin: '0 auto', padding: 24, fontFamily: 'system-ui' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Menu</h1>
+        <div>
+          <span style={{ marginRight: 12 }}>{email}</span>
+          <button
+            onClick={sair}
+            style={{ padding: '8px 12px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <a href="/adm/despesas/nova" style={{ textDecoration: 'none' }}>
+          <button style={{ padding: '10px 14px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}>
+            + Lançar Despesa
+          </button>
+        </a>
+      </div>
     </div>
-  )
+  );
 }
