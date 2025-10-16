@@ -1,61 +1,68 @@
-// app/auth/callback/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { getBrowserSupabase } from '../../../lib/supa';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
 export default function CallbackPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const supa = useMemo(() => getBrowserSupabase(), []);
   const [status, setStatus] = useState('A confirmar login…');
 
-  const next = params.get('next') || '/menu';
-
   useEffect(() => {
-    let cancelled = false;
+    // Tudo roda só no client
+    const supa = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: true, autoRefreshToken: true } }
+    );
+
     (async () => {
       try {
-        const code = params.get('code');
-        const hash = typeof window !== 'undefined' ? window.location.hash : '';
+        const url = new URL(window.location.href);
+        const next = url.searchParams.get('next') || '/menu';
 
+        // 1) Fluxo PKCE / OAuth: ?code=...
+        const code = url.searchParams.get('code');
         if (code) {
           const { error } = await supa.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          if (!cancelled) {
-            setStatus('Login confirmado! Redirecionando…');
-            router.replace(next);
-          }
+          setStatus('Login confirmado! Redirecionando…');
+          router.replace(next);
           return;
         }
 
+        // 2) Fluxo Magic Link: #access_token=...&refresh_token=...
+        const hash = window.location.hash;
         if (hash.includes('access_token')) {
-          const { data } = await supa.auth.getUser();
-          if (data.user && !cancelled) {
+          const params = new URLSearchParams(hash.replace(/^#/, ''));
+          const access_token = params.get('access_token') || '';
+          const refresh_token = params.get('refresh_token') || '';
+
+          if (access_token && refresh_token) {
+            const { error } = await supa.auth.setSession({ access_token, refresh_token });
+            if (error) throw error;
+            setStatus('Login confirmado! Redirecionando…');
             router.replace(next);
             return;
           }
         }
 
-        if (!cancelled) router.replace('/login');
-      } catch (e: any) {
-        console.error('Callback error:', e?.message || e);
-        if (!cancelled) {
-          setStatus('Não foi possível confirmar o login. Voltando ao login…');
-          setTimeout(() => router.replace('/login'), 800);
-        }
+        // Se não tinha code nem tokens no hash, volta pro login
+        setStatus('Não foi possível confirmar o login. Redirecionando…');
+        setTimeout(() => router.replace('/login'), 700);
+      } catch {
+        setStatus('Não foi possível confirmar o login. Redirecionando…');
+        setTimeout(() => router.replace('/login'), 700);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [supa, router, params, next]);
+  }, [router]);
 
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <p>{status}</p>
+      <h1 style={{ fontSize: 18, fontWeight: 700 }}>{status}</h1>
+      <p style={{ marginTop: 6, color: '#555' }}>
+        Se nada acontecer em alguns segundos, <a href="/login">volte ao login</a>.
+      </p>
     </div>
   );
 }
