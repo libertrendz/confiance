@@ -23,6 +23,8 @@ export default function AuthConfirmPage() {
         // Lê params diretamente do window para evitar warnings de Suspense
         const params = new URLSearchParams(window.location.search);
         const token_hash = params.get('token_hash');
+        const code = params.get('code');
+        const next = params.get('next') || '/menu';
         const type = (params.get('type') ?? 'magiclink') as
           | 'magiclink'
           | 'signup'
