@@ -7,6 +7,7 @@ export async function GET() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const { data } = await supa.from('feature_flags').select('key,enabled')
+  const { data, error } = await supa.from('feature_flags').select('key,enabled')
+  if (error) return NextResponse.json([], { status: 200 })
   return NextResponse.json(data ?? [])
 }
