@@ -1,5 +1,7 @@
 // lib/flags.ts
+// Feature flags simples, para evitar que imports quebrem o build.
+// Altere conforme for usando no projeto.
 export const FLAGS = {
-  RLS_MULTI_TENANT: true,
-};
-export default FLAGS;
+  demoMode: true,
+  showRiskBadge: true
+}
