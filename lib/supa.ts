@@ -1,15 +1,9 @@
-// lib/supa.ts
-import { createClient } from '@supabase/supabase-js'
+// lib/flags.ts
+export type FlagMap = Record<string, boolean>
 
-export const supa = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      flowType: 'pkce', // deixa pronto p/ OAuth também
-    },
-  }
-)
+export async function getFlags(): Promise<FlagMap> {
+  const res = await fetch('/api/flags', { cache: 'no-store' })
+  if (!res.ok) return {}
+  const data = (await res.json()) as { key: string; enabled: boolean }[]
+  return Object.fromEntries(data.map((f) => [f.key, f.enabled]))
+}
