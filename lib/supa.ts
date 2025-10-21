@@ -1,9 +1,22 @@
-// lib/flags.ts
-export type FlagMap = Record<string, boolean>
+// lib/supa.ts
+import { createClient } from '@supabase/supabase-js'
 
-export async function getFlags(): Promise<FlagMap> {
-  const res = await fetch('/api/flags', { cache: 'no-store' })
-  if (!res.ok) return {}
-  const data = (await res.json()) as { key: string; enabled: boolean }[]
-  return Object.fromEntries(data.map((f) => [f.key, f.enabled]))
+// Cliente único no browser
+let _client: ReturnType<typeof createClient> | null = null
+
+export function getBrowserSupabase() {
+  if (typeof window === 'undefined') {
+    throw new Error('getBrowserSupabase() só deve ser chamado no cliente.')
+  }
+  if (_client) return _client
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  _client = createClient(url, key, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  })
+  return _client
 }
