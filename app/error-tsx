@@ -1,0 +1,12 @@
+'use client'
+export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
+  return (
+    <html>
+      <body style={{fontFamily:'system-ui', padding:24}}>
+        <h2>Ocorreu um erro</h2>
+        <p>{error.message}</p>
+        <a href="/menu">Voltar ao menu</a>
+      </body>
+    </html>
+  )
+}
