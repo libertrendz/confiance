@@ -1,25 +1,8 @@
 // lib/supa.ts
 import { createClient } from '@supabase/supabase-js'
 
-// Cliente único no navegador para manter sessão (persistSession, autoRefresh)
-let browserClient: ReturnType<typeof createClient> | null = null
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export function getBrowserSupabase() {
-  if (typeof window === 'undefined') {
-    throw new Error('getBrowserSupabase() só deve ser chamado no browser.')
-  }
-  if (browserClient) return browserClient
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-  browserClient = createClient(url, anon, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    }
-  })
-
-  return browserClient
-}
+export const supa = createClient(supabaseUrl, supabaseKey)
+export default supa
