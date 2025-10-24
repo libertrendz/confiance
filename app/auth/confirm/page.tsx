@@ -1,69 +1,75 @@
-// app/auth/confirm/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supa } from '../../../lib/supa'
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getBrowserSupabase } from '../../../lib/supa';
 
 export default function AuthConfirmPage() {
-  const router = useRouter()
-  const [status, setStatus] = useState('Confirmando login…')
+  const router = useRouter();
+  const params = useSearchParams();
+  const [status, setStatus] = useState('Confirmando login…');
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
-    ;(async () => {
+    (async () => {
       try {
-        // Lê os params direto do window para evitar warnings de Suspense
-        const params = new URLSearchParams(window.location.search)
-        const token_hash = params.get('token_hash')
-        const type = (params.get('type') ?? '').toLowerCase()
-        const code = params.get('code')
-        const next = params.get('next') || '/menu'
+        const supa = getBrowserSupabase();
 
-        // 1) Magic Link (GoTrue v2): vem com token_hash + type (magiclink, signup, etc.)
-        if (token_hash) {
-          const { error } = await supa.auth.verifyOtp({ type: 'magiclink', token_hash })
-          if (error) throw error
-          if (!cancelled) {
-            setStatus('Login confirmado! Redirecionando…')
-            router.replace(next)
-          }
-          return
-        }
+        // Lê os parâmetros da URL (gerados pelo Supabase)
+        const token_hash = params.get('token_hash');
+        const type = (params.get('type') || 'magiclink').toLowerCase();
+        const code = params.get('code'); // fluxo OAuth/PKCE
+        const next = params.get('next') || '/menu';
 
-        // 2) Fluxo OAuth/PKCE (às vezes o email template também usa code):
+        // 1) Se veio PKCE/OAuth, troca "code" por sessão
         if (code) {
-          const { error } = await supa.auth.exchangeCodeForSession(code)
-          if (error) throw error
+          const { error } = await supa.auth.exchangeCodeForSession(code);
+          if (error) throw error;
           if (!cancelled) {
-            setStatus('Login confirmado! Redirecionando…')
-            router.replace(next)
+            setStatus('Login confirmado! Redirecionando…');
+            router.replace(next);
           }
-          return
+          return;
         }
 
-        // 3) Sem token/código? volta pro login
-        if (!cancelled) {
-          setStatus('Link inválido ou expirado. Voltando ao login…')
-          setTimeout(() => router.replace('/login'), 900)
+        // 2) Se veio magic link (token_hash), confirma
+        if (token_hash) {
+          // Tipos válidos: magiclink | signup | invite | recovery | email_change
+          const validTypes = ['magiclink', 'signup', 'invite', 'recovery', 'email_change'];
+          const otpType = validTypes.includes(type) ? (type as any) : ('magiclink' as const);
+          const { error } = await supa.auth.verifyOtp({ type: otpType, token_hash });
+          if (error) throw error;
+          if (!cancelled) {
+            setStatus('Login confirmado! Redirecionando…');
+            router.replace(next);
+          }
+          return;
         }
-      } catch (e: any) {
-        console.error('AuthConfirm error:', e)
+
+        // 3) Nada para confirmar → volta ao login
         if (!cancelled) {
-          setStatus('Não foi possível confirmar o login. Voltando ao login…')
-          setTimeout(() => router.replace('/login'), 1200)
+          setStatus('Não há nada para confirmar. Redirecionando…');
+          router.replace('/login');
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setStatus('Não foi possível confirmar o login. Redirecionando…');
+          router.replace('/login');
         }
       }
-    })()
+    })();
 
-    return () => { cancelled = true }
-  }, [router])
+    return () => {
+      cancelled = true;
+    };
+  }, [params, router]);
 
   return (
-    <div style={{padding:24, fontFamily:'system-ui', maxWidth:560, margin:'0 auto'}}>
-      <h1 style={{fontSize:20, fontWeight:700, marginBottom:8}}>Autenticação</h1>
+    <div style={{ padding: 24, fontFamily: 'system-ui' }}>
+      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Autenticação</h1>
       <p>{status}</p>
     </div>
-  )
+  );
 }
