@@ -1,26 +1,27 @@
 // lib/supa.ts
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let _client: SupabaseClient | null = null;
 
-let cached: SupabaseClient | null = null
-
-export function getBrowserSupabase(): SupabaseClient {
-  if (!cached) {
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
-    }
-    cached = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
+/**
+ * Retorna um SupabaseClient para uso no browser (CSR).
+ * Singleton simples para evitar recriações.
+ */
+export default function getBrowserSupabase(): SupabaseClient {
+  if (_client) return _client;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (!url || !anon) {
+    throw new Error('Variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY ausentes.');
   }
-  return cached
+  _client = createBrowserClient(url, anon, {
+    cookies: {
+      // no browser não precisamos implementar; SSR cuidaria disso
+      get() { return ''; },
+      set() {},
+      remove() {},
+    },
+  });
+  return _client;
 }
-
-// Compatibilidade: quem importa `supa` continua funcionando.
-export const supa = getBrowserSupabase()
-export default supa
