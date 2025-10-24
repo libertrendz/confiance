@@ -1,27 +1,39 @@
 // lib/supa.ts
+'use client';
+
 import { createBrowserClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-let _client: SupabaseClient | null = null;
+let browserClient: SupabaseClient | null = null;
 
 /**
- * Retorna um SupabaseClient para uso no browser (CSR).
- * Singleton simples para evitar recriações.
+ * Sempre use:  import getBrowserSupabase from '@/lib/supa'
+ * e depois:     const supa = getBrowserSupabase()
  */
 export default function getBrowserSupabase(): SupabaseClient {
-  if (_client) return _client;
+  if (browserClient) return browserClient;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anon) {
-    throw new Error('Variáveis NEXT_PUBLIC_SUPABASE_URL/ANON_KEY ausentes.');
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (!url || !key) {
+    throw new Error('Supabase URL/Anon Key ausentes nas variáveis de ambiente.');
   }
-  _client = createBrowserClient(url, anon, {
+
+  browserClient = createBrowserClient(url, key, {
     cookies: {
-      // no browser não precisamos implementar; SSR cuidaria disso
-      get() { return ''; },
-      set() {},
-      remove() {},
+      get() {
+        return typeof document !== 'undefined' ? document.cookie : '';
+      },
+      set(value) {
+        if (typeof document !== 'undefined') document.cookie = value;
+      },
+      remove(name) {
+        if (typeof document !== 'undefined') {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+        }
+      },
     },
   });
-  return _client;
+
+  return browserClient;
 }
