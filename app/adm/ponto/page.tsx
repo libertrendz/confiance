@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supa } from '@/lib/supa';
+import { getBrowserSupabase } from '@/lib/supa';
 
 type Ponto = {
   id: string;
