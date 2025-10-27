@@ -14,31 +14,20 @@ export default function MenuPage() {
 
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       try {
-        // 1) Garante que a sessão foi restaurada do storage antes de decidir
         const { data } = await supa.auth.getSession();
-
         if (!data.session) {
-          // sem sessão -> volta pro login
           window.location.replace('/login');
           return;
         }
-
-        // temos sessão
         if (mounted) setEmail(data.session.user.email ?? null);
-
-        // 2) Aqui você pode carregar o restante dos dados do menu (projeto/fases etc.)
-        // ... suas queries com supa.from(...)
-
       } catch (e: any) {
         if (mounted) setErr(e?.message || 'Erro ao carregar menu');
       } finally {
         if (mounted) setLoading(false);
       }
     })();
-
     return () => { mounted = false; };
   }, [supa]);
 
