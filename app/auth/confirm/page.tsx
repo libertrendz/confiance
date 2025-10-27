@@ -1,54 +1,85 @@
-// app/auth/confirm/page.tsx
-'use client'
+'use client';
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import getBrowserSupabase from '../../../lib/supa'
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import getBrowserSupabase from '../../../lib/supa';
 
 export default function AuthConfirmPage() {
-  const router = useRouter()
-  const params = useSearchParams()
-  const supa = useMemo(() => getBrowserSupabase(), [])
-  const [status, setStatus] = useState('Confirmando login…')
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const supa = useMemo(() => getBrowserSupabase(), []);
+  const [status, setStatus] = useState('Confirmando login…');
+
+  // next=/menu por padrão
+  const next = decodeURIComponent(params.get('next') || '/menu');
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
-    ;(async () => {
+    (async () => {
       try {
-        const code = params.get('code') // supabase v2 envia ?code=... (type=magiclink)
-        const next = params.get('next') || '/menu'
-
-        if (!code) {
-          setStatus('Link inválido. Voltando ao login…')
-          setTimeout(() => router.replace('/login'), 800)
-          return
+        // 1) PKCE: /auth/confirm?code=...
+        const code = params.get('code');
+        if (code) {
+          const { error } = await supa.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          if (!cancelled) {
+            setStatus('Login confirmado! Redirecionando…');
+            router.replace(next);
+          }
+          return;
         }
 
-        // Troca o código por sessão e PERSISTE no storage do browser
-        const { error } = await supa.auth.exchangeCodeForSession(code)
-        if (error) throw error
+        // 2) Magiclink clássico: /auth/confirm?type=magiclink&token_hash=...
+        const tokenHash = params.get('token_hash');
+        const type = params.get('type');
+        if (tokenHash && type === 'magiclink') {
+          // Para magiclink, não precisa de email ao usar token_hash
+          const { error } = await supa.auth.verifyOtp({
+            type: 'magiclink',
+            token_hash: tokenHash,
+          } as any); // tipagem de verifyOtp varia por overload
+          if (error) throw error;
 
-        if (!cancelled) {
-          setStatus('Login confirmado! Redirecionando…')
-          setTimeout(() => router.replace(next), 500)
+          if (!cancelled) {
+            setStatus('Login confirmado! Redirecionando…');
+            router.replace(next);
+          }
+          return;
         }
-      } catch (e: any) {
-        console.error('confirm error:', e)
-        if (!cancelled) {
-          setStatus('Não foi possível confirmar o login. Redirecionando…')
-          setTimeout(() => router.replace('/login'), 1200)
+
+        // 3) Fragmento com access_token (#access_token=...) — edge case
+        if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+          // Em alguns setups o getSessionFromUrl não aparece no tipo do SSR client; tentar via exchangeCodeForSession falha.
+          // Se cair aqui, só redireciona — se já houver sessão, o /menu passa;
+          // se não houver, /menu volta pra /login.
+          router.replace(next);
+          return;
         }
+
+        // Nenhum formato reconhecido => tenta checar sessão; se não houver, volta ao login
+        const { data } = await supa.auth.getSession();
+        if (data.session) {
+          router.replace(next);
+        } else {
+          setStatus('Link inválido ou expirado. Redirecionando ao login…');
+          setTimeout(() => router.replace('/login'), 900);
+        }
+      } catch (e) {
+        console.error('Auth confirm error:', e);
+        setStatus('Não foi possível confirmar o login. Redirecionando…');
+        setTimeout(() => router.replace('/login'), 900);
       }
-    })()
+    })();
 
-    return () => { cancelled = true }
-  }, [router, params, supa])
+    return () => { cancelled = true; };
+  }, [params, router, supa, next]);
 
   return (
     <div style={{padding:24, fontFamily:'system-ui'}}>
-      <h1 style={{fontSize:18, fontWeight:700, marginBottom:8}}>Autenticação</h1>
+      <h1 style={{fontSize:20, fontWeight:700, marginBottom:8}}>Autenticação</h1>
       <p>{status}</p>
     </div>
-  )
+  );
 }
