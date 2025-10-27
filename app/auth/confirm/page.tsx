@@ -2,13 +2,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import getBrowserSupabase from '../../../lib/supa';
 
 export const dynamic = 'force-dynamic';
 
 export default function AuthConfirmPage() {
-  const router = useRouter();
   const [msg, setMsg] = useState('A confirmar login…');
 
   useEffect(() => {
@@ -17,11 +15,8 @@ export default function AuthConfirmPage() {
     (async () => {
       const supa = getBrowserSupabase();
       const sp = new URLSearchParams(window.location.search);
-
-      // novo formato (correto) para magic link
       const token_hash = sp.get('token_hash');
       const type = sp.get('type');
-      const next = sp.get('next') || '/menu';
 
       try {
         if (type === 'magiclink' && token_hash) {
@@ -29,23 +24,22 @@ export default function AuthConfirmPage() {
             type: 'magiclink',
             token_hash,
           });
-
           if (error) throw error;
 
           if (!cancelled) {
             setMsg('Login confirmado! Redirecionando…');
-            router.replace(next);
+            // usa redirecionamento forte para evitar ficar na mesma página
+            window.location.replace('/menu');
           }
           return;
         }
 
-        // Se chegou aqui sem token válido
         throw new Error('Link inválido ou expirado');
       } catch (e: any) {
         console.error('Auth confirm error:', e?.message || e);
         if (!cancelled) {
           setMsg('Não foi possível confirmar o login. Redirecionando para o login…');
-          setTimeout(() => router.replace('/login'), 800);
+          setTimeout(() => window.location.replace('/login'), 800);
         }
       }
     })();
@@ -53,7 +47,7 @@ export default function AuthConfirmPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, []);
 
   return (
     <div style={{ padding: 24, fontFamily: 'system-ui' }}>
