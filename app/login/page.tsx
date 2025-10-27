@@ -2,13 +2,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
-  const router = useRouter();
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
@@ -17,16 +15,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supa.auth.getUser();
-      if (data.user) setSessionActive(true);
+      const { data } = await supa.auth.getSession();
+      if (data.session) setSessionActive(true);
     })();
   }, [supa]);
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
-    setErr(null);
-
+    setMsg(null); setErr(null);
     try {
       const emailRedirectTo = `${window.location.origin}/auth/confirm`;
       const { error } = await supa.auth.signInWithOtp({
@@ -41,20 +37,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 480, margin: '0 auto' }}>
+    <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
       {sessionActive && (
         <div style={{ marginBottom: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 8 }}>
           <b>Sessão ativa encontrada.</b>
           <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+            {/* Navegação real por âncora, sem JS */}
+            <a href="/menu" style={{ textDecoration: 'none' }}>
+              <button
+                type="button"
+                style={{ padding: '8px 12px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
+              >
+                Ir para o menu
+              </button>
+            </a>
             <button
-              onClick={() => window.location.replace('/menu')}
-              style={{ padding: '8px 12px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
-            >
-              Ir para o menu
-            </button>
-            <button
+              type="button"
               onClick={async () => {
                 await supa.auth.signOut();
                 setSessionActive(false);
@@ -78,7 +78,10 @@ export default function LoginPage() {
             style={{ display: 'block', width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
           />
         </label>
-        <button type="submit" style={{ padding: '10px 14px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}>
+        <button
+          type="submit"
+          style={{ padding: '10px 14px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
+        >
           Enviar Magic Link
         </button>
       </form>
