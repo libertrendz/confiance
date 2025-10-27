@@ -24,14 +24,14 @@ export default function LoginPage() {
   }, [supa])
 
   async function enviar(e: React.FormEvent) {
-    e.preventDefault()
-    setMsg(null); setErr(null)
-    try {
-      const { error } = await supa.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(next)}`,
-        },
+  e.preventDefault()
+  setMsg(null); setErr(null)
+  try {
+    const { error } = await supa.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/menu`, // ✅ ESSA LINHA É A CHAVE
+      },
       })
       if (error) throw error
       setMsg('Enviámos um link mágico para o seu email.')
