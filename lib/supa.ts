@@ -1,22 +1,26 @@
 // lib/supa.ts
-import { createBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
+'use client';
 
-// cliente único para o browser
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
 let _client: SupabaseClient | null = null;
 
-export default function getBrowserSupabase(): SupabaseClient {
+/**
+ * Cliente único do browser. Nada de @supabase/ssr.
+ * detectSessionInUrl: false => nós tratamos o callback na página /auth/confirm
+ */
+export default function getBrowserSupabase() {
   if (_client) return _client;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  _client = createBrowserClient(url, key, {
+  _client = createClient(url, anon, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // importantíssimo: o parse da URL será feito manualmente na /auth/confirm
       detectSessionInUrl: false,
+      flowType: 'pkce',
     },
   });
 
