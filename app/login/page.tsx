@@ -2,23 +2,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
   const router = useRouter();
-  const sp = useSearchParams();
-  const next = sp?.get('next') || '/menu';
-
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
 
-  // Se já tiver sessão, mostra aviso e habilita “Ir para o menu”
   useEffect(() => {
     (async () => {
       const { data } = await supa.auth.getUser();
@@ -32,15 +28,11 @@ export default function LoginPage() {
     setErr(null);
 
     try {
-      const emailRedirectTo = `${window.location.origin}/auth/confirm?next=${encodeURIComponent(next)}`;
-
+      const emailRedirectTo = `${window.location.origin}/auth/confirm`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
-        options: {
-          emailRedirectTo, // importante: leva para /auth/confirm (com next)
-        },
+        options: { emailRedirectTo },
       });
-
       if (error) throw error;
       setMsg('Enviámos um link de acesso para o seu e-mail.');
     } catch (e: any) {
@@ -57,7 +49,7 @@ export default function LoginPage() {
           <b>Sessão ativa encontrada.</b>
           <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
             <button
-              onClick={() => router.replace(next)}
+              onClick={() => window.location.replace('/menu')}
               style={{ padding: '8px 12px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
             >
               Ir para o menu
