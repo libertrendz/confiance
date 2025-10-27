@@ -16,7 +16,7 @@ export default function LoginPage() {
   useEffect(() => {
     (async () => {
       const { data } = await supa.auth.getSession();
-      if (data.session) setSessionActive(true);
+      setSessionActive(!!data.session);
     })();
   }, [supa]);
 
@@ -24,6 +24,7 @@ export default function LoginPage() {
     e.preventDefault();
     setMsg(null); setErr(null);
     try {
+      // IMPORTANTE: redirecionar para /auth/confirm (sem next)
       const emailRedirectTo = `${window.location.origin}/auth/confirm`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
@@ -44,7 +45,6 @@ export default function LoginPage() {
         <div style={{ marginBottom: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 8 }}>
           <b>Sessão ativa encontrada.</b>
           <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-            {/* Navegação real por âncora, sem JS */}
             <a href="/menu" style={{ textDecoration: 'none' }}>
               <button
                 type="button"
