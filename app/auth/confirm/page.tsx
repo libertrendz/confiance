@@ -35,7 +35,7 @@ export default function AuthConfirmPage() {
 
         // 1) Fluxo PKCE / OAuth: veio "code"
         if (code) {
-          const { error } = await supa.auth.exchangeCodeForSession(code);
+          const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
           if (error) throw error;
 
           setStatus('Login confirmado! Redirecionando…');
