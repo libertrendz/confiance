@@ -1,93 +1,121 @@
 // app/login/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
-
-export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [sessionActive, setSessionActive] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supa.auth.getSession();
-      setSessionActive(!!data.session);
-    })();
-  }, [supa]);
-
-  async function enviar(e: React.FormEvent) {
+  const pedirMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMsg(null); setErr(null);
+    setSending(true);
+    setMsg(null);
+    setErr(null);
     try {
-      // IMPORTANTE: redirecionar para /auth/confirm (sem next)
-      const emailRedirectTo = `${window.location.origin}/auth/confirm`;
+      const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo },
+        options: { emailRedirectTo: redirect },
       });
       if (error) throw error;
-      setMsg('Enviámos um link de acesso para o seu e-mail.');
+      setMsg('Email enviado. Abra o link no navegador do telemóvel (não no app de email).');
     } catch (e: any) {
-      setErr(e?.message || 'Erro ao enviar o link.');
+      console.error('Magic link error:', e);
+      setErr(e?.message ?? 'Falha ao enviar o email. Verifique o endereço e tente novamente.');
+    } finally {
+      setSending(false);
     }
-  }
+  };
+
+  const terminarSessao = async () => {
+    try {
+      await supa.auth.signOut();
+      // higiene extra (casos teimosos)
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-'))
+        .forEach((k) => localStorage.removeItem(k));
+      window.location.replace('/login');
+    } catch {
+      window.location.replace('/login');
+    }
+  };
 
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
+    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
-      {sessionActive && (
-        <div style={{ marginBottom: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 8 }}>
-          <b>Sessão ativa encontrada.</b>
-          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-            <a href="/menu" style={{ textDecoration: 'none' }}>
-              <button
-                type="button"
-                style={{ padding: '8px 12px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
-              >
-                Ir para o menu
-              </button>
-            </a>
-            <button
-              type="button"
-              onClick={async () => {
-                await supa.auth.signOut();
-                setSessionActive(false);
-              }}
-              style={{ padding: '8px 12px', border: '1px solid #ddd', background: '#fff', borderRadius: 8 }}
-            >
-              Terminar sessão
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Sessão ativa (desktop vive grudado em sessão) */}
+      <SessaoAtiva onIrMenu={() => (window.location.href = '/menu')} onSair={terminarSessao} />
 
-      <form onSubmit={enviar} style={{ display: 'grid', gap: 8 }}>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ display: 'block', width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 8 }}
-          />
-        </label>
+      <form onSubmit={pedirMagicLink} style={{ marginTop: 16 }}>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          style={{
+            width: '100%',
+            padding: 10,
+            marginTop: 6,
+            marginBottom: 12,
+            border: '1px solid #ccc',
+            borderRadius: 8,
+          }}
+        />
         <button
           type="submit"
-          style={{ padding: '10px 14px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
+          disabled={sending || !email}
+          style={{
+            width: '100%',
+            padding: 12,
+            borderRadius: 10,
+            border: 'none',
+            cursor: 'pointer',
+            opacity: sending || !email ? 0.6 : 1,
+          }}
         >
-          Enviar Magic Link
+          {sending ? 'Enviando...' : 'Enviar Magic Link'}
         </button>
       </form>
 
-      {msg && <p style={{ marginTop: 8, color: '#14532d' }}>{msg}</p>}
-      {err && <p style={{ marginTop: 8, color: '#7f1d1d' }}>{err}</p>}
+      {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
+      {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
+
+      <p style={{ marginTop: 16, fontSize: 13, color: '#555' }}>
+        Dica: ao receber o email, toque em “Abrir no navegador”. Webviews de apps de email usam outro armazenamento e o login
+        não “cola” no navegador principal.
+      </p>
+    </main>
+  );
+}
+
+function SessaoAtiva(props: { onIrMenu: () => void; onSair: () => void }) {
+  // Renderiza UI “Sessão ativa” sem checar no servidor; deixa o botão de sair funcionar sempre.
+  return (
+    <div
+      style={{
+        border: '1px solid #e5e5e5',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 8,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}
+    >
+      <span>Sessão ativa encontrada.</span>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={props.onIrMenu}>Ir para o menu</button>
+        <button onClick={props.onSair}>Terminar sessão</button>
+      </div>
     </div>
   );
 }
