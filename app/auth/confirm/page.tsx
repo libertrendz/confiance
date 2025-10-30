@@ -9,7 +9,10 @@ export const dynamic = 'force-dynamic';
 function getParams() {
   const u = new URL(window.location.href);
   return {
-    token_hash: u.searchParams.get('token_hash') || u.searchParams.get('token') || u.searchParams.get('tokenHash'),
+    token_hash:
+      u.searchParams.get('token_hash') ||
+      u.searchParams.get('token') ||
+      u.searchParams.get('tokenHash'),
     type:
       (u.searchParams.get('type') as
         | 'magiclink'
@@ -29,23 +32,25 @@ export default function AuthConfirmPage() {
 
   useEffect(() => {
     let done = false;
+
     const go = async () => {
       try {
         const { token_hash, type, code, next } = getParams();
 
-        // 1) Fluxo PKCE / OAuth: veio "code"
+        // 1) Fluxo moderno (PKCE / OAuth): veio ?code=...
         if (code) {
+          // CORREÇÃO: precisa da URL completa no mobile
           const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
           if (error) throw error;
 
           setStatus('Login confirmado! Redirecionando…');
           done = true;
-          // HARD redirect (elimina qualquer ruído do router)
+          // HARD redirect elimina ruídos de roteamento
           window.location.replace(next || '/menu');
           return;
         }
 
-        // 2) Magic link tradicional: veio token_hash + type
+        // 2) Magic link tradicional: token_hash + type
         if (token_hash && type) {
           const { error } = await supa.auth.verifyOtp({ type, token_hash });
           if (error) throw error;
@@ -56,7 +61,7 @@ export default function AuthConfirmPage() {
           return;
         }
 
-        // 3) Nada útil na URL -> tenta sessão existente
+        // 3) Sem parâmetros úteis: tenta sessão existente
         const { data } = await supa.auth.getSession();
         if (data.session) {
           setStatus('Sessão ativa, redirecionando…');
@@ -65,7 +70,7 @@ export default function AuthConfirmPage() {
           return;
         }
 
-        // 4) Falhou tudo -> volta ao login
+        // 4) Falhou tudo: volta ao login, sem loops
         setStatus('Não foi possível confirmar. Voltando ao login…');
         window.location.replace('/login');
       } catch (e: any) {
@@ -73,10 +78,9 @@ export default function AuthConfirmPage() {
         setStatus('Não foi possível confirmar. Voltando ao login…');
         window.location.replace('/login');
       } finally {
-        // Fallback final: se por algum motivo o browser não navegou, força /menu.
-        setTimeout(() => {
-          if (!done) window.location.replace('/menu');
-        }, 1500);
+        // Removido o fallback que empurrava /menu sem sessão
+        // Isso evitava loop “A redirecionar…” no mobile.
+        void done;
       }
     };
 
