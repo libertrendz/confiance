@@ -1,6 +1,6 @@
 // app/auth/confirm/route.ts
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSupabase } from '@/lib/supabaseServer';
+import { getServerSupabase } from '../../../lib/supabaseServer'; // <-- relativo, sem '@/'
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -9,9 +9,8 @@ export async function GET(req: NextRequest) {
   try {
     const supa = getServerSupabase();
 
-    // Fluxo novo (?code=...) — usa a URL completa
-    const hasCode = url.searchParams.has('code');
-    if (hasCode) {
+    // 1) Fluxo moderno (?code=...) usando a URL completa
+    if (url.searchParams.has('code')) {
       const { error } = await supa.auth.exchangeCodeForSession(url.toString());
       if (error) {
         return NextResponse.redirect(new URL(`/login?err=${encodeURIComponent(error.message)}`, url.origin));
@@ -19,11 +18,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Fluxo antigo (token_hash + type)
+    // 2) Fluxo antigo (token_hash + type)
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
       url.searchParams.get('tokenHash');
+
     const type = url.searchParams.get('type') as
       | 'magiclink' | 'recovery' | 'invite' | 'signup' | 'email_change' | null;
 
@@ -35,11 +35,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Sem code/token: se já houver sessão ativa nos cookies, segue; senão volta ao login
+    // 3) Sem code/token: se já existir sessão nos cookies, segue; senão, volta ao login
     const { data } = await supa.auth.getSession();
     if (data.session) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
+
     return NextResponse.redirect(new URL('/login?err=missing_code', url.origin));
   } catch (e: any) {
     const msg = e?.message || 'erro_desconhecido';
