@@ -5,8 +5,8 @@ import { createServerClient } from '@supabase/ssr';
 export function getServerSupabase() {
   const cookieStore = cookies();
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL; // servidor
+  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // pode ser anon público
 
   if (!supabaseUrl || !supabaseAnon) {
     throw new Error('Faltam envs do Supabase: SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY');
