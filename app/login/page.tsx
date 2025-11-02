@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
+export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
