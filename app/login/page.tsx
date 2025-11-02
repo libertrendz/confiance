@@ -40,14 +40,13 @@ export default function LoginPage() {
     setMsg(null);
     setErr(null);
     try {
-      // ESSA É A PARTE DO ITEM 5: redireciona para /auth/confirm (server) que troca o code por cookies
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: redirect },
       });
       if (error) throw error;
-      setMsg('Email enviado. Ao abrir, se houver opção, toque em “Abrir no navegador”.');
+      setMsg('Email enviado. Se abrir em webview e não colar sessão, use “Abrir no navegador”.');
     } catch (e: any) {
       setErr(e?.message ?? 'Falha ao enviar o email. Tente novamente.');
     } finally {
@@ -60,7 +59,6 @@ export default function LoginPage() {
   }
 
   function terminarSessao() {
-    // agora o logout real está no servidor (limpa cookies http-only)
     window.location.href = '/auth/signout';
   }
 
@@ -130,11 +128,6 @@ export default function LoginPage() {
 
       {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
       {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
-
-      <p style={{ marginTop: 16, fontSize: 13, color: '#555' }}>
-        Dica: se o app de e-mail abrir um webview e não colar a sessão no navegador principal, toque em “Abrir no
-        navegador”.
-      </p>
     </main>
   );
 }
