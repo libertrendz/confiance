@@ -1,6 +1,5 @@
-// app/auth/confirm/route.ts
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSupabase } from '../../../lib/supabaseServer'; // <-- relativo, sem '@/'
+import { getServerSupabase } from '@/lib/supabaseServer'; // mesmo alias do supa.ts
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -9,16 +8,12 @@ export async function GET(req: NextRequest) {
   try {
     const supa = getServerSupabase();
 
-    // 1) Fluxo moderno (?code=...) usando a URL completa
     if (url.searchParams.has('code')) {
       const { error } = await supa.auth.exchangeCodeForSession(url.toString());
-      if (error) {
-        return NextResponse.redirect(new URL(`/login?err=${encodeURIComponent(error.message)}`, url.origin));
-      }
+      if (error) return NextResponse.redirect(new URL(`/login?err=${encodeURIComponent(error.message)}`, url.origin));
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // 2) Fluxo antigo (token_hash + type)
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
@@ -29,17 +24,12 @@ export async function GET(req: NextRequest) {
 
     if (token_hash && type) {
       const { error } = await supa.auth.verifyOtp({ type, token_hash });
-      if (error) {
-        return NextResponse.redirect(new URL(`/login?err=${encodeURIComponent(error.message)}`, url.origin));
-      }
+      if (error) return NextResponse.redirect(new URL(`/login?err=${encodeURIComponent(error.message)}`, url.origin));
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // 3) Sem code/token: se já existir sessão nos cookies, segue; senão, volta ao login
     const { data } = await supa.auth.getSession();
-    if (data.session) {
-      return NextResponse.redirect(new URL(next, url.origin));
-    }
+    if (data.session) return NextResponse.redirect(new URL(next, url.origin));
 
     return NextResponse.redirect(new URL('/login?err=missing_code', url.origin));
   } catch (e: any) {
