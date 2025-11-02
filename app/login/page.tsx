@@ -12,10 +12,9 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [hasSession, setHasSession] = useState<boolean>(false); // <- NÃO começa “null” pra não travar
-  const [checked, setChecked] = useState(false); // já checou a sessão?
+  const [hasSession, setHasSession] = useState<boolean>(false);
+  const [checked, setChecked] = useState(false);
 
-  // Descobrir se há sessão (sem travar em "Carregando...")
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -35,52 +34,43 @@ export default function LoginPage() {
     };
   }, [supa]);
 
-  const pedirMagicLink = async (e: React.FormEvent) => {
+  async function pedirMagicLink(e: React.FormEvent) {
     e.preventDefault();
     setSending(true);
     setMsg(null);
     setErr(null);
     try {
+      // ESSA É A PARTE DO ITEM 5: redireciona para /auth/confirm (server) que troca o code por cookies
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: redirect },
       });
       if (error) throw error;
-      setMsg('Email enviado. Abra o link no navegador do telemóvel (não no app de e-mail).');
+      setMsg('Email enviado. Ao abrir, se houver opção, toque em “Abrir no navegador”.');
     } catch (e: any) {
-      console.error('Magic link error:', e);
-      setErr(e?.message ?? 'Falha ao enviar o email. Verifique o endereço e tente novamente.');
+      setErr(e?.message ?? 'Falha ao enviar o email. Tente novamente.');
     } finally {
       setSending(false);
     }
-  };
+  }
 
-  const terminarSessao = async () => {
-    try {
-      await supa.auth.signOut();
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith('sb-'))
-        .forEach((k) => localStorage.removeItem(k));
-      setHasSession(false);
-      window.location.replace('/login');
-    } catch {
-      window.location.replace('/login');
-    }
-  };
-
-  const irMenu = () => {
+  function irMenu() {
     window.location.href = '/menu';
-  };
+  }
+
+  function terminarSessao() {
+    // agora o logout real está no servidor (limpa cookies http-only)
+    window.location.href = '/auth/signout';
+  }
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
-      {/* Não trava: se ainda não checou sessão, segue mostrando formulário + aviso leve */}
       {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
 
-      {checked && hasSession ? (
+      {checked && hasSession && (
         <div
           style={{
             border: '1px solid #e5e5e5',
@@ -99,9 +89,8 @@ export default function LoginPage() {
             <button type="button" onClick={terminarSessao}>Terminar sessão</button>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* Formulário SEMPRE disponível (mesmo enquanto checa sessão) */}
       <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
         <label htmlFor="email">Email</label>
         <input
@@ -143,8 +132,8 @@ export default function LoginPage() {
       {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
 
       <p style={{ marginTop: 16, fontSize: 13, color: '#555' }}>
-        Dica: ao receber o e-mail, toque em “Abrir no navegador”. Webviews de apps de e-mail usam outro armazenamento
-        e o login não “cola” no navegador principal.
+        Dica: se o app de e-mail abrir um webview e não colar a sessão no navegador principal, toque em “Abrir no
+        navegador”.
       </p>
     </main>
   );
