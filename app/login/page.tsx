@@ -12,11 +12,25 @@ export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
 
-  // Descobre se já há sessão (desktop vivia “sempre logado”)
+  // Descobrir se há sessão (sem travar em "Carregando...")
   useEffect(() => {
-    supa.auth.getSession().then(({ data }) => {
-      setHasSession(!!data.session);
-    }).catch(() => setHasSession(false));
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supa.auth.getSession();
+        if (!alive) return;
+        setHasSession(!!data.session);
+      } catch {
+        if (!alive) return;
+        setHasSession(false);
+      } finally {
+        // failsafe: se por algum motivo ficou null, define como false
+        if (alive) setHasSession((v) => (v === null ? false : v));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
   const pedirMagicLink = async (e: React.FormEvent) => {
@@ -31,7 +45,7 @@ export default function LoginPage() {
         options: { emailRedirectTo: redirect },
       });
       if (error) throw error;
-      setMsg('Email enviado. Abra o link no navegador do telemóvel (não no app de email).');
+      setMsg('Email enviado. Abra o link no navegador do telemóvel (não no app de e-mail).');
     } catch (e: any) {
       console.error('Magic link error:', e);
       setErr(e?.message ?? 'Falha ao enviar o email. Verifique o endereço e tente novamente.');
@@ -43,7 +57,7 @@ export default function LoginPage() {
   const terminarSessao = async () => {
     try {
       await supa.auth.signOut();
-      // higiene extra (casos teimosos)
+      // higiene extra para casos teimosos
       Object.keys(localStorage)
         .filter((k) => k.startsWith('sb-'))
         .forEach((k) => localStorage.removeItem(k));
@@ -62,7 +76,6 @@ export default function LoginPage() {
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
-      {/* Enquanto detecta sessão, não pisca UI */}
       {hasSession === null ? (
         <p>Carregando…</p>
       ) : hasSession ? (
@@ -94,6 +107,8 @@ export default function LoginPage() {
               required
               autoComplete="email"
               inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
@@ -117,7 +132,7 @@ export default function LoginPage() {
                 opacity: sending || !email.trim() ? 0.6 : 1,
               }}
             >
-              {sending ? 'Enviando...' : 'Enviar Magic Link'}
+              {sending ? 'Enviando…' : 'Enviar Magic Link'}
             </button>
           </form>
 
@@ -125,8 +140,8 @@ export default function LoginPage() {
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
 
           <p style={{ marginTop: 16, fontSize: 13, color: '#555' }}>
-            Dica: ao receber o email, toque em “Abrir no navegador”. Webviews de apps de email usam outro armazenamento e
-            o login não “cola” no navegador principal.
+            Dica: ao receber o e-mail, toque em “Abrir no navegador”. Webviews de apps de e-mail usam outro armazenamento
+            e o login não “cola” no navegador principal.
           </p>
         </>
       )}
