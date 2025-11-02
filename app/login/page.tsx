@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
+
 export const dynamic = 'force-dynamic';
 
 export default function LoginPage() {
@@ -11,7 +12,8 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [hasSession, setHasSession] = useState<boolean>(false); // <- NÃO começa “null” pra não travar
+  const [checked, setChecked] = useState(false); // já checou a sessão?
 
   // Descobrir se há sessão (sem travar em "Carregando...")
   useEffect(() => {
@@ -25,8 +27,7 @@ export default function LoginPage() {
         if (!alive) return;
         setHasSession(false);
       } finally {
-        // failsafe: se por algum motivo ficou null, define como false
-        if (alive) setHasSession((v) => (v === null ? false : v));
+        if (alive) setChecked(true);
       }
     })();
     return () => {
@@ -58,7 +59,6 @@ export default function LoginPage() {
   const terminarSessao = async () => {
     try {
       await supa.auth.signOut();
-      // higiene extra para casos teimosos
       Object.keys(localStorage)
         .filter((k) => k.startsWith('sb-'))
         .forEach((k) => localStorage.removeItem(k));
@@ -77,9 +77,10 @@ export default function LoginPage() {
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
-      {hasSession === null ? (
-        <p>Carregando…</p>
-      ) : hasSession ? (
+      {/* Não trava: se ainda não checou sessão, segue mostrando formulário + aviso leve */}
+      {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
+
+      {checked && hasSession ? (
         <div
           style={{
             border: '1px solid #e5e5e5',
@@ -98,54 +99,53 @@ export default function LoginPage() {
             <button type="button" onClick={terminarSessao}>Terminar sessão</button>
           </div>
         </div>
-      ) : (
-        <>
-          <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              inputMode="email"
-              autoCapitalize="none"
-              spellCheck={false}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{
-                width: '100%',
-                padding: 10,
-                marginTop: 6,
-                marginBottom: 12,
-                border: '1px solid #ccc',
-                borderRadius: 8,
-              }}
-            />
-            <button
-              type="submit"
-              disabled={sending || !email.trim()}
-              style={{
-                width: '100%',
-                padding: 12,
-                borderRadius: 10,
-                border: 'none',
-                cursor: 'pointer',
-                opacity: sending || !email.trim() ? 0.6 : 1,
-              }}
-            >
-              {sending ? 'Enviando…' : 'Enviar Magic Link'}
-            </button>
-          </form>
+      ) : null}
 
-          {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
-          {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
+      {/* Formulário SEMPRE disponível (mesmo enquanto checa sessão) */}
+      <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          required
+          autoComplete="email"
+          inputMode="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          style={{
+            width: '100%',
+            padding: 10,
+            marginTop: 6,
+            marginBottom: 12,
+            border: '1px solid #ccc',
+            borderRadius: 8,
+          }}
+        />
+        <button
+          type="submit"
+          disabled={sending || !email.trim()}
+          style={{
+            width: '100%',
+            padding: 12,
+            borderRadius: 10,
+            border: 'none',
+            cursor: 'pointer',
+            opacity: sending || !email.trim() ? 0.6 : 1,
+          }}
+        >
+          {sending ? 'Enviando…' : 'Enviar Magic Link'}
+        </button>
+      </form>
 
-          <p style={{ marginTop: 16, fontSize: 13, color: '#555' }}>
-            Dica: ao receber o e-mail, toque em “Abrir no navegador”. Webviews de apps de e-mail usam outro armazenamento
-            e o login não “cola” no navegador principal.
-          </p>
-        </>
-      )}
+      {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
+      {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
+
+      <p style={{ marginTop: 16, fontSize: 13, color: '#555' }}>
+        Dica: ao receber o e-mail, toque em “Abrir no navegador”. Webviews de apps de e-mail usam outro armazenamento
+        e o login não “cola” no navegador principal.
+      </p>
     </main>
   );
 }
