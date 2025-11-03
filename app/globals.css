@@ -163,3 +163,64 @@ h1, h2, h3 {
     width: 100%;
   }
 }
+
+/* ===== FIX header/mobile ===== */
+
+/* Barra do topo responsiva */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0; /* permite truncar */
+}
+
+.topbar__title {
+  font-weight: 700;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar__user {
+  max-width: 50vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O botão Sair nunca deve ocupar 100% no mobile */
+.logout, .logout-btn {
+  width: auto !important;
+  position: static !important;
+  z-index: auto !important;
+}
+
+/* Só botões de formulário ficam 100% no mobile */
+@media (max-width: 480px) {
+  form button {
+    width: 100%;
+  }
+  /* títulos e email um pouco menores para caber */
+  .topbar__title { font-size: 16px; }
+  .topbar__user { max-width: 45vw; font-size: 14px; }
+}
+
