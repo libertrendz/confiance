@@ -1,9 +1,165 @@
-/* --- Ajuste mobile: evita sobreposição do botão "Sair" sobre o menu --- */
-body {
-  padding-bottom: 100px; /* cria espaço p/ menu fixo no rodapé */
+/* ================================
+   GLOBAL STYLES – CONFIANCE
+   ================================ */
+
+/* Reset básico e tipografia */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: #fafafa;
+  color: #111;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Links e botões */
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 button {
-  position: relative; /* garante que não fique fixo por engano */
-  z-index: auto;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: #111;
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  transition: background 0.2s ease;
+}
+
+button:hover {
+  background: #333;
+}
+
+/* Input padrão */
+input, select, textarea {
+  width: 100%;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px;
+  outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #111;
+}
+
+/* ===========================================
+   LAYOUT E FIXOS (MENU / FOOTER / SAFE AREAS)
+   =========================================== */
+
+:root {
+  --bottom-nav-h: 72px; /* altura do menu fixo */
+}
+
+/* garante espaço pro menu fixo e safe area */
+body {
+  padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+  background-color: #fdfdfd;
+}
+
+/* container principal das páginas */
+main {
+  padding: 24px;
+  padding-bottom: calc(var(--bottom-nav-h) + 16px);
+}
+
+/* menu fixo no rodapé */
+.bottom-nav,
+.footer-fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bottom-nav-h);
+  background: #111;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 1000;
+}
+
+/* ícones e textos do menu */
+.bottom-nav a,
+.footer-fixed a {
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+  flex: 1;
+}
+
+/* botão genérico – nunca fixo */
+button,
+.btn,
+.action,
+.logout,
+.logout-btn {
+  position: static !important;
+  z-index: auto !important;
+  bottom: auto !important;
+}
+
+/* estados */
+p.error {
+  color: crimson;
+}
+
+p.success {
+  color: green;
+}
+
+/* headers */
+h1, h2, h3 {
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+/* ===========================================
+   PWA E SAFE AREA PARA IOS
+   =========================================== */
+
+@supports (padding: max(0px)) {
+  body {
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-bottom: max(calc(var(--bottom-nav-h)), env(safe-area-inset-bottom));
+  }
+}
+
+/* ===========================================
+   SCROLLBAR E TRANSIÇÕES
+   =========================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* ===========================================
+   RESPONSIVIDADE
+   =========================================== */
+
+@media (max-width: 480px) {
+  main {
+    padding: 16px;
+  }
+
+  button {
+    width: 100%;
+  }
 }
