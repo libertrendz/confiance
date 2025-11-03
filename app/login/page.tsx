@@ -40,7 +40,7 @@ export default function LoginPage() {
     setMsg(null);
     setErr(null);
     try {
-      const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
+      const redirect = `${window.location.origin}/auth/callback?next=/menu`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: redirect },
