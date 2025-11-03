@@ -1,5 +1,6 @@
 // app/layout.tsx
 import './globals.css';
+import SwRegister from './sw-register';
 
 export const metadata = {
   title: 'CONFIANCE',
@@ -24,7 +25,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#0A3D91" />
       </head>
-      <body>{children}</body>
+      <body>
+        <SwRegister />
+        {children}
+      </body>
     </html>
   );
 }
