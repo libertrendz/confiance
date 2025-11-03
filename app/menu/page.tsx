@@ -3,12 +3,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
+import UnderConstruction from '@/components/UnderConstruction';
 
 export const dynamic = 'force-dynamic';
+
+type Role = 'adm' | 'funcionario';
 
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string>('…');
+  const [role, setRole] = useState<Role>('funcionario');
 
   useEffect(() => {
     let alive = true;
@@ -16,158 +20,119 @@ export default function MenuPage() {
       try {
         const { data } = await supa.auth.getSession();
         const e = data.session?.user?.email || 'Utilizador';
-        if (alive) setEmail(e);
+        const r = (data.session?.user?.user_metadata?.role as Role) || 'adm'; // default adm por enquanto
+        if (alive) {
+          setEmail(e);
+          setRole(r);
+        }
       } catch {
-        if (alive) setEmail('Utilizador');
+        if (alive) {
+          setEmail('Utilizador');
+          setRole('funcionario');
+        }
       }
     })();
     return () => { alive = false; };
   }, [supa]);
 
-  function sair() {
-    window.location.href = '/logout';
-  }
+  function sair() { window.location.href = '/logout'; }
 
   return (
-    <div className="page">
-      {/* HEADER RESPONSIVO */}
+    <div>
+      {/* HEADER */}
       <header className="topbar">
-        <div className="brand">Menu</div>
+        <div className="brand">Confiance</div>
         <div className="user">
-          <span className="userEmail" title={email}>{email}</span>
-          <button className="logoutBtn" onClick={sair} title="Terminar sessão">Sair</button>
+          <span className="user-email" title={email}>{email}</span>
+          <button className="btn btn-ghost logout-btn" onClick={sair}>Sair</button>
         </div>
       </header>
 
       {/* CONTEÚDO */}
-      <main className="content">
-        <a className="card" href="/ponto">
-          <div className="cardTitle">Marcar Ponto</div>
-          <div className="cardDesc">Registo rápido de ponto</div>
-        </a>
+      <main>
+        {/* Bloco de atalhos por perfil */}
+        {role === 'funcionario' ? (
+          <section className="grid">
+            <div className="card">
+              <div className="h2">Marcar Ponto</div>
+              <p className="muted">Registo rápido com geolocalização e foto</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-primary" href="/ponto">Abrir</a>
+              </div>
+            </div>
 
-        <a className="card" href="/adm/fornecedores">
-          <div className="cardTitle">Fornecedores</div>
-          <div className="cardDesc">Listagem e gestão</div>
-        </a>
+            <div className="card">
+              <div className="h2">Histórico</div>
+              <p className="muted">Veja seus registos de presença</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-ghost" href="/ponto/historico">Ver histórico</a>
+              </div>
+            </div>
 
-        <a className="card" href="/adm/fornecedores/importar">
-          <div className="cardTitle">Importar Fornecedores (CSV)</div>
-          <div className="cardDesc">Staging e normalização blindada</div>
-        </a>
+            <div className="card">
+              <div className="h2">Perfil</div>
+              <p className="muted">Dados pessoais e preferências</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-ghost" href="/perfil">Abrir perfil</a>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="grid cols-2">
+            <div className="card">
+              <div className="h2">Dashboard</div>
+              <p className="muted">Indicadores principais do negócio</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-primary" href="/menu">Abrir</a>
+              </div>
+            </div>
 
-        <a className="card" href="/adm/ponto">
-          <div className="cardTitle">Relatórios de Ponto (ADM)</div>
-          <div className="cardDesc">Presenças, auditoria e exportações</div>
-        </a>
+            <div className="card">
+              <div className="h2">Fornecedores</div>
+              <p className="muted">Listagem e gestão de fornecedores</p>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <a className="btn btn-primary" href="/adm/fornecedores">Abrir</a>
+                <a className="btn btn-ghost" href="/adm/fornecedores/novo">Novo</a>
+                <a className="btn btn-ghost" href="/adm/fornecedores/importar">Importar CSV</a>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="h2">Ponto (ADM)</div>
+              <p className="muted">Relatórios, auditoria e validações</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-primary" href="/adm/ponto">Abrir</a>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="h2">Financeiro</div>
+              <p className="muted">Lançamentos, faturas, recibos e pagamentos</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-ghost" href="/financeiro">Abrir</a>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="h2">Orçamentos e Contratos</div>
+              <p className="muted">Propostas, numeração automática e templates</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-ghost" href="/orcamentos">Abrir</a>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="h2">Clientes</div>
+              <p className="muted">Cadastro e gestão de clientes</p>
+              <div style={{ marginTop: 12 }}>
+                <a className="btn btn-ghost" href="/clientes">Abrir</a>
+              </div>
+            </div>
+
+            <UnderConstruction title="Configurações" note="Perfis, branding e preferências do workspace" />
+          </section>
+        )}
       </main>
-
-      <style jsx>{`
-        .page {
-          min-height: 100dvh;
-          background: #fafafa;
-        }
-
-        /* ===== Header ===== */
-        .topbar {
-          position: sticky;
-          top: 0;
-          z-index: 50;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 12px 16px;
-          background: #ffffff;
-          border-bottom: 1px solid #eee;
-        }
-
-        .brand {
-          font-size: 18px;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .user {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-width: 0; /* permite truncamento */
-          flex-shrink: 0;
-        }
-
-        .userEmail {
-          max-width: 48vw;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          color: #333;
-          font-size: 14px;
-        }
-
-        .logoutBtn {
-          background: #111;
-          color: #fff;
-          border: 0;
-          border-radius: 10px;
-          padding: 8px 12px;
-          font-size: 14px;
-          cursor: pointer;
-          width: auto;           /* <- nunca 100% */
-        }
-
-        .logoutBtn:hover { background: #333; }
-
-        /* ===== Conteúdo ===== */
-        .content {
-          padding: 16px;
-          display: grid;
-          gap: 12px;
-        }
-
-        .card {
-          display: block;
-          background: #fff;
-          border: 1px solid #eee;
-          border-radius: 12px;
-          padding: 16px;
-          text-decoration: none;
-          color: inherit;
-          transition: transform .06s ease, box-shadow .06s ease, border-color .06s ease;
-        }
-
-        .card:hover {
-          border-color: #ddd;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-          transform: translateY(-1px);
-        }
-
-        .cardTitle {
-          font-size: 16px;
-          font-weight: 700;
-          margin-bottom: 4px;
-        }
-
-        .cardDesc {
-          font-size: 13px;
-          color: #666;
-        }
-
-        /* ===== Mobile fine-tuning ===== */
-        @media (max-width: 480px) {
-          .userEmail { max-width: 44vw; }
-          .logoutBtn { padding: 8px 10px; }
-        }
-
-        /* ===== Desktop layout ===== */
-        @media (min-width: 980px) {
-          .content {
-            max-width: 960px;
-            margin: 0 auto;
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-      `}</style>
     </div>
   );
 }
