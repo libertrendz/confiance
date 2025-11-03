@@ -8,51 +8,98 @@ export const dynamic = 'force-dynamic';
 
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
-  const [email, setEmail] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [email, setEmail] = useState<string>('…');
 
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
     (async () => {
       try {
         const { data } = await supa.auth.getSession();
-        if (!data.session) {
-          window.location.replace('/login');
-          return;
-        }
-        if (mounted) setEmail(data.session.user.email ?? null);
-      } catch (e: any) {
-        if (mounted) setErr(e?.message || 'Erro ao carregar menu');
-      } finally {
-        if (mounted) setLoading(false);
+        const e = data.session?.user?.email || 'Utilizador';
+        if (alive) setEmail(e);
+      } catch {
+        if (alive) setEmail('Utilizador');
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
-  if (loading) return <div style={{ padding: 24 }}>Carregando…</div>;
-  if (err) return <div style={{ padding: 24, color: '#7f1d1d' }}>Erro: {err}</div>;
+  function sair() {
+    window.location.href = '/logout';
+  }
 
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto', padding: 24, fontFamily: 'system-ui' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Menu</h1>
-        <div>
-          <span style={{ marginRight: 12 }}>{email}</span>
-          <button
-            onClick={async () => { await supa.auth.signOut(); window.location.replace('/login'); }}
-            style={{ padding: '8px 12px', border: '1px solid #111', background: '#111', color: '#fff', borderRadius: 8 }}
-          >
+    <div>
+      {/* TOPO RESPONSIVO */}
+      <div className="topbar">
+        <div className="brand">Menu</div>
+        <div className="user">
+          <span className="user-email">{email}</span>
+          <button className="logout-btn" onClick={sair} title="Terminar sessão">
             Sair
           </button>
         </div>
       </div>
 
-      <div style={{ marginTop: 16, padding: 16, border: '1px solid #eee', borderRadius: 12 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Bem-vindo 👋</h2>
-        <p>Se você está vendo esta página, a sessão foi reconhecida corretamente.</p>
-      </div>
+      {/* CONTEÚDO DO MENU */}
+      <main>
+        <div style={{ display: 'grid', gap: 12 }}>
+          {/* Exemplos de atalhos (ajuste conforme teu app) */}
+          <a
+            href="/ponto"
+            style={{
+              display: 'block',
+              padding: 16,
+              borderRadius: 12,
+              border: '1px solid #eee',
+              background: '#fff',
+            }}
+          >
+            Marcar Ponto
+          </a>
+
+          <a
+            href="/adm/fornecedores"
+            style={{
+              display: 'block',
+              padding: 16,
+              borderRadius: 12,
+              border: '1px solid #eee',
+              background: '#fff',
+            }}
+          >
+            Fornecedores
+          </a>
+
+          <a
+            href="/adm/fornecedores/importar"
+            style={{
+              display: 'block',
+              padding: 16,
+              borderRadius: 12,
+              border: '1px solid #eee',
+              background: '#fff',
+            }}
+          >
+            Importar Fornecedores (CSV)
+          </a>
+
+          <a
+            href="/adm/ponto"
+            style={{
+              display: 'block',
+              padding: 16,
+              borderRadius: 12,
+              border: '1px solid #eee',
+              background: '#fff',
+            }}
+          >
+            Relatórios de Ponto (ADM)
+          </a>
+        </div>
+      </main>
     </div>
   );
 }
