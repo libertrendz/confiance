@@ -34,15 +34,22 @@ export async function GET(req: NextRequest) {
   const next = url.searchParams.get('next') || '/menu';
 
   try {
-    // Fluxo PKCE moderno: ?code=...
-    if (url.searchParams.has('code')) {
-      // SSR: passe a URL completa
-      const { error } = await supa.auth.exchangeCodeForSession(url.toString());
-      if (error) throw error;
-      return NextResponse.redirect(new URL(next, req.url));
+    // ---- Fluxo PKCE moderno: ?code=... ----
+    const code =
+      url.searchParams.get('code') || // padrão mais comum
+      url.searchParams.get('verification_code'); // variação vista em alguns provedores
+
+    if (code) {
+      const { error } = await supa.auth.exchangeCodeForSession(code);
+      if (error) {
+        const err = encodeURIComponent(error.message || 'code_exchange_failed');
+        return NextResponse.redirect(new URL(`/login?err=${err}&flow=code`, url.origin));
+      }
+      // sucesso: cookies http-only gravados
+      return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Fluxo antigo: token_hash + type
+    // ---- Fluxo antigo (Magic Link): token_hash + type=magiclink ----
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
@@ -53,19 +60,23 @@ export async function GET(req: NextRequest) {
 
     if (token_hash && type) {
       const { error } = await supa.auth.verifyOtp({ type, token_hash });
-      if (error) throw error;
-      return NextResponse.redirect(new URL(next, req.url));
+      if (error) {
+        const err = encodeURIComponent(error.message || 'otp_verify_failed');
+        return NextResponse.redirect(new URL(`/login?err=${err}&flow=otp`, url.origin));
+      }
+      return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Sem code/token: já tem sessão nos cookies?
+    // ---- Sem code/token: já existe sessão nos cookies? ----
     const { data } = await supa.auth.getSession();
     if (data.session) {
-      return NextResponse.redirect(new URL(next, req.url));
+      return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    return NextResponse.redirect(new URL('/login', req.url));
-  } catch (err) {
-    console.error('Auth confirm error:', err);
-    return NextResponse.redirect(new URL('/login', req.url));
+    // Nada útil: volta ao login com causa explícita
+    return NextResponse.redirect(new URL('/login?err=missing_code_or_token', url.origin));
+  } catch (e: any) {
+    const err = encodeURIComponent(e?.message || 'unknown_error');
+    return NextResponse.redirect(new URL(`/login?err=${err}&flow=catch`, url.origin));
   }
 }
