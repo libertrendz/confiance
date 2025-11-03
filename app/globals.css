@@ -1,0 +1,9 @@
+/* --- Ajuste mobile: evita sobreposição do botão "Sair" sobre o menu --- */
+body {
+  padding-bottom: 100px; /* cria espaço p/ menu fixo no rodapé */
+}
+
+button {
+  position: relative; /* garante que não fique fixo por engano */
+  z-index: auto;
+}
