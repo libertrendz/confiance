@@ -6,6 +6,9 @@ import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
+// URL do logo no Supabase Storage (já guardado)
+const LOGO_URL = 'https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/LOGO%20CONFIANCE.png';
+
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string>('…');
@@ -31,8 +34,8 @@ export default function MenuPage() {
       {/* HEADER */}
       <header className="topbar">
         <div className="brand">
-          <span className="logo-dot" />
-          Confiance
+          <img src={LOGO_URL} alt="CONFIANCE" className="brand-logo" />
+          <span>Confiance</span>
         </div>
         <div className="user">
           <span className="user-email" title={email}>{email}</span>
