@@ -1,5 +1,32 @@
+// app/auth/confirm/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSupabase } from '../../../lib/supabaseServer';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+function getServerSupabase() {
+  const cookieStore = cookies();
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anon) {
+    throw new Error('Faltam envs do Supabase: NEXT_PUBLIC_SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  }
+
+  return createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: any) {
+        cookieStore.set(name, value, options);
+      },
+      remove(name: string, options: any) {
+        cookieStore.set(name, '', { ...options, maxAge: 0 });
+      },
+    },
+  });
+}
 
 export async function GET(req: NextRequest) {
   const supa = getServerSupabase();
@@ -7,9 +34,9 @@ export async function GET(req: NextRequest) {
   const next = url.searchParams.get('next') || '/menu';
 
   try {
-    // Fluxo novo: ?code=...
+    // Fluxo PKCE moderno: ?code=...
     if (url.searchParams.has('code')) {
-      // servidor espera a URL completa
+      // SSR: passe a URL completa
       const { error } = await supa.auth.exchangeCodeForSession(url.toString());
       if (error) throw error;
       return NextResponse.redirect(new URL(next, req.url));
@@ -30,9 +57,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, req.url));
     }
 
-    // Já tem sessão?
+    // Sem code/token: já tem sessão nos cookies?
     const { data } = await supa.auth.getSession();
-    if (data.session) return NextResponse.redirect(new URL(next, req.url));
+    if (data.session) {
+      return NextResponse.redirect(new URL(next, req.url));
+    }
 
     return NextResponse.redirect(new URL('/login', req.url));
   } catch (err) {
