@@ -75,3 +75,14 @@ main{padding:var(--space-3)}
 .h1{font-size:22px;font-weight:800}
 .h2{font-size:16px;font-weight:700}
 .muted{color:var(--muted)}
+
+/* Ajuste do logo no topo */
+.brand .brand-logo{
+  height: 22px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+}
+@media (min-width:980px){
+  .brand .brand-logo{ height: 24px; }
+}
