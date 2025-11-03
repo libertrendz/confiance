@@ -1,68 +1,98 @@
+// app/auth/callback/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { useEffect, useMemo, useState } from 'react';
+import getBrowserSupabase from '@/lib/supa';
 
-export default function CallbackPage() {
-  const router = useRouter();
-  const [status, setStatus] = useState('A confirmar login…');
+export const dynamic = 'force-dynamic';
+
+function getParams() {
+  const u = new URL(window.location.href);
+  return {
+    token_hash: u.searchParams.get('token_hash') || u.searchParams.get('token') || u.searchParams.get('tokenHash'),
+    type: (u.searchParams.get('type') as 'magiclink' | 'recovery' | 'invite' | 'signup' | 'email_change' | null) || null,
+    code: u.searchParams.get('code') || u.searchParams.get('verification_code'),
+    next: u.searchParams.get('next') || '/menu',
+  };
+}
+
+export default function AuthCallbackPage() {
+  const supa = useMemo(() => getBrowserSupabase(), []);
+  const [status, setStatus] = useState('Confirmando login…');
 
   useEffect(() => {
-    // Tudo roda só no client
-    const supa = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { persistSession: true, autoRefreshToken: true } }
-    );
+    let done = false;
 
-    (async () => {
+    const go = async () => {
       try {
-        const url = new URL(window.location.href);
-        const next = url.searchParams.get('next') || '/menu';
+        const { token_hash, type, code, next } = getParams();
 
-        // 1) Fluxo PKCE / OAuth: ?code=...
-        const code = url.searchParams.get('code');
+        // 1) PKCE / OAuth: veio ?code=
         if (code) {
-          const { error } = await supa.auth.exchangeCodeForSession(code);
+          const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
           if (error) throw error;
+          done = true;
           setStatus('Login confirmado! Redirecionando…');
-          router.replace(next);
+          window.location.replace(next);
           return;
         }
 
-        // 2) Fluxo Magic Link: #access_token=...&refresh_token=...
+        // 2) Magic link antigo: ?token_hash=&type=magiclink
+        if (token_hash && type) {
+          const { error } = await supa.auth.verifyOtp({ type, token_hash });
+          if (error) throw error;
+          done = true;
+          setStatus('Login confirmado! Redirecionando…');
+          window.location.replace(next);
+          return;
+        }
+
+        // 3) Já tem sessão?
+        const { data } = await supa.auth.getSession();
+        if (data.session?.user?.id) {
+          done = true;
+          setStatus('Sessão ativa! Redirecionando…');
+          window.location.replace(next);
+          return;
+        }
+
+        // 4) Fallback webview: tokens no hash #access_token=...
         const hash = window.location.hash;
         if (hash.includes('access_token')) {
           const params = new URLSearchParams(hash.replace(/^#/, ''));
           const access_token = params.get('access_token') || '';
           const refresh_token = params.get('refresh_token') || '';
-
           if (access_token && refresh_token) {
             const { error } = await supa.auth.setSession({ access_token, refresh_token });
             if (error) throw error;
-            setStatus('Login confirmado! Redirecionando…');
-            router.replace(next);
+            done = true;
+            setStatus('Login confirmado (fallback)! Redirecionando…');
+            window.location.replace(next);
             return;
           }
         }
 
-        // Se não tinha code nem tokens no hash, volta pro login
-        setStatus('Não foi possível confirmar o login. Redirecionando…');
-        setTimeout(() => router.replace('/login'), 700);
-      } catch {
-        setStatus('Não foi possível confirmar o login. Redirecionando…');
-        setTimeout(() => router.replace('/login'), 700);
+        // 5) Falhou tudo
+        setStatus('Não foi possível confirmar. Voltando ao login…');
+        window.location.replace('/login');
+      } catch (e) {
+        console.error('auth/callback error:', e);
+        setStatus('Erro ao confirmar. Voltando ao login…');
+        window.location.replace('/login');
+      } finally {
+        setTimeout(() => {
+          if (!done) window.location.replace('/menu');
+        }, 1500);
       }
-    })();
-  }, [router]);
+    };
+
+    go();
+  }, [supa]);
 
   return (
-    <div style={{ padding: 24, fontFamily: 'system-ui' }}>
-      <h1 style={{ fontSize: 18, fontWeight: 700 }}>{status}</h1>
-      <p style={{ marginTop: 6, color: '#555' }}>
-        Se nada acontecer em alguns segundos, <a href="/login">volte ao login</a>.
-      </p>
+    <div style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Autenticação</h1>
+      <p>{status}</p>
     </div>
   );
 }
