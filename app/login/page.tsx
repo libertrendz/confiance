@@ -69,7 +69,7 @@ export default function LoginPage() {
   }
 
   function terminarSessao() {
-    window.location.href = '/auth/signout';
+    window.location.href = 'logout';
   }
 
   return (
