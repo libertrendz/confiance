@@ -1,11 +1,26 @@
 // components/Header.tsx
 'use client';
 
+import { useMemo } from 'react';
+import getBrowserSupabase from '@/lib/supa';
+
 type HeaderProps = {
   email?: string | null;
 };
 
 export default function Header({ email }: HeaderProps) {
+  const supa = useMemo(() => getBrowserSupabase(), []);
+
+  async function terminarSessao() {
+    try {
+      await supa.auth.signOut();           // encerra sessão (client)
+    } catch {
+      // ignora erros de signOut; vamos redirecionar de qualquer forma
+    } finally {
+      window.location.replace('/login');   // volta ao login
+    }
+  }
+
   return (
     <header className="topbar">
       <div className="brand">
@@ -13,18 +28,12 @@ export default function Header({ email }: HeaderProps) {
           src="/logo-confiance.png"
           alt="CONFIANCE"
           className="brand-logo"
-          // Se quiser tamanho fixo aqui, descomenta a linha abaixo e ajusta:
-          // style={{ height: 54 }}
         />
       </div>
 
       <div className="user">
-        {email ? <span className="user-email">{email}</span> : <span className="user-email">—</span>}
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => (window.location.href = '/auth/signout')}
-        >
+        <span className="user-email">{email ?? '—'}</span>
+        <button type="button" className="btn btn-ghost" onClick={terminarSessao}>
           Sair
         </button>
       </div>
