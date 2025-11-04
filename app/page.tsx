@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
 const LOGO_URL =
-  'https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/LOGO%20CONFIANCE.png';
+  'https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png';
 
 export default function SplashPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
