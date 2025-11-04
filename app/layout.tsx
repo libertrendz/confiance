@@ -1,34 +1,27 @@
 // app/layout.tsx
 import './globals.css';
-import SwRegister from './sw-register';
 
 export const metadata = {
-  title: 'CONFIANCE',
-  description: 'Sistema CONFIANCE',
-  manifest: '/manifest.webmanifest',
-  themeColor: '#0A3D91',
+  title: 'Confiance',
+  description: 'App CONFIANCE',
   icons: {
-    icon: ['/icon-192.png', '/icon-512.png', '/favicon.ico'],
-    apple: ['/apple-touch-icon.png'],
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
   },
+  manifest: '/manifest.webmanifest',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt">
       <head>
-        <meta name="application-name" content="CONFIANCE" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="CONFIANCE" />
-        <meta name="format-detection" content="telephone=no" />
-        <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#0A3D91" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body>
-        <SwRegister />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
