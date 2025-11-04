@@ -2,20 +2,17 @@
 :root{
   --brand-1:#0A3D91;        /* azul principal */
   --brand-1-contrast:#ffffff;
-  --brand-2:#F2B705;        /* dourado de destaque */
+  --brand-2:#F2B705;        /* dourado */
   --brand-2-contrast:#0b0b0b;
 
   --bg:#f5f7fb;
   --surface:#ffffff;
   --text:#0b1220;
   --muted:#667085;
-
   --border:#e5e7eb;
   --shadow:0 2px 10px rgba(0,0,0,.05);
-
   --radius:12px;
   --radius-sm:10px;
-
   --space-1:8px;
   --space-2:12px;
   --space-3:16px;
@@ -26,48 +23,37 @@
 html,body{height:100%}
 body{
   margin:0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;
   color:var(--text);
   background:var(--bg);
   -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
 }
 
-a{color:inherit;text-decoration:none}
-main{padding:var(--space-3)}
-
-/* ---------- Topbar padrão ---------- */
+/* ---------- Topbar ---------- */
 .topbar{
   position:sticky;top:0;z-index:50;
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:var(--space-3);
   background:var(--surface);border-bottom:1px solid var(--border);
 }
-.topbar .brand{font-weight:800;font-size:18px;letter-spacing:.3px;display:flex;align-items:center;gap:10px}
-.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--brand-2)}
-.topbar .user{display:flex;align-items:center;gap:10px;min-width:0}
-.topbar .user-email{max-width:48vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:14px}
-.topbar .btn{width:auto !important}
-
-/* ---------- Logo no header (AUMENTADO) ---------- */
+.topbar .brand{
+  display:flex;align-items:center;gap:10px;
+  font-weight:800;font-size:18px;
+}
 .brand .brand-logo{
-  height: 32px;          /* antes ~22-24px; agora maior */
-  width: auto;
-  display: block;
-  object-fit: contain;
+  height: 46px; /* aumentado */
+  width:auto;
+  display:block;object-fit:contain;
 }
-@media (min-width:980px){
-  .brand .brand-logo{ height: 36px; }
-}
+@media(min-width:980px){.brand .brand-logo{height:54px}}
 
 /* ---------- Botões ---------- */
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   height:40px;padding:0 14px;border-radius:var(--radius-sm);
   border:1px solid transparent;background:var(--surface);color:var(--text);
-  cursor:pointer;transition:filter .15s ease, background .15s ease, border-color .15s ease;
+  cursor:pointer;transition:filter .15s ease,background .15s ease;
 }
-.btn:disabled{opacity:.6;cursor:not-allowed}
 .btn-primary{background:var(--brand-1);color:var(--brand-1-contrast)}
 .btn-primary:hover{filter:brightness(1.05)}
 .btn-accent{background:var(--brand-2);color:var(--brand-2-contrast)}
@@ -76,43 +62,37 @@ main{padding:var(--space-3)}
 
 /* ---------- Cards e grid ---------- */
 .card{
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:var(--space-3);box-shadow:var(--shadow);
-  transition:transform .06s ease, box-shadow .06s ease, border-color .06s ease;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:var(--space-3);box-shadow:var(--shadow);
 }
-.card:hover{transform:translateY(-1px);border-color:#d8dde4}
 .grid{display:grid;gap:var(--space-3)}
-@media (min-width:980px){.grid.cols-2{grid-template-columns:1fr 1fr;max-width:960px;margin:0 auto}}
-.h1{font-size:22px;font-weight:800}
-.h2{font-size:16px;font-weight:700}
-.muted{color:var(--muted)}
+@media(min-width:980px){.grid.cols-2{grid-template-columns:1fr 1fr;max-width:960px;margin:0 auto}}
 
 /* ---------- Splash screen ---------- */
 .splash{
-  position:fixed; inset:0;
-  background: var(--brand-1);
-  display:flex; align-items:center; justify-content:center;
-  z-index: 9999;
-  animation: splashIn 900ms cubic-bezier(.2,.8,.2,1) forwards;
+  position:fixed;inset:0;
+  background:var(--brand-1);
+  display:flex;align-items:center;justify-content:center;
+  z-index:9999;
+  animation:splashIn 1.2s ease forwards;
 }
 .splashLogo{
-  width: 200px; max-width: 70vw; height: auto;
-  filter: drop-shadow(0 8px 24px rgba(0,0,0,.25));
-  animation: popIn 900ms cubic-bezier(.2,.8,.2,1) forwards;
+  width:260px;max-width:75vw;height:auto;
+  filter:drop-shadow(0 10px 30px rgba(0,0,0,.3));
+  animation:popIn 1.6s cubic-bezier(.2,.8,.2,1) forwards;
 }
-.splash.splash-leave{
-  animation: splashOut 380ms ease forwards;
-}
+.splash.splash-leave{animation:splashOut .7s ease forwards}
+
 @keyframes popIn{
-  0%{ transform: scale(.92); opacity: .0; }
-  60%{ transform: scale(1.04); opacity: 1; }
-  100%{ transform: scale(1.0); opacity: 1; }
+  0%{transform:scale(.85);opacity:0}
+  40%{transform:scale(1.05);opacity:1}
+  100%{transform:scale(1);opacity:1}
 }
 @keyframes splashIn{
-  0%{ opacity: 0; }
-  100%{ opacity: 1; }
+  0%{opacity:0}
+  100%{opacity:1}
 }
 @keyframes splashOut{
-  0%{ opacity: 1; }
-  100%{ opacity: 0; visibility: hidden; }
+  0%{opacity:1}
+  100%{opacity:0;visibility:hidden}
 }
