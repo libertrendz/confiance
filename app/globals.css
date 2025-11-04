@@ -18,4 +18,109 @@
 
   --space-1:8px;
   --space-2:12px;
-  --space-3:
+  --space-3:16px;
+  --space-4:20px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+  color:var(--text);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+a{color:inherit;text-decoration:none}
+main{padding:var(--space-3)}
+
+/* ---------- Topbar responsiva ---------- */
+.topbar{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:var(--space-3);
+  background:var(--surface); border-bottom:1px solid var(--border);
+}
+.topbar .brand{
+  display:flex; align-items:center; gap:10px;
+  font-weight:800; font-size:18px; min-width:0;
+}
+.brand .brand-logo{
+  height:54px; width:auto; display:block; object-fit:contain; /* desktop grande */
+}
+.topbar .user{ display:flex; align-items:center; gap:10px; min-width:0; }
+.topbar .user-email{
+  max-width:48vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--muted); font-size:14px;
+}
+.topbar .btn{ height:40px; padding:0 14px; }
+
+/* Mobile – quebra em 2 linhas com controles no lugar */
+@media (max-width: 560px){
+  .topbar{ flex-wrap:wrap; row-gap:8px; }
+  .brand .brand-logo{ height:44px; }           /* ainda grande no mobile */
+  .topbar .brand{ order:1; flex:1 1 auto; }
+  .topbar .user{ order:2; width:100%; justify-content:space-between; }
+  .topbar .user-email{ max-width: calc(100% - 110px); } /* espaço pro botão */
+  .topbar .btn{ height:36px; padding:0 12px; }
+}
+
+/* ---------- Botões ---------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  height:40px; padding:0 14px; border-radius:var(--radius-sm);
+  border:1px solid transparent; background:var(--surface); color:var(--text);
+  cursor:pointer; transition:filter .15s ease, background .15s ease, border-color .15s ease;
+}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-primary{background:var(--brand-1);color:var(--brand-1-contrast)}
+.btn-primary:hover{filter:brightness(1.05)}
+.btn-accent{background:var(--brand-2);color:var(--brand-2-contrast)}
+.btn-ghost{background:transparent;border-color:var(--border)}
+.btn-ghost:hover{background:#f1f5f9}
+
+/* ---------- Cards e grid ---------- */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:var(--space-3); box-shadow:var(--shadow);
+  transition:transform .06s ease, box-shadow .06s ease, border-color .06s ease;
+}
+.card:hover{ transform:translateY(-1px); border-color:#d8dde4 }
+.grid{ display:grid; gap:var(--space-3) }
+@media (min-width:980px){
+  .grid.cols-2{ grid-template-columns:1fr 1fr; max-width:960px; margin:0 auto }
+}
+.h1{ font-size:22px; font-weight:800 }
+.h2{ font-size:16px; font-weight:700 }
+.muted{ color:var(--muted) }
+
+/* ---------- Splash screen ---------- */
+.splash{
+  position:fixed; inset:0;
+  background: var(--brand-1);
+  display:flex; align-items:center; justify-content:center;
+  z-index: 9999;
+  animation: splashIn 1.2s ease forwards;
+}
+.splashLogo{
+  width:260px; max-width: 75vw; height: auto;
+  filter: drop-shadow(0 10px 30px rgba(0,0,0,.3));
+  animation: popIn 1.6s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.splash.splash-leave{ animation: splashOut .7s ease forwards; }
+
+@keyframes popIn{
+  0%{ transform: scale(.85); opacity: 0; }
+  40%{ transform: scale(1.05); opacity: 1; }
+  100%{ transform: scale(1.0); opacity: 1; }
+}
+@keyframes splashIn{
+  0%{ opacity: 0; }
+  100%{ opacity: 1; }
+}
+@keyframes splashOut{
+  0%{ opacity: 1; }
+  100%{ opacity: 0; visibility: hidden; }
+}
