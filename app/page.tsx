@@ -4,8 +4,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
-const LOGO_URL =
-  'https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png';
+// Usa o ficheiro local do logo (coloca /public/logo-confiance.png no repo)
+const LOGO_SRC = '/logo-confiance.png';
 
 export default function SplashPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
@@ -14,13 +14,13 @@ export default function SplashPage() {
   useEffect(() => {
     let alive = true;
 
-    // 1) exibe logo por 1.8s antes de desaparecer
+    // 1) mostra o logo 1.8s e inicia o fade-out
     const t1 = setTimeout(() => {
       if (!alive) return;
       setStep('leaving');
     }, 1800);
 
-    // 2) navega depois da animação (~2.5 s total)
+    // 2) navega 600ms depois do início do fade (≈ 2.4s total)
     const go = async () => {
       try {
         const { data } = await supa.auth.getSession();
@@ -28,13 +28,13 @@ export default function SplashPage() {
         setTimeout(() => {
           const next = hasSession ? '/menu' : '/login';
           window.location.replace(next);
-        }, 700);
+        }, 600);
       } catch {
         window.location.replace('/login');
       }
     };
 
-    const t2 = setTimeout(go, 2500);
+    const t2 = setTimeout(go, 1800); // chama go junto do fade-out
 
     return () => {
       alive = false;
@@ -45,7 +45,7 @@ export default function SplashPage() {
 
   return (
     <div className={`splash ${step === 'leaving' ? 'splash-leave' : ''}`}>
-      <img className="splashLogo" src={LOGO_URL} alt="CONFIANCE" />
+      <img className="splashLogo" src={LOGO_SRC} alt="CONFIANCE" />
     </div>
   );
 }
