@@ -14,28 +14,27 @@ export default function SplashPage() {
   useEffect(() => {
     let alive = true;
 
-    // 1) animação ~1.1s
+    // 1) exibe logo por 1.8s antes de desaparecer
     const t1 = setTimeout(() => {
       if (!alive) return;
       setStep('leaving');
-    }, 1100);
+    }, 1800);
 
-    // 2) depois navega conforme sessão
+    // 2) navega depois da animação (~2.5 s total)
     const go = async () => {
       try {
         const { data } = await supa.auth.getSession();
         const hasSession = !!data.session;
-        // espera +400ms para finalizar animação de saída
         setTimeout(() => {
           const next = hasSession ? '/menu' : '/login';
           window.location.replace(next);
-        }, 400);
+        }, 700);
       } catch {
         window.location.replace('/login');
       }
     };
 
-    const t2 = setTimeout(go, 1150);
+    const t2 = setTimeout(go, 2500);
 
     return () => {
       alive = false;
