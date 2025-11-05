@@ -7,85 +7,47 @@ const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || '';
 
-type Papel = 'externo' | 'gestor' | 'admin';
-
-async function getCallerUser(accessToken: string) {
-  const supa = createClient(URL, ANON, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { data, error } = await supa.auth.getUser(accessToken);
+async function getCaller(token: string) {
+  const supa = createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } = await supa.auth.getUser(token);
   if (error) throw error;
   return data.user;
 }
 
 export async function POST(req: Request) {
   try {
-    // 1) Validar token do chamador
     const auth = req.headers.get('authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
     if (!token) return NextResponse.json({ error: 'missing_token' }, { status: 401 });
 
-    const caller = await getCallerUser(token);
-    if (!caller) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+    const caller = await getCaller(token);
+    const callerRole = (caller.user_metadata?.app_role as string) || 'externo';
+    const empresaId = (caller.user_metadata?.empresa_id as string) || null;
+    if (callerRole !== 'admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    if (!empresaId) return NextResponse.json({ error: 'missing_empresa_id' }, { status: 400 });
 
-    // 2) Validar papel = admin
-    const meta = (caller.user_metadata || {}) as Record<string, any>;
-    const callerRole = (meta.app_role as string) || 'externo';
-    const empresaId = (meta.empresa_id as string) || null;
-    if (callerRole !== 'admin') {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-    }
-    if (!empresaId) {
-      return NextResponse.json({ error: 'missing_empresa_id' }, { status: 400 });
-    }
-
-    // 3) Payload
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || '').trim().toLowerCase();
     const nome  = String(body.nome || 'Utilizador');
-    const papel = (String(body.papel || 'externo') as Papel);
-
-    if (!email || !email.includes('@')) {
-      return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
-    }
-    if (!['externo','gestor','admin'].includes(papel)) {
-      return NextResponse.json({ error: 'invalid_papel' }, { status: 400 });
-    }
+    const papel = String(body.papel || 'externo') as 'externo'|'gestor'|'admin';
+    if (!email || !email.includes('@')) return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
 
     const admin = getAdminSupabase();
 
-    // 4) Convidar por email
-    const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${SITE}/login`,
-    });
-    if (invErr) {
-      return NextResponse.json({ error: 'invite_failed', details: invErr.message }, { status: 400 });
-    }
-    const newUser = invited.user;
+    const inv = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: `${SITE}/login` });
+    if (inv.error) return NextResponse.json({ error: 'invite_failed', details: inv.error.message }, { status: 400 });
 
-    // 5) Definir metadata (papel + empresa)
-    const { error: updErr } = await admin.auth.admin.updateUserById(newUser.id, {
+    const uid = inv.data.user.id;
+    const upm = await admin.auth.admin.updateUserById(uid, {
       user_metadata: { app_role: papel, empresa_id: empresaId },
     });
-    if (updErr) {
-      return NextResponse.json({ error: 'metadata_failed', details: updErr.message }, { status: 400 });
-    }
+    if (upm.error) return NextResponse.json({ error: 'metadata_failed', details: upm.error.message }, { status: 400 });
 
-    // 6) Upsert profiles (usa enum papel_enum existente: externo/gestor/admin)
-    const { error: profErr } = await admin
-      .from('profiles')
-      .upsert({
-        user_id: newUser.id,
-        empresa_id: empresaId,
-        papel, // <- enum válido
-        nome,
-      }, { onConflict: 'user_id' });
-    if (profErr) {
-      return NextResponse.json({ error: 'profiles_failed', details: profErr.message }, { status: 400 });
-    }
+    const up = await admin.from('profiles').upsert({ user_id: uid, empresa_id: empresaId, nome, papel }, { onConflict: 'user_id' });
+    if (up.error) return NextResponse.json({ error: 'profiles_failed', details: up.error.message }, { status: 400 });
 
-    return NextResponse.json({ ok: true, user_id: newUser.id });
-  } catch (e: any) {
-    return NextResponse.json({ error: 'unexpected', details: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ ok: true, user_id: uid });
+  } catch (e:any) {
+    return NextResponse.json({ error: 'unexpected', details: e?.message }, { status: 500 });
   }
 }
