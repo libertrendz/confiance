@@ -8,6 +8,13 @@ export const dynamic = 'force-dynamic';
 
 type AppRole = 'admin' | 'gestor' | 'colaborador';
 
+function shortNameFromEmail(email?: string | null) {
+  if (!email) return 'Utilizador';
+  const local = email.split('@')[0] || email;
+  // limita a 18 chars para caber no mobile
+  return local.length > 18 ? local.slice(0, 18) + '…' : local;
+}
+
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
@@ -24,7 +31,7 @@ export default function MenuPage() {
         const user = data.user;
         setEmail(user?.email ?? null);
 
-        // Lê papel do user_metadata (definido no Supabase Auth → Users)
+        // Papel no user_metadata
         const meta = (user?.user_metadata || {}) as Record<string, any>;
         const appRole = (meta.app_role as AppRole) || 'colaborador';
         setRole(appRole);
@@ -32,12 +39,16 @@ export default function MenuPage() {
         if (alive) setReady(true);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
   function sair() {
     (async () => {
-      try { await supa.auth.signOut(); } catch {}
+      try {
+        await supa.auth.signOut();
+      } catch {}
       window.location.replace('/login');
     })();
   }
@@ -50,9 +61,11 @@ export default function MenuPage() {
     );
   }
 
+  const userShort = shortNameFromEmail(email);
+
   return (
-    <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
-      {/* TOPBAR */}
+    <main style={{ padding: 12, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
+      {/* TOPBAR RESPONSIVO */}
       <header
         style={{
           display: 'flex',
@@ -60,47 +73,63 @@ export default function MenuPage() {
           justifyContent: 'space-between',
           gap: 12,
           marginBottom: 16,
+          flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Branding + Identidade */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <img
             src="/logo-confiance.png"
             alt="CONFIANCE"
-            style={{ height: 42, width: 'auto' }}
+            style={{ height: 36, width: 'auto', flexShrink: 0 }}
           />
-          <span
-            style={{
-              fontWeight: 700,
-              letterSpacing: 0.3,
-              color: '#0A3D91',
-              fontSize: 18,
-            }}
-          >
-            Menu
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <strong
+              style={{
+                fontWeight: 700,
+                letterSpacing: 0.2,
+                color: '#0A3D91',
+                fontSize: 16,
+                lineHeight: 1.1,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: 220,
+              }}
+              title={email ?? undefined}
+            >
+              {userShort}
+            </strong>
+            <span
+              style={{
+                fontSize: 11,
+                color: '#0A3D91',
+                background: '#EEF3FF',
+                border: '1px solid #D7E3FF',
+                alignSelf: 'flex-start',
+                padding: '2px 6px',
+                borderRadius: 999,
+                marginTop: 4,
+              }}
+            >
+              {role.toUpperCase()}
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, color: '#555' }}>{email ?? '—'}</span>
-          <span
-            style={{
-              fontSize: 12,
-              background: '#EEF3FF',
-              color: '#0A3D91',
-              padding: '4px 8px',
-              borderRadius: 999,
-              border: '1px solid #D7E3FF',
-            }}
-          >
-            {role.toUpperCase()}
-          </span>
+
+        {/* Botão sair sempre visível */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
           <button
             onClick={sair}
+            aria-label="Terminar sessão"
+            title="Terminar sessão"
             style={{
               padding: '8px 12px',
               borderRadius: 10,
               border: '1px solid #ddd',
               background: '#fff',
               cursor: 'pointer',
+              whiteSpace: 'nowrap',
             }}
           >
             Sair
@@ -116,35 +145,29 @@ export default function MenuPage() {
           gap: 12,
         }}
       >
-        {/* Colaborador: Ponto */}
-        {(role === 'colaborador') && (
+        {/* VISÃO COLABORADOR */}
+        {role === 'colaborador' && (
           <>
             <Card
               title="Marcar Ponto"
               desc="Registar ponto com foto e localização."
-              actions={[
-                { href: '/ponto', label: 'Abrir', kind: 'primary' },
-              ]}
+              actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
             />
             <Card
               title="Histórico"
               desc="Consultar marcações e estado (validado/pendente/recusado)."
-              actions={[
-                { href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' },
-              ]}
+              actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
             />
           </>
         )}
 
-        {/* Admin/Gestor: tudo */}
+        {/* VISÃO ADMIN/GESTOR */}
         {(role === 'admin' || role === 'gestor') && (
           <>
             <Card
               title="Ponto — Painel ADM"
               desc="Validação diária de marcações, filtros e auditoria."
-              actions={[
-                { href: '/adm/ponto', label: 'Abrir painel', kind: 'primary' },
-              ]}
+              actions={[{ href: '/adm/ponto', label: 'Abrir painel', kind: 'primary' }]}
             />
             <Card
               title="Fornecedores"
@@ -158,9 +181,7 @@ export default function MenuPage() {
             <Card
               title="Clientes"
               desc="Cadastro e gestão de clientes."
-              actions={[
-                { href: '/adm/clientes', label: 'Abrir', kind: 'ghost' },
-              ]}
+              actions={[{ href: '/adm/clientes', label: 'Abrir', kind: 'ghost' }]}
             />
             <Card
               title="Orçamentos & Contratos"
@@ -173,20 +194,23 @@ export default function MenuPage() {
             <Card
               title="Financeiro"
               desc="Faturas, recibos, pagamentos e relatórios."
-              actions={[
-                { href: '/adm/financeiro', label: 'Abrir', kind: 'ghost' },
-              ]}
+              actions={[{ href: '/adm/financeiro', label: 'Abrir', kind: 'ghost' }]}
             />
             <Card
               title="Dashboard"
               desc="Indicadores principais por período e empresa."
-              actions={[
-                { href: '/adm/dashboard', label: 'Ver dashboard', kind: 'ghost' },
-              ]}
+              actions={[{ href: '/adm/dashboard', label: 'Ver dashboard', kind: 'ghost' }]}
             />
           </>
         )}
       </section>
+
+      {/* Link de diagnóstico opcional */}
+      <div style={{ marginTop: 16 }}>
+        <a href="/whoami" style={{ fontSize: 12, color: '#6a6f7a' }}>
+          Diagnóstico: quem sou eu →
+        </a>
+      </div>
     </main>
   );
 }
