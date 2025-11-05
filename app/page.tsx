@@ -4,8 +4,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
-// Usa o ficheiro local do logo (coloca /public/logo-confiance.png no repo)
-const LOGO_SRC = '/logo-confiance.png';
+// usa o mesmo ícone maskable do PWA para unificar visual
+const LOGO_SRC = '/icon-512-maskable.png';
 
 export default function SplashPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
@@ -14,33 +14,22 @@ export default function SplashPage() {
   useEffect(() => {
     let alive = true;
 
-    // 1) mostra o logo 1.8s e inicia o fade-out
-    const t1 = setTimeout(() => {
-      if (!alive) return;
-      setStep('leaving');
-    }, 1800);
+    const t1 = setTimeout(() => { if (alive) setStep('leaving'); }, 1800);
 
-    // 2) navega 600ms depois do início do fade (≈ 2.4s total)
     const go = async () => {
       try {
         const { data } = await supa.auth.getSession();
         const hasSession = !!data.session;
         setTimeout(() => {
-          const next = hasSession ? '/menu' : '/login';
-          window.location.replace(next);
+          window.location.replace(hasSession ? '/menu' : '/login');
         }, 600);
       } catch {
         window.location.replace('/login');
       }
     };
+    const t2 = setTimeout(go, 1800);
 
-    const t2 = setTimeout(go, 1800); // chama go junto do fade-out
-
-    return () => {
-      alive = false;
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    return () => { alive = false; clearTimeout(t1); clearTimeout(t2); };
   }, [supa]);
 
   return (
