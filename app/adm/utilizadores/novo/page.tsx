@@ -6,11 +6,13 @@ import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
+type Papel = 'externo' | 'gestor' | 'admin';
+
 export default function NovoUtilizadorPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState('');
   const [nome, setNome] = useState('');
-  const [papel, setPapel] = useState<'colaborador'|'gestor'|'admin'>('colaborador');
+  const [papel, setPapel] = useState<Papel>('externo');
   const [msg, setMsg] = useState<string|null>(null);
   const [err, setErr] = useState<string|null>(null);
   const [sending, setSending] = useState(false);
@@ -25,17 +27,14 @@ export default function NovoUtilizadorPage() {
 
       const res = await fetch('/api/admin/users/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ email, nome, papel }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.details || json?.error || 'Falha ao criar utilizador');
 
-      setMsg('Convite enviado. O colaborador receberá um email para entrar.');
-      setEmail(''); setNome(''); setPapel('colaborador');
+      setMsg('Convite enviado. O utilizador receberá um email para entrar.');
+      setEmail(''); setNome(''); setPapel('externo');
     } catch (e:any) {
       setErr(e?.message || 'Erro inesperado');
     } finally {
@@ -47,6 +46,15 @@ export default function NovoUtilizadorPage() {
     <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Novo Utilizador</h1>
       <form onSubmit={criar}>
+        <label>Nome</label>
+        <input
+          type="text"
+          placeholder="ex.: João Silva"
+          value={nome}
+          onChange={e => setNome(e.target.value)}
+          style={{ width: '100%', padding: 10, border: '1px solid #ccc', borderRadius: 8, margin: '6px 0 12px' }}
+        />
+
         <label>Email</label>
         <input
           type="email"
@@ -56,22 +64,13 @@ export default function NovoUtilizadorPage() {
           style={{ width: '100%', padding: 10, border: '1px solid #ccc', borderRadius: 8, margin: '6px 0 12px' }}
         />
 
-        <label>Nome</label>
-        <input
-          type="text"
-          value={nome}
-          onChange={e => setNome(e.target.value)}
-          placeholder="Opcional"
-          style={{ width: '100%', padding: 10, border: '1px solid #ccc', borderRadius: 8, margin: '6px 0 12px' }}
-        />
-
         <label>Papel</label>
         <select
           value={papel}
-          onChange={e => setPapel(e.target.value as any)}
+          onChange={e => setPapel(e.target.value as Papel)}
           style={{ width: '100%', padding: 10, border: '1px solid #ccc', borderRadius: 8, margin: '6px 0 16px' }}
         >
-          <option value="colaborador">colaborador</option>
+          <option value="externo">externo</option>
           <option value="gestor">gestor</option>
           <option value="admin">admin</option>
         </select>
