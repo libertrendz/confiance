@@ -6,49 +6,27 @@ import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
-type AppRole = 'admin' | 'gestor' | 'externo';
-
-type Profile = {
-  nome: string | null;
-  papel: AppRole | null;
-};
+type AppRole = 'admin' | 'gestor' | 'colaborador' | 'externo';
 
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
-  const [role, setRole] = useState<AppRole>('externo');
-  const [nome, setNome] = useState<string | null>(null);
+  const [role, setRole] = useState<AppRole>('colaborador'); // default seguro
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const { data: userData } = await supa.auth.getUser();
-        const user = userData.user;
+        const { data } = await supa.auth.getUser();
         if (!alive) return;
 
+        const user = data.user;
         setEmail(user?.email ?? null);
 
-        // metadata (fallback)
         const meta = (user?.user_metadata || {}) as Record<string, any>;
-        const metaRole = (meta.app_role as AppRole) || 'externo';
-        let r: AppRole = metaRole;
-
-        // profiles primeiro
-        if (user?.id) {
-          const { data: prof } = await supa
-            .from('profiles')
-            .select('nome, papel')
-            .eq('user_id', user.id)
-            .maybeSingle<Profile>();
-          if (prof?.nome) setNome(prof.nome);
-          if (prof?.papel) r = prof.papel;
-        }
-
-        // airbag: se vier algo fora do esperado, vira 'externo'
-        if (r !== 'admin' && r !== 'gestor' && r !== 'externo') r = 'externo';
-        setRole(r);
+        const appRole = (meta.app_role as AppRole) || 'colaborador';
+        setRole(appRole);
       } finally {
         if (alive) setReady(true);
       }
@@ -71,76 +49,52 @@ export default function MenuPage() {
     );
   }
 
-  const displayName = (nome?.trim() || email || '—');
-
   return (
-    <main style={{ padding: 12, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
-      {/* TOPBAR responsiva */}
+    <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
       <header
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr auto',
+          display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
           gap: 12,
           marginBottom: 16,
         }}
       >
-        {/* LOGO MAIOR */}
-        <img
-          src="/logo-confiance.png"
-          alt="CONFIANCE"
-          style={{ height: 56, width: 'auto' }} // <- aumentado
-        />
-
-        <div style={{ minWidth: 0 }}>
-          <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 42, width: 'auto' }} />
+          <span style={{ fontWeight: 700, letterSpacing: 0.3, color: '#0A3D91', fontSize: 18 }}>
+            Menu
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, color: '#555' }}>{email ?? '—'}</span>
+          <span
             style={{
-              fontWeight: 700,
-              fontSize: 16,
-              color: '#0A3D91',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={displayName}
-          >
-            {displayName}
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              display: 'inline-block',
-              marginTop: 4,
+              fontSize: 12,
               background: '#EEF3FF',
               color: '#0A3D91',
-              padding: '3px 8px',
+              padding: '4px 8px',
               borderRadius: 999,
               border: '1px solid #D7E3FF',
             }}
           >
             {role.toUpperCase()}
-          </div>
-        </div>
-
-        <div style={{ textAlign: 'right' }}>
+          </span>
           <button
             onClick={sair}
             style={{
-              padding: '10px 14px',
+              padding: '8px 12px',
               borderRadius: 10,
               border: '1px solid #ddd',
               background: '#fff',
               cursor: 'pointer',
-              whiteSpace: 'nowrap',
             }}
-            aria-label="Terminar sessão"
           >
             Sair
           </button>
         </div>
       </header>
 
-      {/* GRID DE CARDS */}
       <section
         style={{
           display: 'grid',
@@ -148,8 +102,7 @@ export default function MenuPage() {
           gap: 12,
         }}
       >
-        {/* Utilizador externo (colaborador) */}
-        {role === 'externo' && (
+        {(role === 'colaborador') && (
           <>
             <Card
               title="Marcar Ponto"
@@ -158,27 +111,23 @@ export default function MenuPage() {
             />
             <Card
               title="Histórico"
-              desc="Consultar marcações e estado."
+              desc="Consultar marcações e estado (validado/pendente/recusado)."
               actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
             />
           </>
         )}
 
-        {/* Admin/Gestor */}
         {(role === 'admin' || role === 'gestor') && (
           <>
             <Card
               title="Utilizadores"
-              desc="Criar, editar e excluir contas da equipa."
-              actions={[
-                { href: '/adm/utilizadores', label: 'Listar', kind: 'ghost' },
-                { href: '/adm/utilizadores/novo', label: 'Novo utilizador', kind: 'primary' },
-              ]}
+              desc="Convidar, listar, editar e apagar utilizadores."
+              actions={[{ href: '/adm/utilizadores', label: 'Abrir', kind: 'primary' }]}
             />
             <Card
               title="Ponto — Painel ADM"
-              desc="Validação diária, filtros e auditoria."
-              actions={[{ href: '/adm/ponto', label: 'Abrir painel', kind: 'ghost' }]}
+              desc="Validação diária de marcações, filtros e auditoria."
+              actions={[{ href: '/adm/ponto', label: 'Abrir painel', kind: 'primary' }]}
             />
             <Card
               title="Fornecedores"
@@ -196,7 +145,7 @@ export default function MenuPage() {
             />
             <Card
               title="Orçamentos & Contratos"
-              desc="Fases, numeração automática, geração."
+              desc="Fases, numeração automática, geração de contrato."
               actions={[
                 { href: '/adm/orcamentos', label: 'Orçamentos', kind: 'ghost' },
                 { href: '/adm/contratos', label: 'Contratos', kind: 'ghost' },
@@ -209,7 +158,7 @@ export default function MenuPage() {
             />
             <Card
               title="Dashboard"
-              desc="Indicadores principais por período."
+              desc="Indicadores principais por período e empresa."
               actions={[{ href: '/adm/dashboard', label: 'Ver dashboard', kind: 'ghost' }]}
             />
           </>
@@ -220,7 +169,6 @@ export default function MenuPage() {
 }
 
 type CardAction = { href: string; label: string; kind?: 'primary' | 'accent' | 'ghost' };
-
 function Card({ title, desc, actions = [] }: { title: string; desc: string; actions?: CardAction[] }) {
   return (
     <article
@@ -252,12 +200,7 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
                 padding: '8px 12px',
                 borderRadius: 10,
                 border: a.kind === 'primary' ? 'none' : '1px solid #D7E3FF',
-                background:
-                  a.kind === 'primary'
-                    ? '#0A3D91'
-                    : a.kind === 'accent'
-                    ? '#FFD24D'
-                    : '#fff',
+                background: a.kind === 'primary' ? '#0A3D91' : a.kind === 'accent' ? '#FFD24D' : '#fff',
                 color: a.kind === 'primary' ? '#fff' : '#0A3D91',
               }}
             >
