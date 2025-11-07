@@ -122,7 +122,7 @@ export default function UtilizadoresListPage() {
                     <th style={th}>Nome</th>
                     <th style={th}>Email</th>
                     <th style={th}>Papel</th>
-                    <th style={th}}>Último login</th>
+                    <th style={th}>Último login</th>
                     <th style={th}>Ações</th>
                   </tr>
                 </thead>
