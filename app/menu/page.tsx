@@ -11,7 +11,7 @@ type AppRole = 'admin' | 'gestor' | 'externo';
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
-  const [role, setRole] = useState<AppRole>('externo'); // default seguro
+  const [role, setRole] = useState<AppRole>('externo');
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -23,11 +23,9 @@ export default function MenuPage() {
         const uid = user?.id || null;
         setEmail(user?.email ?? null);
 
-        // 1) Papel vindo do JWT (user_metadata.app_role)
         const meta = (user?.user_metadata || {}) as Record<string, any>;
         let effectiveRole = (meta.app_role as AppRole) || 'externo';
 
-        // 2) Fallback: profiles.papel
         if (!['admin', 'gestor', 'externo'].includes(effectiveRole) && uid) {
           const { data: prof } = await supa
             .from('profiles')
@@ -40,7 +38,6 @@ export default function MenuPage() {
           }
         }
 
-        // Admin/Gestor → layout ADM
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
@@ -51,11 +48,15 @@ export default function MenuPage() {
         if (alive) setReady(true);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
   async function sair() {
-    try { await supa.auth.signOut(); } catch {}
+    try {
+      await supa.auth.signOut();
+    } catch {}
     window.location.replace('/login');
   }
 
@@ -67,35 +68,55 @@ export default function MenuPage() {
     );
   }
 
-  // EXTERNO (colaborador): Ponto + Histórico
   return (
-    <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
+    <main
+      style={{
+        padding: 16,
+        fontFamily: 'system-ui',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}
+    >
       {/* TOPBAR */}
       <header
         style={{
           display: 'flex',
-          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 8,
+          flexWrap: 'wrap',
+          gap: 10,
           marginBottom: 16,
-          rowGap: 8,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 180 }}>
-          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 40, width: 'auto' }} />
-          <span style={{ fontWeight: 800, letterSpacing: 0.3, color: '#0e3258', fontSize: 18 }}>
+        {/* Logo + Título */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img
+            src="/logo-confiance.png"
+            alt="CONFIANCE"
+            style={{ height: 40, width: 'auto' }}
+          />
+          <span
+            style={{
+              fontWeight: 800,
+              letterSpacing: 0.3,
+              color: '#0e3258',
+              fontSize: 18,
+            }}
+          >
             CONFIANCE
           </span>
         </div>
 
+        {/* Info do usuário */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
             justifyContent: 'flex-end',
+            flex: 1,
+            gap: 8,
+            minWidth: 240,
+            flexWrap: 'wrap',
           }}
         >
           <span
@@ -107,11 +128,27 @@ export default function MenuPage() {
               borderRadius: 999,
               border: '1px solid #D7E3FF',
               fontWeight: 600,
+              whiteSpace: 'nowrap',
             }}
           >
             {role.toUpperCase()}
           </span>
-          <span style={{ fontSize: 13, color: '#555' }}>{email ?? '—'}</span>
+          <span
+            style={{
+              fontSize: 13,
+              color: '#555',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: 200,
+            }}
+          >
+            {email ?? '—'}
+          </span>
+        </div>
+
+        {/* Botão de sair fixo à direita */}
+        <div style={{ flexShrink: 0 }}>
           <button
             onClick={sair}
             style={{
@@ -128,7 +165,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* GRID DE CARDS — somente para EXTERNO */}
+      {/* GRID DE CARDS */}
       <section
         style={{
           display: 'grid',
@@ -151,9 +188,21 @@ export default function MenuPage() {
   );
 }
 
-type CardAction = { href: string; label: string; kind?: 'primary' | 'accent' | 'ghost' };
+type CardAction = {
+  href: string;
+  label: string;
+  kind?: 'primary' | 'accent' | 'ghost';
+};
 
-function Card({ title, desc, actions = [] }: { title: string; desc: string; actions?: CardAction[] }) {
+function Card({
+  title,
+  desc,
+  actions = [],
+}: {
+  title: string;
+  desc: string;
+  actions?: CardAction[];
+}) {
   return (
     <article
       style={{
@@ -169,8 +218,19 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
       }}
     >
       <div>
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0e3258' }}>{title}</h3>
-        <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>{desc}</p>
+        <h3
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 800,
+            color: '#0e3258',
+          }}
+        >
+          {title}
+        </h3>
+        <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
+          {desc}
+        </p>
       </div>
       {!!actions.length && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
@@ -184,7 +244,12 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
                 padding: '8px 12px',
                 borderRadius: 10,
                 border: a.kind === 'primary' ? 'none' : '1px solid #D7E3FF',
-                background: a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff',
+                background:
+                  a.kind === 'primary'
+                    ? '#0e3258'
+                    : a.kind === 'accent'
+                    ? '#FFD24D'
+                    : '#fff',
                 color: a.kind === 'primary' ? '#fff' : '#0e3258',
               }}
             >
