@@ -19,51 +19,30 @@ export default function MenuPage() {
     let alive = true;
     (async () => {
       try {
-        const { data: ud } = await supa.auth.getUser();
-        const user = ud.user;
-        const uid = user?.id ?? null;
+        const { data } = await supa.auth.getUser();
+        const user = data.user;
+        if (!user) return;
 
-        setEmail(user?.email ?? null);
+        const uid = user.id;
+        const rawEmail = user.email ?? null;
 
-        // Papel do JWT (user_metadata) primeiro
-        const meta = (user?.user_metadata || {}) as Record<string, any>;
-        let effectiveRole = (meta.app_role as AppRole) || 'externo';
+        // Busca nome e papel do profile
+        const { data: prof } = await supa
+          .from('profiles')
+          .select('papel, nome_exibicao, nome')
+          .eq('user_id', uid)
+          .maybeSingle();
 
-        // Nome de exibição, se existir no metadata
-        const metaNome =
-          (meta.nome_exibicao as string) ||
-          (meta.nome as string) ||
-          (meta.name as string) ||
-          null;
+        const papel = (prof?.papel as AppRole) || 'externo';
+        setRole(papel);
 
-        // Complementa pelo profiles se necessário
-        if (uid) {
-          const { data: prof } = await supa
-            .from('profiles')
-            .select('papel, nome_exibicao, nome')
-            .eq('user_id', uid)
-            .maybeSingle();
+        const display =
+          (prof?.nome_exibicao && prof.nome_exibicao.trim()) ||
+          (prof?.nome && prof.nome.trim()) ||
+          (rawEmail ? rawEmail.split('@')[0] : '—');
 
-          const papel = (prof?.papel as AppRole) || effectiveRole;
-          if (['admin', 'gestor', 'externo'].includes(papel)) {
-            effectiveRole = papel;
-          }
-
-          const dbNome =
-            prof?.nome_exibicao || prof?.nome || null;
-
-          setNome(metaNome || dbNome || null);
-        } else {
-          setNome(metaNome || null);
-        }
-
-        // Admin/Gestor vai para layout ADM (sidebar)
-        if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
-          window.location.replace('/adm/dashboard');
-          return;
-        }
-
-        setRole(effectiveRole);
+        setNome(display);
+        setEmail(rawEmail);
       } finally {
         if (alive) setReady(true);
       }
@@ -88,7 +67,6 @@ export default function MenuPage() {
     );
   }
 
-  // Cabeçalho pedido: [ PERFIL ] [ NOME/EMAIL ……… ] [ SAIR ]
   return (
     <main
       style={{
@@ -108,7 +86,7 @@ export default function MenuPage() {
           marginBottom: 16,
         }}
       >
-        {/* PERFIL (sempre primeiro) */}
+        {/* PERFIL */}
         <span
           style={{
             fontSize: 12,
@@ -124,7 +102,7 @@ export default function MenuPage() {
           {role.toUpperCase()}
         </span>
 
-        {/* NOME / EMAIL com ellipsis */}
+        {/* NOME / EMAIL */}
         <div
           style={{
             minWidth: 0,
@@ -149,7 +127,7 @@ export default function MenuPage() {
           </span>
         </div>
 
-        {/* SAIR (sempre colado à direita) */}
+        {/* SAIR */}
         <div>
           <button
             onClick={sair}
@@ -167,15 +145,14 @@ export default function MenuPage() {
           </button>
         </div>
 
-        {/* Responsivo: se a tela for muito estreita, o layout vira duas linhas mas mantém a ordem pedida */}
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              @media (max-width: 420px) {
+              @media (max-width: 480px) {
                 header { grid-template-columns: 1fr auto; }
                 header > span:nth-child(1) { order: 1; }
-                header > div:nth-child(2) { order: 3; grid-column: 1 / span 2; }
-                header > div:nth-child(3) { order: 2; }
+                header > div:nth-child(2) { order: 3; grid-column: 1 / span 2; text-align: left; }
+                header > div:nth-child(3) { order: 2; justify-self: end; }
               }
             `,
           }}
@@ -183,24 +160,33 @@ export default function MenuPage() {
       </header>
 
       {/* GRID DE CARDS (colaborador/externo) */}
-      <section
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 12,
-        }}
-      >
-        <Card
-          title="Marcar Ponto"
-          desc="Registar ponto com foto e localização."
-          actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
-        />
-        <Card
-          title="Histórico"
-          desc="Consultar marcações e estado (validado/pendente/recusado)."
-          actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
-        />
-      </section>
+      {role === 'externo' && (
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <Card
+            title="Marcar Ponto"
+            desc="Registar ponto com foto e localização."
+            actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
+          />
+          <Card
+            title="Histórico"
+            desc="Consultar marcações e estado (validado/pendente/recusado)."
+            actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
+          />
+        </section>
+      )}
+
+      {/* ADMIN/GESTOR redirecionam manualmente via sidebar */}
+      {(role === 'admin' || role === 'gestor') && (
+        <section style={{ color: '#0e3258', paddingTop: 10 }}>
+          <p>Usa o menu lateral para navegar nas secções administrativas.</p>
+        </section>
+      )}
     </main>
   );
 }
