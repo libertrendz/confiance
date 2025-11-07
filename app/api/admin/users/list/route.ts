@@ -1,35 +1,27 @@
+// app/api/admin/users/list/route.ts
 import { NextResponse } from 'next/server';
-import { getAdminClient } from '../../_supabase';
+import { createClient } from '@supabase/supabase-js';
 
 export async function GET() {
   try {
-    const supa = getAdminClient();
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceKey) {
+      return NextResponse.json({ ok: false, error: 'Missing SUPABASE envs' }, { status: 500 });
+    }
 
-    // users do Auth
-    const { data: authUsers, error: auErr } = await supa.auth.admin.listUsers();
-    if (auErr) throw auErr;
+    const admin = createClient(url, serviceKey);
 
-    // profiles (nome/papel)
-    const { data: profs, error: pErr } = await supa
+    // Tabela profiles: user_id, empresa_id, papel, nome, nome_exibicao, created_at, updated_at, id
+    const { data, error } = await admin
       .from('profiles')
-      .select('user_id, nome_exibicao, papel');
-    if (pErr) throw pErr;
+      .select('id,user_id,empresa_id,papel,nome,nome_exibicao,created_at,updated_at')
+      .order('created_at', { ascending: false });
 
-    const profById = new Map(profs?.map(p => [p.user_id, p]) ?? []);
-    const rows = (authUsers?.users ?? []).map(u => {
-      const prof = profById.get(u.id) || null;
-      return {
-        id: u.id,
-        email: u.email,
-        nome: prof?.nome_exibicao ?? null,
-        papel: prof?.papel ?? null,
-        created_at: u.created_at,
-        last_sign_in_at: u.last_sign_in_at,
-      };
-    });
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
 
-    return NextResponse.json({ ok: true, rows });
+    return NextResponse.json({ ok: true, rows: data ?? [] });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'fail' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || 'Erro inesperado' }, { status: 500 });
   }
 }
