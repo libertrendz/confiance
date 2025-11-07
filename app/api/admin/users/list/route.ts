@@ -1,59 +1,35 @@
-// app/api/admin/users/list/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getAdminSupabase } from '@/lib/supabaseAdmin';
+import { getAdminClient } from '../../_supabase';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-async function getCaller(token: string) {
-  const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data, error } = await supa.auth.getUser(token);
-  if (error) throw error;
-  return data.user;
-}
-
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const auth = req.headers.get('authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token) return NextResponse.json({ error: 'missing_token' }, { status: 401 });
+    const supa = getAdminClient();
 
-    const caller = await getCaller(token);
-    const role = (caller.user_metadata?.app_role as string) || 'externo';
-    if (role !== 'admin' && role !== 'gestor') {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-    }
+    // users do Auth
+    const { data: authUsers, error: auErr } = await supa.auth.admin.listUsers();
+    if (auErr) throw auErr;
 
-    const admin = getAdminSupabase();
-
-    const { data: profiles, error: pErr } = await admin
+    // profiles (nome/papel)
+    const { data: profs, error: pErr } = await supa
       .from('profiles')
-      .select('user_id, nome, papel');
+      .select('user_id, nome_exibicao, papel');
     if (pErr) throw pErr;
 
-    const { data: usersList, error: uErr } = await admin.auth.admin.listUsers();
-    if (uErr) {
-      return NextResponse.json(
-        { error: 'users_list_failed', details: uErr.message },
-        { status: 400 },
-      );
-    }
-
-    const rows = usersList.users.map((u) => {
-      const p = profiles.find((x) => x.user_id === u.id);
+    const profById = new Map(profs?.map(p => [p.user_id, p]) ?? []);
+    const rows = (authUsers?.users ?? []).map(u => {
+      const prof = profById.get(u.id) || null;
       return {
         id: u.id,
         email: u.email,
-        nome: p?.nome ?? null,
-        papel: p?.papel ?? 'externo',
+        nome: prof?.nome_exibicao ?? null,
+        papel: prof?.papel ?? null,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at,
       };
     });
 
-    return NextResponse.json({ rows });
+    return NextResponse.json({ ok: true, rows });
   } catch (e: any) {
-    return NextResponse.json({ error: 'unexpected', details: e?.message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message ?? 'fail' }, { status: 500 });
   }
 }
