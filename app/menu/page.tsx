@@ -11,6 +11,7 @@ type AppRole = 'admin' | 'gestor' | 'externo';
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
+  const [nome, setNome] = useState<string | null>(null);
   const [role, setRole] = useState<AppRole>('externo');
   const [ready, setReady] = useState(false);
 
@@ -18,29 +19,45 @@ export default function MenuPage() {
     let alive = true;
     (async () => {
       try {
-        const { data: userData } = await supa.auth.getUser();
-        const user = userData.user;
-        const uid = user?.id || null;
+        const { data: ud } = await supa.auth.getUser();
+        const user = ud.user;
+        const uid = user?.id ?? null;
+
         setEmail(user?.email ?? null);
 
-        // 1) Papel do user_metadata (JWT)
+        // Papel do JWT (user_metadata) primeiro
         const meta = (user?.user_metadata || {}) as Record<string, any>;
         let effectiveRole = (meta.app_role as AppRole) || 'externo';
 
-        // 2) Fallback: profiles.papel
-        if (!['admin', 'gestor', 'externo'].includes(effectiveRole) && uid) {
+        // Nome de exibição, se existir no metadata
+        const metaNome =
+          (meta.nome_exibicao as string) ||
+          (meta.nome as string) ||
+          (meta.name as string) ||
+          null;
+
+        // Complementa pelo profiles se necessário
+        if (uid) {
           const { data: prof } = await supa
             .from('profiles')
-            .select('papel')
+            .select('papel, nome_exibicao, nome')
             .eq('user_id', uid)
             .maybeSingle();
-          const papel = (prof?.papel as AppRole) || 'externo';
+
+          const papel = (prof?.papel as AppRole) || effectiveRole;
           if (['admin', 'gestor', 'externo'].includes(papel)) {
             effectiveRole = papel;
           }
+
+          const dbNome =
+            prof?.nome_exibicao || prof?.nome || null;
+
+          setNome(metaNome || dbNome || null);
+        } else {
+          setNome(metaNome || null);
         }
 
-        // Admin/Gestor → layout ADM
+        // Admin/Gestor vai para layout ADM (sidebar)
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
@@ -71,6 +88,7 @@ export default function MenuPage() {
     );
   }
 
+  // Cabeçalho pedido: [ PERFIL ] [ NOME/EMAIL ……… ] [ SAIR ]
   return (
     <main
       style={{
@@ -80,78 +98,58 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* TOPBAR (Grid: logo | info | sair) */}
       <header
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto 1fr auto',
           alignItems: 'center',
-          columnGap: 12,
+          columnGap: 10,
           rowGap: 8,
           marginBottom: 16,
         }}
       >
-        {/* Col 1: Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 180 }}>
-          <img
-            src="/logo-confiance.png"
-            alt="CONFIANCE"
-            style={{ height: 40, width: 'auto' }}
-          />
-          <span
-            style={{
-              fontWeight: 800,
-              letterSpacing: 0.3,
-              color: '#0e3258',
-              fontSize: 18,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            CONFIANCE
-          </span>
-        </div>
+        {/* PERFIL (sempre primeiro) */}
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            background: '#EEF3FF',
+            color: '#0e3258',
+            padding: '6px 10px',
+            borderRadius: 999,
+            border: '1px solid #D7E3FF',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {role.toUpperCase()}
+        </span>
 
-        {/* Col 2: Info (chip + email) — cresce, corta com ellipsis */}
+        {/* NOME / EMAIL com ellipsis */}
         <div
           style={{
+            minWidth: 0,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'flex-end',
             gap: 8,
-            minWidth: 0, // importante pro ellipsis funcionar
           }}
         >
           <span
             style={{
-              fontSize: 12,
-              background: '#EEF3FF',
               color: '#0e3258',
-              padding: '4px 8px',
-              borderRadius: 999,
-              border: '1px solid #D7E3FF',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {role.toUpperCase()}
-          </span>
-          <span
-            style={{
-              fontSize: 13,
-              color: '#555',
+              fontWeight: 800,
+              fontSize: 18,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               maxWidth: '100%',
             }}
-            title={email ?? undefined}
+            title={(nome || email) ?? undefined}
           >
-            {email ?? '—'}
+            {nome || email || '—'}
           </span>
         </div>
 
-        {/* Col 3: Sair — sempre na direita */}
+        {/* SAIR (sempre colado à direita) */}
         <div>
           <button
             onClick={sair}
@@ -161,7 +159,7 @@ export default function MenuPage() {
               border: '1px solid #ddd',
               background: '#fff',
               cursor: 'pointer',
-              fontWeight: 500,
+              fontWeight: 600,
               whiteSpace: 'nowrap',
             }}
           >
@@ -169,27 +167,22 @@ export default function MenuPage() {
           </button>
         </div>
 
-        {/* Responsividade: em telas estreitas, info vai para linha de baixo e ocupa 3 colunas */}
+        {/* Responsivo: se a tela for muito estreita, o layout vira duas linhas mas mantém a ordem pedida */}
         <style
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{
             __html: `
-            @media (max-width: 560px) {
-              header {
-                grid-template-columns: 1fr auto;
+              @media (max-width: 420px) {
+                header { grid-template-columns: 1fr auto; }
+                header > span:nth-child(1) { order: 1; }
+                header > div:nth-child(2) { order: 3; grid-column: 1 / span 2; }
+                header > div:nth-child(3) { order: 2; }
               }
-              header > div:nth-child(2) {
-                grid-column: 1 / span 2;
-                justify-content: flex-start;
-                order: 3;
-              }
-            }
-          `,
+            `,
           }}
         />
       </header>
 
-      {/* GRID DE CARDS */}
+      {/* GRID DE CARDS (colaborador/externo) */}
       <section
         style={{
           display: 'grid',
