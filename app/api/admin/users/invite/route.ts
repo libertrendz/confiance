@@ -2,82 +2,90 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+type Papel = 'admin' | 'gestor' | 'externo';
+
 export async function POST(req: Request) {
   try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceKey) {
+      return NextResponse.json(
+        { ok: false, error: 'Missing SUPABASE envs (URL or SERVICE_ROLE_KEY)' },
+        { status: 500 }
+      );
+    }
+
+    const admin = createClient(url, serviceKey);
+
     const body = await req.json().catch(() => ({}));
-    const email: string = String(body.email || '').trim().toLowerCase();
-    const papel: 'admin' | 'gestor' | 'externo' = (body.papel || 'externo').toLowerCase();
-    const empresa_id: string = String(body.empresa_id || '').trim();
-    const nome: string | null = body.nome ? String(body.nome) : null;
-    const nome_exibicao: string | null = body.nome_exibicao ? String(body.nome_exibicao) : null;
+    const email = String(body?.email || '').trim().toLowerCase();
+    const nome = String(body?.nome || '').trim();
+    const papel = (String(body?.papel || 'externo').trim() as Papel);
+    const empresa_id = String(body?.empresa_id || '').trim(); // opcional; se vier, gravamos
 
-    if (!email) return NextResponse.json({ error: 'email obrigatório' }, { status: 400 });
-    if (!empresa_id) return NextResponse.json({ error: 'empresa_id obrigatório' }, { status: 400 });
-    if (!['admin','gestor','externo'].includes(papel))
-      return NextResponse.json({ error: 'papel inválido' }, { status: 400 });
-
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const service = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    if (!url || !service) {
-      return NextResponse.json({ error: 'Faltam envs do Supabase (URL/Service Key)' }, { status: 500 });
+    if (!email) {
+      return NextResponse.json({ ok: false, error: 'Email obrigatório' }, { status: 400 });
+    }
+    if (!['admin', 'gestor', 'externo'].includes(papel)) {
+      return NextResponse.json({ ok: false, error: 'Papel inválido' }, { status: 400 });
     }
 
-    // Admin client
-    const admin = createClient(url, service, {
-      auth: { autoRefreshToken: false, persistSession: false }
+    // Redireciona para o confirm
+    const origin = new URL(req.url).origin;
+    const redirectTo = `${origin}/auth/confirm?next=/menu`;
+
+    // 1) Convida o utilizador (cria user e envia email)
+    const { data: invite, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: {
+        app_role: papel,
+        nome_exibicao: nome || null,
+        ...(empresa_id ? { empresa_id } : {}),
+      },
     });
+    if (inviteErr) {
+      return NextResponse.json({ ok: false, error: inviteErr.message }, { status: 400 });
+    }
 
-    // 1) Cria user e envia email de convite
-    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      email_confirm: false,
-      user_metadata: { app_role: papel, nome: nome ?? nome_exibicao ?? '' },
-      app_metadata: { provider: 'email' },
-      // Não há "invite" separado na SDK v2; para forçar email de confirmação, usa generateLink:
+    const user = invite?.user;
+    if (!user?.id) {
+      // Muito improvável, mas sejamos explícitos
+      return NextResponse.json({ ok: false, error: 'Convite enviado, mas user vazio' }, { status: 200 });
+    }
+
+    // 2) Upsert do profile para refletir no app imediatamente
+    // Tabela profiles: user_id, empresa_id, papel, nome, created_at, updated_at, id, nome_exibicao
+    const upsertPayload: Record<string, any> = {
+      user_id: user.id,
+      papel,
+      nome: nome || null,
+      nome_exibicao: nome || null,
+    };
+    if (empresa_id) upsertPayload.empresa_id = empresa_id;
+
+    const { error: upErr } = await admin.from('profiles').upsert(upsertPayload, {
+      onConflict: 'user_id',
+      ignoreDuplicates: false,
     });
-    if (createErr) {
-      // Se já existe, pega o user existente
-      if (createErr.status !== 422) {
-        return NextResponse.json({ error: createErr.message }, { status: 400 });
-      }
+    if (upErr) {
+      // Não falha o convite por causa do perfil; só reporta
+      return NextResponse.json({
+        ok: true,
+        warning: `Convite enviado, mas falhou sincronizar profiles: ${upErr.message}`,
+        user_id: user.id,
+        email,
+        papel,
+      });
     }
 
-    // Gera link de confirmação (equivalente a convite)
-    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-      type: 'signup',
-      email,
-      options: { redirectTo }
-    });
-    if (linkErr) {
-      return NextResponse.json({ error: linkErr.message }, { status: 400 });
-    }
-
-    const user_id = linkData?.user?.id;
-    if (!user_id) {
-      return NextResponse.json({ error: 'Não foi possível obter user_id' }, { status: 400 });
-    }
-
-    // 2) Upsert do profile via RPC
-    const { error: rpcErr } = await admin.rpc('perfil_upsert_admin', {
-      p_user_id: user_id,
-      p_empresa_id: empresa_id,
-      p_papel: papel,
-      p_nome: nome,
-      p_nome_exibicao: nome_exibicao
-    });
-    if (rpcErr) {
-      return NextResponse.json({ error: rpcErr.message }, { status: 400 });
-    }
-
-    // 3) Retorna OK
     return NextResponse.json({
       ok: true,
-      user_id,
+      user_id: user.id,
       email,
-      next: redirectTo
+      papel,
+      redirectTo,
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'erro inesperado' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || 'Erro inesperado' }, { status: 500 });
   }
 }
