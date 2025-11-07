@@ -13,6 +13,18 @@ type Row = {
   papel: 'admin' | 'gestor' | 'externo';
   created_at: string | null;
   updated_at: string | null;
+  last_sign_in_at?: string | null;
+};
+
+const th: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', color: '#0A3D91' };
+const td: React.CSSProperties = { padding: '10px 12px', color: '#323B4B' };
+const ghostBtn: React.CSSProperties = {
+  textDecoration: 'none',
+  padding: '8px 12px',
+  borderRadius: 10,
+  border: '1px solid #D7E3FF',
+  background: '#fff',
+  color: '#0A3D91',
 };
 
 export default function UtilizadoresListPage() {
@@ -26,7 +38,7 @@ export default function UtilizadoresListPage() {
     let alive = true;
     (async () => {
       try {
-        // 1) Garante sessão
+        // 1) Sessão obrigatória
         const { data: s } = await supa.auth.getSession();
         if (!s.session) {
           window.location.replace('/login');
@@ -34,34 +46,49 @@ export default function UtilizadoresListPage() {
         }
         setMeId(s.session.user.id);
 
-        // 2) Carrega a lista (RLS filtra por empresa)
+        // 2) Lista via VIEW (RLS filtra por empresa)
         const { data, error } = await supa
           .from('v_admin_users')
-          .select('id, email, nome, papel, created_at, updated_at')
+          .select('id, email, nome, papel, created_at, updated_at, last_sign_in_at')
           .order('created_at', { ascending: true });
 
         if (error) throw error;
         if (!alive) return;
 
-        setRows(data as Row[]);
+        setRows((data || []) as Row[]);
       } catch (e: any) {
         setErr(e?.message ?? 'Falha ao carregar utilizadores.');
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
   return (
     <main style={{ padding: 18, fontFamily: 'system-ui', maxWidth: 1100 }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#0A3D91' }}>Utilizadores</h1>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        }}
+      >
+        <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#0A3D91' }}>
+          Utilizadores
+        </h1>
         <a
           href="/adm/utilizadores/convite"
           style={{
-            textDecoration: 'none', padding: '10px 14px', borderRadius: 10,
-            border: 'none', background: '#0A3D91', color: '#fff'
+            textDecoration: 'none',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: 'none',
+            background: '#0A3D91',
+            color: '#fff',
           }}
         >
           Convidar novo utilizador
@@ -74,11 +101,17 @@ export default function UtilizadoresListPage() {
       {!loading && !err && (
         <>
           {rows.length === 0 ? (
-            <div style={{
-              border: '1px dashed #D7E3FF', borderRadius: 12, padding: 16, background: '#F7FAFF'
-            }}>
+            <div
+              style={{
+                border: '1px dashed #D7E3FF',
+                borderRadius: 12,
+                padding: 16,
+                background: '#F7FAFF',
+              }}
+            >
               <p style={{ margin: 0, color: '#49546A' }}>
-                Nenhum utilizador encontrado na tua empresa. Começa por <a href="/adm/utilizadores/convite">convidar</a>.
+                Nenhum utilizador encontrado na tua empresa. Começa por{' '}
+                <a href="/adm/utilizadores/convite">convidar</a>.
               </p>
             </div>
           ) : (
@@ -89,6 +122,7 @@ export default function UtilizadoresListPage() {
                     <th style={th}>Nome</th>
                     <th style={th}>Email</th>
                     <th style={th}>Papel</th>
+                    <th style={th}}>Último login</th>
                     <th style={th}>Ações</th>
                   </tr>
                 </thead>
@@ -98,22 +132,29 @@ export default function UtilizadoresListPage() {
                       <td style={td}>{r.nome || '—'}</td>
                       <td style={td}>{r.email}</td>
                       <td style={td}>
-                        <span style={{
-                          fontSize: 12, background: '#EEF3FF', color: '#0A3D91',
-                          padding: '4px 8px', borderRadius: 999, border: '1px solid #D7E3FF'
-                        }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            background: '#EEF3FF',
+                            color: '#0A3D91',
+                            padding: '4px 8px',
+                            borderRadius: 999,
+                            border: '1px solid #D7E3FF',
+                          }}
+                        >
                           {r.papel.toUpperCase()}
                         </span>
                       </td>
                       <td style={td}>
+                        {r.last_sign_in_at
+                          ? new Date(r.last_sign_in_at).toLocaleString()
+                          : '—'}
+                      </td>
+                      <td style={td}>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <a
-                            href={`/adm/utilizadores/editar?id=${r.id}`}
-                            style={ghostBtn}
-                          >
+                          <a href={`/adm/utilizadores/editar?id=${r.id}`} style={ghostBtn}>
                             Editar
                           </a>
-                          {/* Remover/Desativar poderá vir depois, com confirmação */}
                           {meId !== r.id && (
                             <button
                               disabled
@@ -136,10 +177,3 @@ export default function UtilizadoresListPage() {
     </main>
   );
 }
-
-const th: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', color: '#0A3D91' };
-const td: React.CSSProperties = { padding: '10px 12px', color: '#323B4B' };
-const ghostBtn: React.CSSProperties = {
-  textDecoration: 'none', padding: '8px 12px', borderRadius: 10,
-  border: '1px solid #D7E3FF', background: '#fff', color: '#0A3D91'
-};
