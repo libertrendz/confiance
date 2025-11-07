@@ -1,111 +1,185 @@
-// app/adm/utilizadores/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import getBrowserSupabase from '@/lib/supa';
 
-type Row = {
-  id: string;
-  user_id: string | null;
-  empresa_id: string | null;
-  papel: 'admin' | 'gestor' | 'externo';
+type UserRow = {
+  user_id: string;
+  email: string | null;
   nome: string | null;
-  nome_exibicao: string | null;
-  created_at: string;
-  updated_at: string;
+  papel: 'admin' | 'gestor' | 'externo';
+  empresa_id: string;
+  created_at: string | null;
+  last_sign_in_at: string | null;
 };
 
 export default function UtilizadoresPage() {
-  const [rows, setRows] = useState<Row[]>([]);
+  const supa = useMemo(() => getBrowserSupabase(), []);
+  const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
+  // estado de edição por linha
+  const [rowState, setRowState] = useState<Record<string, { nome: string; papel: UserRow['papel'] }>>({});
+
   useEffect(() => {
-    let alive = true;
     (async () => {
+      setLoading(true);
+      setErr(null);
       try {
-        setLoading(true);
         const res = await fetch('/api/admin/users/list', { cache: 'no-store' });
-        const json = await res.json();
-        if (!alive) return;
-        if (!json?.ok) throw new Error(json?.error || 'Falha ao listar');
-        setRows(json.rows || []);
+        const js = await res.json();
+        if (!res.ok) throw new Error(js?.error || 'Falha ao listar');
+        const data: UserRow[] = js.users || [];
+        setRows(data);
+        // inicializa estado por id
+        const init: Record<string, { nome: string; papel: UserRow['papel'] }> = {};
+        for (const r of data) {
+          init[r.user_id] = { nome: r.nome || '', papel: r.papel };
+        }
+        setRowState(init);
       } catch (e: any) {
-        if (alive) setErr(e?.message || 'Erro');
+        setErr(e.message || 'Erro ao carregar');
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => { alive = false; };
   }, []);
 
+  async function guardar(user_id: string) {
+    const state = rowState[user_id];
+    if (!state) return;
+    const payload = {
+      user_id,
+      nome: state.nome || null,
+      nome_exibicao: state.nome || null,
+      papel: state.papel,
+    };
+    const res = await fetch('/api/admin/users/update', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const js = await res.json().catch(() => ({}));
+      alert(`Falha ao salvar: ${js?.error || res.statusText}`);
+      return;
+    }
+    // refresh leve
+    setRows(prev => prev.map(r => r.user_id === user_id ? { ...r, nome: state.nome, papel: state.papel } : r));
+  }
+
+  async function convidar(form: FormData) {
+    const email = String(form.get('email') || '').trim();
+    const nome = String(form.get('nome') || '').trim();
+    const papel = String(form.get('papel') || 'externo') as UserRow['papel'];
+    if (!email) { alert('Informe email'); return; }
+
+    const res = await fetch('/api/admin/users/invite', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, nome, papel }),
+    });
+    const js = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(`Falha ao convidar: ${js?.error || res.statusText}`);
+      return;
+    }
+    alert('Convite enviado. O utilizador deve confirmar por email.');
+  }
+
+  if (loading) {
+    return <main style={{ padding: 18, fontFamily: 'system-ui' }}>A carregar…</main>;
+  }
+  if (err) {
+    return <main style={{ padding: 18, fontFamily: 'system-ui', color: 'crimson' }}>{err}</main>;
+  }
+
   return (
-    <main style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: '100vh' }}>
-      {/* Sidebar fixa (ADM) */}
-      <aside style={{ borderRight: '1px solid #E9EEF7', padding: 16 }}>
-        <h3 style={{ margin: 0, color: '#0e3258' }}>Admin</h3>
-        <nav style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-          <a href="/adm/dashboard">Dashboard</a>
-          <a href="/adm/utilizadores" style={{ fontWeight: 700, color: '#0e3258' }}>Utilizadores</a>
-          <a href="/adm/ponto">Ponto</a>
-          <a href="/adm/fornecedores">Fornecedores</a>
-          <a href="/adm/clientes">Clientes</a>
-          <a href="/adm/orcamentos">Orçamentos</a>
-          <a href="/adm/contratos">Contratos</a>
-          <a href="/adm/financeiro">Financeiro</a>
-          <a href="/adm/config">Configurações</a>
-        </nav>
-      </aside>
+    <main style={{ padding: 18, fontFamily: 'system-ui', maxWidth: 1100 }}>
+      <h1 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12, color: '#0e3258' }}>Utilizadores</h1>
 
-      {/* Conteúdo */}
-      <section style={{ padding: 18, fontFamily: 'system-ui', maxWidth: 1100 }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0e3258' }}>Utilizadores</h1>
-          <a
-            href="/adm/utilizadores/convite"
-            style={{ textDecoration: 'none', padding: '8px 12px', borderRadius: 10, background: '#0e3258', color: '#fff' }}
-          >
-            Convidar novo
-          </a>
-        </header>
-
-        {loading && <p style={{ color: '#666' }}>A carregar…</p>}
-        {err && <p style={{ color: 'crimson' }}>{err}</p>}
-
-        {!loading && !err && (
-          <div style={{ overflowX: 'auto', border: '1px solid #E9EEF7', borderRadius: 12 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: '#F7FAFF' }}>
-                <tr>
-                  <th style={th}>Nome</th>
-                  <th style={th}>Papel</th>
-                  <th style={th}>Email (user_id)</th>
-                  <th style={th}>Ações</th>
+      {/* Tabela */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#F4F7FB' }}>
+              <Th>Email</Th>
+              <Th>Nome</Th>
+              <Th>Papel</Th>
+              <Th>Último acesso</Th>
+              <Th>Ações</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const st = rowState[r.user_id] || { nome: r.nome || '', papel: r.papel };
+              return (
+                <tr key={r.user_id} style={{ borderBottom: '1px solid #EEF2F7' }}>
+                  <Td>{r.email || '—'}</Td>
+                  <Td>
+                    <input
+                      value={st.nome}
+                      onChange={e => setRowState(prev => ({ ...prev, [r.user_id]: { ...st, nome: e.target.value } }))}
+                      style={{ width: '100%', padding: 6, border: '1px solid #ddd', borderRadius: 8 }}
+                      placeholder="Nome para exibição"
+                    />
+                  </Td>
+                  <Td>
+                    <select
+                      value={st.papel}
+                      onChange={e => setRowState(prev => ({ ...prev, [r.user_id]: { ...st, papel: e.target.value as UserRow['papel'] } }))}
+                      style={{ padding: 6, border: '1px solid #ddd', borderRadius: 8 }}
+                    >
+                      <option value="externo">Externo</option>
+                      <option value="gestor">Gestor</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </Td>
+                  <Td>{r.last_sign_in_at ? new Date(r.last_sign_in_at).toLocaleString() : '—'}</Td>
+                  <Td>
+                    <button
+                      onClick={() => guardar(r.user_id)}
+                      style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #0e3258', color: '#0e3258', background: '#fff' }}
+                    >
+                      Guardar
+                    </button>
+                  </Td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={r.id}>
-                    <td style={td}>{r.nome_exibicao || r.nome || '—'}</td>
-                    <td style={td}><span style={pill}>{r.papel.toUpperCase()}</span></td>
-                    <td style={td}><code style={{ fontSize: 12 }}>{r.user_id || '—'}</code></td>
-                    <td style={td}>
-                      <a href={`/adm/utilizadores/${r.id}/edit`} style={linkBtn}>Editar</a>
-                    </td>
-                  </tr>
-                ))}
-                {!rows.length && (
-                  <tr><td style={td} colSpan={4}>Sem utilizadores.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Convite */}
+      <section style={{ marginTop: 20 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0e3258' }}>Convidar novo utilizador</h2>
+        <form
+          onSubmit={e => { e.preventDefault(); convidar(new FormData(e.currentTarget)); }}
+          style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', marginTop: 8 }}
+        >
+          <input name="email" type="email" placeholder="email@dominio" required style={inp} />
+          <input name="nome" type="text" placeholder="Nome (opcional)" style={inp} />
+          <select name="papel" defaultValue="externo" style={inp}>
+            <option value="externo">Externo</option>
+            <option value="gestor">Gestor</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit" style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#0e3258', color: '#fff' }}>
+            Convidar
+          </button>
+        </form>
       </section>
     </main>
   );
 }
 
-const th = { textAlign: 'left' as const, padding: '10px 12px', fontSize: 12, color: '#49546A', borderBottom: '1px solid #E9EEF7' };
-const td = { padding: '10px 12px', fontSize: 13, borderBottom: '1px solid #F1F4FB' };
-const pill = { background: '#EEF3FF', color: '#0e3258', padding: '4px 8px', borderRadius: 999, border: '1px solid #D7E3FF', fontSize: 12 };
-const linkBtn = { textDecoration: 'none', padding: '6px 10px', borderRadius: 8, border: '1px solid #D7E3FF', color: '#0e3258', fontSize: 13 };
+const inp: React.CSSProperties = { padding: 8, border: '1px solid #ddd', borderRadius: 8 };
+
+function Th({ children }: { children: any }) {
+  return <th style={{ textAlign: 'left', padding: 10, fontSize: 12, color: '#445', fontWeight: 700 }}>{children}</th>;
+}
+function Td({ children }: { children: any }) {
+  return <td style={{ padding: 10, fontSize: 13, color: '#223' }}>{children}</td>;
+}
