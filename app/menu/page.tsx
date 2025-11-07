@@ -23,9 +23,11 @@ export default function MenuPage() {
         const uid = user?.id || null;
         setEmail(user?.email ?? null);
 
+        // 1) Papel do user_metadata (JWT)
         const meta = (user?.user_metadata || {}) as Record<string, any>;
         let effectiveRole = (meta.app_role as AppRole) || 'externo';
 
+        // 2) Fallback: profiles.papel
         if (!['admin', 'gestor', 'externo'].includes(effectiveRole) && uid) {
           const { data: prof } = await supa
             .from('profiles')
@@ -38,6 +40,7 @@ export default function MenuPage() {
           }
         }
 
+        // Admin/Gestor → layout ADM
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
@@ -77,19 +80,19 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* TOPBAR */}
+      {/* TOPBAR (Grid: logo | info | sair) */}
       <header
         style={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns: 'auto 1fr auto',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 10,
+          columnGap: 12,
+          rowGap: 8,
           marginBottom: 16,
         }}
       >
-        {/* Logo + Título */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Col 1: Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 180 }}>
           <img
             src="/logo-confiance.png"
             alt="CONFIANCE"
@@ -101,22 +104,21 @@ export default function MenuPage() {
               letterSpacing: 0.3,
               color: '#0e3258',
               fontSize: 18,
+              whiteSpace: 'nowrap',
             }}
           >
             CONFIANCE
           </span>
         </div>
 
-        {/* Info do usuário */}
+        {/* Col 2: Info (chip + email) — cresce, corta com ellipsis */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
-            flex: 1,
             gap: 8,
-            minWidth: 240,
-            flexWrap: 'wrap',
+            minWidth: 0, // importante pro ellipsis funcionar
           }}
         >
           <span
@@ -129,6 +131,7 @@ export default function MenuPage() {
               border: '1px solid #D7E3FF',
               fontWeight: 600,
               whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             {role.toUpperCase()}
@@ -140,15 +143,16 @@ export default function MenuPage() {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              maxWidth: 200,
+              maxWidth: '100%',
             }}
+            title={email ?? undefined}
           >
             {email ?? '—'}
           </span>
         </div>
 
-        {/* Botão de sair fixo à direita */}
-        <div style={{ flexShrink: 0 }}>
+        {/* Col 3: Sair — sempre na direita */}
+        <div>
           <button
             onClick={sair}
             style={{
@@ -158,11 +162,31 @@ export default function MenuPage() {
               background: '#fff',
               cursor: 'pointer',
               fontWeight: 500,
+              whiteSpace: 'nowrap',
             }}
           >
             Sair
           </button>
         </div>
+
+        {/* Responsividade: em telas estreitas, info vai para linha de baixo e ocupa 3 colunas */}
+        <style
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: `
+            @media (max-width: 560px) {
+              header {
+                grid-template-columns: 1fr auto;
+              }
+              header > div:nth-child(2) {
+                grid-column: 1 / span 2;
+                justify-content: flex-start;
+                order: 3;
+              }
+            }
+          `,
+          }}
+        />
       </header>
 
       {/* GRID DE CARDS */}
