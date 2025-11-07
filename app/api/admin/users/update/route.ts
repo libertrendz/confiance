@@ -1,42 +1,47 @@
-// app/api/admin/users/update/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getServerSupabase } from '@/lib/supabaseServer';
 
-type Papel = 'admin' | 'gestor' | 'externo';
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const { user_id, nome, nome_exibicao, papel } = body || {};
 
-export async function PATCH(req: Request) {
-  try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !serviceKey) {
-      return NextResponse.json({ ok: false, error: 'Missing SUPABASE envs' }, { status: 500 });
-    }
-    const admin = createClient(url, serviceKey);
+  if (!user_id) return NextResponse.json({ error: 'missing_user_id' }, { status: 400 });
 
-    const body = await req.json().catch(() => ({}));
-    const id = String(body?.id || '').trim(); // profiles.id (uuid)
-    const nome = (body?.nome ?? '').toString().trim();
-    const nome_exibicao = (body?.nome_exibicao ?? '').toString().trim();
-    const papel = (body?.papel ?? '').toString().trim() as Papel;
+  const supa = getServerSupabase();
 
-    if (!id) return NextResponse.json({ ok: false, error: 'id obrigatório' }, { status: 400 });
-    if (papel && !['admin', 'gestor', 'externo'].includes(papel))
-      return NextResponse.json({ ok: false, error: 'papel inválido' }, { status: 400 });
+  // sessão + empresa + papel do editor
+  const { data: u } = await supa.auth.getUser();
+  const editorId = u.user?.id;
+  if (!editorId) return NextResponse.json({ error: 'no_session' }, { status: 401 });
 
-    const payload: Record<string, any> = {};
-    if (nome) payload.nome = nome;
-    if (nome_exibicao) payload.nome_exibicao = nome_exibicao;
-    if (papel) payload.papel = papel;
+  const { data: editorProf } = await supa
+    .from('profiles')
+    .select('empresa_id,papel')
+    .eq('user_id', editorId)
+    .maybeSingle();
 
-    if (Object.keys(payload).length === 0) {
-      return NextResponse.json({ ok: false, error: 'Nada para atualizar' }, { status: 400 });
-    }
-
-    const { error } = await admin.from('profiles').update(payload).eq('id', id);
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'Erro inesperado' }, { status: 500 });
+  if (!editorProf?.empresa_id) {
+    return NextResponse.json({ error: 'no_empresa' }, { status: 400 });
   }
+  if (!['admin', 'gestor'].includes(editorProf.papel as string)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  // atualização: apenas dentro da mesma empresa
+  const { error } = await supa
+    .from('profiles')
+    .update({
+      nome: nome ?? null,
+      nome_exibicao: nome_exibicao ?? null,
+      papel: papel ?? undefined,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', user_id)
+    .eq('empresa_id', editorProf.empresa_id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }
