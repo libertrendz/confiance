@@ -6,27 +6,47 @@ import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
-type AppRole = 'admin' | 'gestor' | 'colaborador' | 'externo';
+type AppRole = 'admin' | 'gestor' | 'externo';
 
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
-  const [role, setRole] = useState<AppRole>('colaborador'); // default seguro
+  const [role, setRole] = useState<AppRole>('externo'); // default seguro
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const { data } = await supa.auth.getUser();
-        if (!alive) return;
-
-        const user = data.user;
+        const { data: userData } = await supa.auth.getUser();
+        const user = userData.user;
+        const uid = user?.id || null;
         setEmail(user?.email ?? null);
 
+        // 1) Primeiro tenta o papel do JWT (user_metadata.app_role)
         const meta = (user?.user_metadata || {}) as Record<string, any>;
-        const appRole = (meta.app_role as AppRole) || 'colaborador';
-        setRole(appRole);
+        let effectiveRole = (meta.app_role as AppRole) || 'externo';
+
+        // 2) Fallback: lê da tabela profiles via user_id (caso o JWT venha vazio)
+        if (!['admin', 'gestor', 'externo'].includes(effectiveRole) && uid) {
+          const { data: prof } = await supa
+            .from('profiles')
+            .select('papel')
+            .eq('user_id', uid)
+            .maybeSingle();
+          const papel = (prof?.papel as AppRole) || 'externo';
+          if (['admin', 'gestor', 'externo'].includes(papel)) {
+            effectiveRole = papel;
+          }
+        }
+
+        // Admin/Gestor → abre layout ADM
+        if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
+          window.location.replace('/adm/dashboard');
+          return;
+        }
+
+        setRole(effectiveRole);
       } finally {
         if (alive) setReady(true);
       }
@@ -34,11 +54,9 @@ export default function MenuPage() {
     return () => { alive = false; };
   }, [supa]);
 
-  function sair() {
-    (async () => {
-      try { await supa.auth.signOut(); } catch {}
-      window.location.replace('/login');
-    })();
+  async function sair() {
+    try { await supa.auth.signOut(); } catch {}
+    window.location.replace('/login');
   }
 
   if (!ready) {
@@ -49,37 +67,38 @@ export default function MenuPage() {
     );
   }
 
+  // EXTERNO (colaborador): mostra Ponto + Histórico
   return (
     <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
+      {/* TOPBAR */}
       <header
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
+          gap: 8,
           marginBottom: 16,
+          rowGap: 8,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 42, width: 'auto' }} />
-          <span style={{ fontWeight: 700, letterSpacing: 0.3, color: '#0A3D91', fontSize: 18 }}>
-            Menu
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 180 }}>
+          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 40, width: 'auto' }} />
+          <span style={{ fontWeight: 800, letterSpacing: 0.3, color: '#0e3258', fontSize: 18 }}>
+            CONFIANCE
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, color: '#555' }}>{email ?? '—'}</span>
-          <span
-            style={{
-              fontSize: 12,
-              background: '#EEF3FF',
-              color: '#0A3D91',
-              padding: '4px 8px',
-              borderRadius: 999,
-              border: '1px solid #D7E3FF',
-            }}
-          >
-            {role.toUpperCase()}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Chip de debug do papel — remove quando quiser */}
+          <span style={{
+            fontSize: 11, background: '#F2F6FF', color: '#0e3258',
+            padding: '3px 8px', borderRadius: 999, border: '1px solid #D7E3FF',
+          }}>
+            papel: {role}
           </span>
+
+          <span style={{ fontSize: 13, color: '#555' }}>{email ?? '—'}</span>
           <button
             onClick={sair}
             style={{
@@ -88,6 +107,7 @@ export default function MenuPage() {
               border: '1px solid #ddd',
               background: '#fff',
               cursor: 'pointer',
+              fontWeight: 500
             }}
           >
             Sair
@@ -95,6 +115,7 @@ export default function MenuPage() {
         </div>
       </header>
 
+      {/* GRID DE CARDS — somente para EXTERNO */}
       <section
         style={{
           display: 'grid',
@@ -102,73 +123,23 @@ export default function MenuPage() {
           gap: 12,
         }}
       >
-        {(role === 'colaborador') && (
-          <>
-            <Card
-              title="Marcar Ponto"
-              desc="Registar ponto com foto e localização."
-              actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
-            />
-            <Card
-              title="Histórico"
-              desc="Consultar marcações e estado (validado/pendente/recusado)."
-              actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
-            />
-          </>
-        )}
-
-        {(role === 'admin' || role === 'gestor') && (
-          <>
-            <Card
-              title="Utilizadores"
-              desc="Convidar, listar, editar e apagar utilizadores."
-              actions={[{ href: '/adm/utilizadores', label: 'Abrir', kind: 'primary' }]}
-            />
-            <Card
-              title="Ponto — Painel ADM"
-              desc="Validação diária de marcações, filtros e auditoria."
-              actions={[{ href: '/adm/ponto', label: 'Abrir painel', kind: 'primary' }]}
-            />
-            <Card
-              title="Fornecedores"
-              desc="Importar, listar e gerir fornecedores."
-              actions={[
-                { href: '/adm/fornecedores', label: 'Listar', kind: 'ghost' },
-                { href: '/adm/fornecedores/novo', label: 'Novo', kind: 'accent' },
-                { href: '/adm/fornecedores/importar', label: 'Importar CSV', kind: 'primary' },
-              ]}
-            />
-            <Card
-              title="Clientes"
-              desc="Cadastro e gestão de clientes."
-              actions={[{ href: '/adm/clientes', label: 'Abrir', kind: 'ghost' }]}
-            />
-            <Card
-              title="Orçamentos & Contratos"
-              desc="Fases, numeração automática, geração de contrato."
-              actions={[
-                { href: '/adm/orcamentos', label: 'Orçamentos', kind: 'ghost' },
-                { href: '/adm/contratos', label: 'Contratos', kind: 'ghost' },
-              ]}
-            />
-            <Card
-              title="Financeiro"
-              desc="Faturas, recibos, pagamentos e relatórios."
-              actions={[{ href: '/adm/financeiro', label: 'Abrir', kind: 'ghost' }]}
-            />
-            <Card
-              title="Dashboard"
-              desc="Indicadores principais por período e empresa."
-              actions={[{ href: '/adm/dashboard', label: 'Ver dashboard', kind: 'ghost' }]}
-            />
-          </>
-        )}
+        <Card
+          title="Marcar Ponto"
+          desc="Registar ponto com foto e localização."
+          actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
+        />
+        <Card
+          title="Histórico"
+          desc="Consultar marcações e estado (validado/pendente/recusado)."
+          actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
+        />
       </section>
     </main>
   );
 }
 
 type CardAction = { href: string; label: string; kind?: 'primary' | 'accent' | 'ghost' };
+
 function Card({ title, desc, actions = [] }: { title: string; desc: string; actions?: CardAction[] }) {
   return (
     <article
@@ -177,7 +148,7 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
         borderRadius: 16,
         padding: 16,
         background: '#fff',
-        boxShadow: '0 1px 0 rgba(10,61,145,0.05)',
+        boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -185,7 +156,7 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
       }}
     >
       <div>
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0A3D91' }}>{title}</h3>
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0e3258' }}>{title}</h3>
         <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>{desc}</p>
       </div>
       {!!actions.length && (
@@ -200,8 +171,8 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
                 padding: '8px 12px',
                 borderRadius: 10,
                 border: a.kind === 'primary' ? 'none' : '1px solid #D7E3FF',
-                background: a.kind === 'primary' ? '#0A3D91' : a.kind === 'accent' ? '#FFD24D' : '#fff',
-                color: a.kind === 'primary' ? '#fff' : '#0A3D91',
+                background: a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff',
+                color: a.kind === 'primary' ? '#fff' : '#0e3258',
               }}
             >
               {a.label}
