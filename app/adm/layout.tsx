@@ -47,6 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <a href="/adm/clientes" style={linkStyle}>Clientes</a>
           <a href="/adm/orcamentos" style={linkStyle}>Orçamentos & Contratos</a>
           <a href="/adm/financeiro" style={linkStyle}>Financeiro</a>
+          <a href="/adm/ativos" style={linkStyle}>Gestão de Ativos</a>
           <a href="/adm/config" style={linkStyle}>Configurações</a>
         </nav>
 
