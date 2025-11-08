@@ -41,12 +41,12 @@ export default function MenuPage() {
         if (uid) {
           const { data: prof } = await supa
             .from('profiles')
-            .select('papel, nome_exibicao, nome')
+            .select('role, nome_exibicao, nome')
             .eq('user_id', uid)
             .maybeSingle();
 
-          if (prof?.papel && ['admin','gestor','externo'].includes(prof.papel)) {
-            effectiveRole = prof.papel as AppRole;
+          if (prof?.role && ['admin','gestor','externo'].includes(prof.role)) {
+            effectiveRole = prof.role as AppRole;
           }
           const dbNome = prof?.nome_exibicao || prof?.nome || null;
           setNome(metaNome || dbNome || null);
