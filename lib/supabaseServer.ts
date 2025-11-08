@@ -1,38 +1,23 @@
 // lib/supabaseServer.ts
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 
-export function getServerSupabase() {
-  const cookieStore = cookies();
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const service = process.env.SUPABASE_SERVICE_ROLE_KEY!; // precisa estar setado no Vercel
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!supabaseUrl || !supabaseAnon) {
-    throw new Error('Faltam envs do Supabase (URL/ANON).');
-  }
-
-  return createServerClient(supabaseUrl, supabaseAnon, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        try { cookieStore.set({ name, value, ...options }); } catch {}
-      },
-      remove(name: string, options: CookieOptions) {
-        try { cookieStore.set({ name, value: '', ...options }); } catch {}
-      },
-    },
+// Cliente "admin" com Service Role: só usar em rotas /api/ (server), NUNCA no client.
+export function getServiceSupabase() {
+  return createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
-export function getServiceSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  if (!supabaseUrl || !serviceKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY ausente.');
-  }
-  // Importa on-demand para evitar bundle no client
-  const { createClient } = require('@supabase/supabase-js');
-  return createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+// Cliente “por requisição”, lendo o bearer do cabeçalho (rotas /api/ se precisarmos)
+export function getRouteSupabase() {
+  const auth = headers().get('authorization') || '';
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  const supa = createClient(url, anon, { auth: { persistSession: false } });
+  if (bearer) supa.auth.setAuth(bearer);
+  return supa;
 }
