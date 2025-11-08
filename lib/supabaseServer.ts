@@ -1,33 +1,35 @@
 // lib/supabaseServer.ts
-// Server-side Supabase com contexto de sessão via cookies HTTP-only,
-// sem @supabase/ssr. Funciona no Vercel App Router.
+// Server-side Supabase para App Router, lendo o token do request (Authorization)
+// ou, se faltar, dos cookies http-only (sb-access-token).
 
 import { cookies } from 'next/headers';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-let _serverClient: SupabaseClient | null = null;
+type Opts = { req?: Request };
 
-export function getServerSupabase() {
-  if (_serverClient) return _serverClient;
-
+export function getServerSupabase({ req }: Opts = {}): SupabaseClient {
   const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  // Lê o access token http-only definido pelo Supabase Auth.
-  // Cookie padrão (v2): 'sb-access-token'
-  const cookieStore = cookies();
-  const access = cookieStore.get('sb-access-token')?.value || '';
+  // 1) Tenta header Authorization do próprio request
+  let access = '';
+  if (req) {
+    const h = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    if (h.startsWith('Bearer ')) access = h.slice('Bearer '.length);
+  }
 
-  _serverClient = createClient(url, anon, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-    global: {
-      // Injeta o token na Authorization para que auth.getUser() funcione no servidor.
-      headers: access ? { Authorization: `Bearer ${access}` } : {},
-    },
+  // 2) Se não veio via header, tenta cookie http-only (sb-access-token)
+  if (!access) {
+    try {
+      const c = cookies();
+      access = c.get('sb-access-token')?.value || '';
+    } catch {
+      // nada
+    }
+  }
+
+  return createClient(url, anon, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: access ? { Authorization: `Bearer ${access}` } : {} },
   });
-
-  return _serverClient;
 }
