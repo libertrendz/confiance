@@ -12,7 +12,7 @@ export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
-  const [role, setRole] = useState<AppRole | null>(null); // <- sem default
+  const [role, setRole] = useState<AppRole | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -27,8 +27,7 @@ export default function MenuPage() {
 
         // Papel pelo metadata primeiro
         const meta = (user?.user_metadata || {}) as Record<string, any>;
-        let effectiveRole: AppRole =
-          (meta.app_role as AppRole) || 'externo';
+        let effectiveRole: AppRole = (meta.app_role as AppRole) || 'externo';
 
         // Nome de exibição (metadata)
         const metaNome =
@@ -41,20 +40,22 @@ export default function MenuPage() {
         if (uid) {
           const { data: prof } = await supa
             .from('profiles')
-            .select('role, nome_exibicao, nome')
+            .select('papel, nome_exibicao, nome') // <- AQUI: PAPEL
             .eq('user_id', uid)
             .maybeSingle();
 
-          if (prof?.role && ['admin','gestor','externo'].includes(prof.role)) {
-            effectiveRole = prof.role as AppRole;
+          const papelDb = prof?.papel as AppRole | undefined;
+          if (papelDb && ['admin', 'gestor', 'externo'].includes(papelDb)) {
+            effectiveRole = papelDb;
           }
+
           const dbNome = prof?.nome_exibicao || prof?.nome || null;
           setNome(metaNome || dbNome || null);
         } else {
           setNome(metaNome || null);
         }
 
-        // Se for ADM/Gestor, redireciona ANTES de renderizar qualquer coisa.
+        // Redireciona ADM/Gestor antes de renderizar
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
@@ -138,7 +139,7 @@ export default function MenuPage() {
             style={{
               padding: '8px 12px',
               borderRadius: 10,
-              border: '1px solid #ddd',
+              border: '1px solid '#ddd'",
               background: '#fff',
               cursor: 'pointer',
               fontWeight: 600,
@@ -217,7 +218,7 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
                 fontSize: 13,
                 padding: '8px 12px',
                 borderRadius: 10,
-                border: a.kind === 'primary' ? 'none' : '1px solid #D7E3FF',
+                border: a.kind === 'primary' ? 'none' : '1px solid var(--border)',
                 background: a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff',
                 color: a.kind === 'primary' ? '#fff' : '#0e3258',
               }}
