@@ -1,66 +1,56 @@
-// app/api/admin/users/invite/route.ts
+// app/api/admin/users/list/route.ts
 import { NextResponse } from 'next/server';
-import { getServerSupabase } from '@/lib/supabaseServer';
+import { getServerSupabase, getServiceSupabase } from '@/lib/supabaseServer';
 
-export async function POST(req: Request) {
+export async function GET() {
   try {
-    const supa = getServerSupabase({ req });
+    // 1) tenta com sessão do cookie (admin com RLS)
+    const supa = getServerSupabase();
+    const { data: me } = await supa.auth.getUser();
+    const isLogged = !!me.user;
 
-    const body = await req.json().catch(() => ({}));
-    const email: string = (body.email || '').trim().toLowerCase();
-    const nome: string = (body.nome || '').trim();
-    const papel: 'admin' | 'gestor' | 'externo' = body.papel || 'externo';
+    if (isLogged) {
+      // Lista via view segura (recomendada): admin_users_v
+      const { data, error } = await supa
+        .from('admin_users_v')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return NextResponse.json({ ok: true, source: 'rls', data });
+    }
 
-    if (!email) return NextResponse.json({ error: 'email_required' }, { status: 400 });
+    // 2) fallback: service role (precisa SUPABASE_SERVICE_ROLE_KEY)
+    const admin = getServiceSupabase();
+    const { data: users, error } = await admin.auth.admin.listUsers();
+    if (error) throw error;
 
-    // Quem está convidando
-    const { data: me, error: meErr } = await supa.auth.getUser();
-    if (meErr || !me?.user) return NextResponse.json({ error: 'no_session' }, { status: 401 });
+    // Junta com profiles (se existir)
+    const ids = users.users.map(u => u.id);
+    let profiles: any[] = [];
+    if (ids.length) {
+      const { data: profs } = await admin
+        .from('profiles')
+        .select('user_id, nome, nome_exibicao, papel, empresa_id')
+        .in('user_id', ids);
+      profiles = profs || [];
+    }
 
-    // Empresa do convidador
-    const { data: myProf, error: profErr } = await supa
-      .from('profiles')
-      .select('empresa_id')
-      .eq('user_id', me.user.id)
-      .maybeSingle();
-    if (profErr) throw profErr;
-
-    const empresa_id = myProf?.empresa_id || null;
-
-    // Cria o utilizador via signUp com redirect para /auth/confirm
-    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
-    const { data: sign, error: signErr } = await supa.auth.signUp({
-      email,
-      options: {
-        emailRedirectTo: redirectTo,
-        data: { app_role: papel, nome, nome_exibicao: nome || null },
-      },
+    const merged = users.users.map(u => {
+      const p = profiles.find(pp => pp.user_id === u.id);
+      return {
+        user_id: u.id,
+        email: u.email,
+        last_sign_in_at: u.last_sign_in_at,
+        papel: p?.papel || null,
+        nome: p?.nome || null,
+        nome_exibicao: p?.nome_exibicao || null,
+        empresa_id: p?.empresa_id || null,
+        created_at: u.created_at,
+      };
     });
-    if (signErr) return NextResponse.json({ error: 'auth_signup_failed', detail: signErr.message }, { status: 400 });
 
-    const newUserId = sign.user?.id;
-    if (!newUserId) {
-      return NextResponse.json({ error: 'missing_user_id_after_signup' }, { status: 500 });
-    }
-
-    // Garante profile (idempotente por user_id)
-    const { error: upsertErr } = await supa.from('profiles').upsert(
-      {
-        user_id: newUserId,
-        empresa_id,
-        papel,
-        nome,
-        nome_exibicao: nome || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id' }
-    );
-    if (upsertErr) {
-      return NextResponse.json({ error: 'db_profile_upsert_failed', detail: upsertErr.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ ok: true, user_id: newUserId });
+    return NextResponse.json({ ok: true, source: 'service', data: merged });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'fail' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e.message || String(e) }, { status: 500 });
   }
 }
