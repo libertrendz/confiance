@@ -22,7 +22,11 @@ export default function UtilizadoresAdmPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [list, setList] = useState<Row[] | null>(null);
   const [loadingList, setLoadingList] = useState(false);
-  const [invite, setInvite] = useState<{ email: string; nome: string; papel: Papel }>({ email: '', nome: '', papel: 'externo' });
+  const [invite, setInvite] = useState<{ email: string; nome: string; papel: Papel }>({
+    email: '',
+    nome: '',
+    papel: 'externo',
+  });
   const [inviting, setInviting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -75,20 +79,26 @@ export default function UtilizadoresAdmPage() {
       {/* CONVITE */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2">Convidar utilizador</h2>
-        <form onSubmit={doInvite} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 160px auto' }}>
+        <form
+          onSubmit={doInvite}
+          style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 160px auto' }}
+        >
           <div>
             <label className="muted">Email</label>
             <input
-              type="email" required value={invite.email}
-              onChange={e => setInvite(i => ({ ...i, email: e.target.value }))}
+              type="email"
+              required
+              value={invite.email}
+              onChange={(e) => setInvite((i) => ({ ...i, email: e.target.value }))}
               style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: '10px' }}
             />
           </div>
           <div>
             <label className="muted">Nome</label>
             <input
-              type="text" value={invite.nome}
-              onChange={e => setInvite(i => ({ ...i, nome: e.target.value }))}
+              type="text"
+              value={invite.nome}
+              onChange={(e) => setInvite((i) => ({ ...i, nome: e.target.value }))}
               style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: '10px' }}
             />
           </div>
@@ -96,8 +106,14 @@ export default function UtilizadoresAdmPage() {
             <label className="muted">Papel</label>
             <select
               value={invite.papel}
-              onChange={e => setInvite(i => ({ ...i, papel: e.target.value as Papel }))}
-              style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: '10px', background: '#fff' }}
+              onChange={(e) => setInvite((i) => ({ ...i, papel: e.target.value as Papel }))}
+              style={{
+                width: '100%',
+                padding: 10,
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                background: '#fff',
+              }}
             >
               <option value="externo">Externo</option>
               <option value="gestor">Gestor</option>
@@ -125,6 +141,7 @@ export default function UtilizadoresAdmPage() {
         </div>
 
         {!list?.length && !loadingList && <p className="muted">Sem registos.</p>}
+
         {!!list?.length && (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -134,6 +151,7 @@ export default function UtilizadoresAdmPage() {
                   <th style={{ padding: '8px' }}>Email</th>
                   <th style={{ padding: '8px' }}>Papel</th>
                   <th style={{ padding: '8px' }}>Último acesso</th>
+                  <th style={{ padding: '8px', textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -142,7 +160,19 @@ export default function UtilizadoresAdmPage() {
                     <td style={{ padding: '8px' }}>{r.nome_exibicao || r.nome || '—'}</td>
                     <td style={{ padding: '8px' }}>{r.email || '—'}</td>
                     <td style={{ padding: '8px', textTransform: 'capitalize' }}>{r.papel}</td>
-                    <td style={{ padding: '8px' }}>{r.last_sign_in_at ? new Date(r.last_sign_in_at).toLocaleString() : '—'}</td>
+                    <td style={{ padding: '8px' }}>
+                      {r.last_sign_in_at ? new Date(r.last_sign_in_at).toLocaleString() : '—'}
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'right' }}>
+                      <a href={`/adm/utilizadores/editar?id=${r.user_id}`} className="btn btn-ghost">Editar</a>
+                      <a
+                        href={`/adm/utilizadores/deletar?id=${r.user_id}`}
+                        className="btn btn-ghost"
+                        style={{ marginLeft: 6 }}
+                      >
+                        Eliminar
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
