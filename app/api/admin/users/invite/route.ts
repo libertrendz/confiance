@@ -12,22 +12,23 @@ export async function POST(req: Request) {
     const email = String(body?.email || '').trim().toLowerCase();
     const nome = String(body?.nome || '').trim();
     const papel = (String(body?.papel || 'externo') as Papel);
+    const empresa_id = process.env.CONF_EMPRESA_ID || null;
 
     if (!email) return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
-    if (!['admin', 'gestor', 'externo'].includes(papel)) {
+    if (!['admin', 'gestor', 'externo'].includes(papel))
       return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
-    }
 
-    // 1) Envia convite (e seta metadata para o JWT pós-confirmação)
     const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
+
+    // 1) Envia convite — se já existir, ignora e segue
     const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: { app_role: papel, nome, nome_exibicao: nome || null },
     });
-    if (invErr) {
-      return NextResponse.json({ error: `Invite falhou: ${invErr.message}` }, { status: 500 });
-    }
 
+    if (invErr && !invErr.message.includes('already registered')) {
+      throw invErr;
+    }
     const userId = invited?.user?.id;
     if (!userId) {
       return NextResponse.json({ error: 'Convite enviado, mas sem user_id' }, { status: 202 });
