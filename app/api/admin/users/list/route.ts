@@ -1,56 +1,43 @@
 // app/api/admin/users/list/route.ts
 import { NextResponse } from 'next/server';
-import { getServerSupabase, getServiceSupabase } from '@/lib/supabaseServer';
+import { getServiceSupabase } from '@/lib/supabaseServer';
 
+// Retorna perfis + email (via Admin API), com paginação simples
 export async function GET() {
   try {
-    // 1) tenta com sessão do cookie (admin com RLS)
-    const supa = getServerSupabase();
-    const { data: me } = await supa.auth.getUser();
-    const isLogged = !!me.user;
-
-    if (isLogged) {
-      // Lista via view segura (recomendada): admin_users_v
-      const { data, error } = await supa
-        .from('admin_users_v')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return NextResponse.json({ ok: true, source: 'rls', data });
-    }
-
-    // 2) fallback: service role (precisa SUPABASE_SERVICE_ROLE_KEY)
     const admin = getServiceSupabase();
-    const { data: users, error } = await admin.auth.admin.listUsers();
-    if (error) throw error;
 
-    // Junta com profiles (se existir)
-    const ids = users.users.map(u => u.id);
-    let profiles: any[] = [];
-    if (ids.length) {
-      const { data: profs } = await admin
-        .from('profiles')
-        .select('user_id, nome, nome_exibicao, papel, empresa_id')
-        .in('user_id', ids);
-      profiles = profs || [];
+    // 1) Busca perfis no nosso schema
+    const { data: profiles, error: pErr } = await admin
+      .from('profiles')
+      .select('id, user_id, empresa_id, papel, nome, nome_exibicao, created_at, updated_at')
+      .order('created_at', { ascending: false });
+
+    if (pErr) throw pErr;
+
+    // 2) Traz todos os users do Auth para mapear email por user_id
+    //    (ajusta page/limit se tiveres >1000 utilizadores)
+    const { data: usersPage, error: uErr } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (uErr) throw uErr;
+
+    const emailById = new Map<string, string>();
+    for (const u of usersPage.users) {
+      if (u.id) emailById.set(u.id, u.email ?? '');
     }
 
-    const merged = users.users.map(u => {
-      const p = profiles.find(pp => pp.user_id === u.id);
-      return {
-        user_id: u.id,
-        email: u.email,
-        last_sign_in_at: u.last_sign_in_at,
-        papel: p?.papel || null,
-        nome: p?.nome || null,
-        nome_exibicao: p?.nome_exibicao || null,
-        empresa_id: p?.empresa_id || null,
-        created_at: u.created_at,
-      };
-    });
+    const result = (profiles ?? []).map((p) => ({
+      ...p,
+      email: emailById.get(p.user_id) ?? '',
+    }));
 
-    return NextResponse.json({ ok: true, source: 'service', data: merged });
+    return NextResponse.json({ ok: true, data: result });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message || String(e) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: e?.message ?? 'list_failed' },
+      { status: 500 }
+    );
   }
 }
