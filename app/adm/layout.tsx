@@ -1,14 +1,16 @@
-// app/adm/layout.tsx
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const path = usePathname();
+const AZUL = '#0e3258';
+const FUNDO = '#f6f8fb';
 
-  const Item = ({ href, label }: { href: string; label: string }) => {
-    const active = path?.startsWith(href);
+export default function AdmLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const item = (href: string, label: string) => {
+    const active = pathname.startsWith(href);
     return (
       <Link
         href={href}
@@ -16,11 +18,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           display: 'block',
           padding: '10px 12px',
           borderRadius: 10,
+          color: active ? '#fff' : '#e3edff',
+          background: active ? 'rgba(255,255,255,0.16)' : 'transparent',
           textDecoration: 'none',
           fontWeight: 600,
-          color: active ? '#fff' : '#0e3258',
-          background: active ? '#0e3258' : 'transparent',
-          border: active ? 'none' : '1px solid #D7E3FF',
         }}
       >
         {label}
@@ -29,22 +30,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: '100dvh' }}>
-      <aside style={{ padding: 16, borderRight: '1px solid #E9EEF7', background: '#F8FAFF' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: '100vh', background: FUNDO }}>
+      <aside style={{ background: AZUL, color: '#fff', padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 34 }} />
-          <span style={{ fontWeight: 800, color: '#0e3258' }}>Admin</span>
+          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 36, width: 'auto' }} />
         </div>
-        <nav style={{ display: 'grid', gap: 8 }}>
-          <Item href="/adm/dashboard" label="Dashboard" />
-          <Item href="/adm/utilizadores" label="Utilizadores" />
-          <Item href="/adm/ponto" label="Ponto" />
-          <Item href="/adm/fornecedores" label="Fornecedores" />
-          <Item href="/adm/clientes" label="Clientes" />
-          <Item href="/adm/orcamentos" label="Orçamentos & Contratos" />
-          <Item href="/adm/financeiro" label="Financeiro" />
-          <Item href="/adm/config" label="Configurações" />
-          <Item href="/adm/ativos" label="Ativos (viaturas/ferramentas)" />
+        <nav style={{ display: 'grid', gap: 6 }}>
+          {item('/adm/dashboard', 'Dashboard')}
+          {item('/adm/utilizadores', 'Utilizadores')}
+          {item('/adm/ponto', 'Ponto (ADM)')}
+          {item('/adm/fornecedores', 'Fornecedores')}
+          {item('/adm/clientes', 'Clientes')}
+          {item('/adm/orcamentos', 'Orçamentos & Contratos')}
+          {item('/adm/financeiro', 'Financeiro')}
+          {item('/adm/ativos', 'Ativos (Frota & Ferramentas)')}
+          {item('/adm/configuracoes', 'Configurações')}
         </nav>
       </aside>
       <section style={{ padding: 18 }}>{children}</section>
