@@ -1,0 +1,54 @@
+/* app/adm/adm.css */
+.adm-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+  background: #f7f9fc;
+  color: #0e3258;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.adm-aside {
+  background: #0e3258;
+  color: #fff;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adm-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+.adm-brand img { height: 38px; width: auto; }
+
+.adm-nav { display: flex; flex-direction: column; gap: 16px; }
+
+.adm-section { display: flex; flex-direction: column; gap: 6px; }
+.adm-section-title {
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  opacity: .75;
+  margin: 6px 6px 2px;
+}
+
+.adm-nav-item {
+  display: block;
+  padding: 8px 10px;
+  color: #eef2ff;
+  text-decoration: none;
+  border-radius: 8px;
+}
+.adm-nav-item:hover { background: rgba(255,255,255,0.12); }
+
+.nav-sub { margin-left: 10px; display: flex; flex-direction: column; gap: 4px; }
+
+.adm-main {
+  padding: 18px;
+  min-width: 0;
+}
