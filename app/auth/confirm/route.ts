@@ -3,6 +3,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
+function sanitizeNext(nextRaw: string | null): string {
+  if (!nextRaw) return '/menu';
+  try {
+    // Só aceita caminhos relativos internos
+    const url = new URL(nextRaw, 'http://x');
+    const p = url.pathname + (url.search || '');
+    return p.startsWith('/') ? p : '/menu';
+  } catch {
+    return '/menu';
+  }
+}
+
 function getServerSupabase() {
   const cookieStore = cookies();
 
@@ -10,7 +24,9 @@ function getServerSupabase() {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anon) {
-    throw new Error('Faltam envs do Supabase: NEXT_PUBLIC_SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    throw new Error(
+      'Faltam envs: NEXT_PUBLIC_SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY'
+    );
   }
 
   return createServerClient(url, anon, {
@@ -19,10 +35,22 @@ function getServerSupabase() {
         return cookieStore.get(name)?.value;
       },
       set(name: string, value: string, options: any) {
-        cookieStore.set(name, value, options);
+        // garante cookies http-only coerentes
+        cookieStore.set(name, value, {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          ...options,
+        });
       },
       remove(name: string, options: any) {
-        cookieStore.set(name, '', { ...options, maxAge: 0 });
+        cookieStore.set(name, '', {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 0,
+          ...options,
+        });
       },
     },
   });
@@ -31,13 +59,13 @@ function getServerSupabase() {
 export async function GET(req: NextRequest) {
   const supa = getServerSupabase();
   const url = new URL(req.url);
-  const next = url.searchParams.get('next') || '/menu';
+  const next = sanitizeNext(url.searchParams.get('next'));
 
   try {
-    // ---- Fluxo PKCE moderno: ?code=... ----
+    // 1) Fluxo PKCE / OAuth moderno: ?code=...
     const code =
-      url.searchParams.get('code') || // padrão mais comum
-      url.searchParams.get('verification_code'); // variação vista em alguns provedores
+      url.searchParams.get('code') ||
+      url.searchParams.get('verification_code'); // variação em alguns provedores
 
     if (code) {
       const { error } = await supa.auth.exchangeCodeForSession(code);
@@ -49,14 +77,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // ---- Fluxo antigo (Magic Link): token_hash + type=magiclink ----
+    // 2) Fluxo Magic Link "antigo": token_hash + type
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
       url.searchParams.get('tokenHash');
 
     const type = url.searchParams.get('type') as
-      | 'magiclink' | 'recovery' | 'invite' | 'signup' | 'email_change' | null;
+      | 'magiclink'
+      | 'recovery'
+      | 'invite'
+      | 'signup'
+      | 'email_change'
+      | null;
 
     if (token_hash && type) {
       const { error } = await supa.auth.verifyOtp({ type, token_hash });
@@ -67,13 +100,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // ---- Sem code/token: já existe sessão nos cookies? ----
+    // 3) Sem code/token: já existe sessão nos cookies?
     const { data } = await supa.auth.getSession();
     if (data.session) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Nada útil: volta ao login com causa explícita
+    // 4) Sem nada útil: volta com causa explícita
     return NextResponse.redirect(new URL('/login?err=missing_code_or_token', url.origin));
   } catch (e: any) {
     const err = encodeURIComponent(e?.message || 'unknown_error');
