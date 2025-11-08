@@ -6,50 +6,53 @@ type Papel = 'admin' | 'gestor' | 'externo';
 
 export async function POST(req: Request) {
   try {
-    const { email, nome, papel, empresa_id } = (await req.json()) as {
-      email: string; nome?: string; papel: Papel; empresa_id?: string | null;
-    };
+    const admin = getServiceSupabase();
+    const body = await req.json().catch(() => ({}));
+    const email = String(body.email ?? '').trim().toLowerCase();
+    const nome = String(body.nome ?? '').trim();
+    const papel: Papel = (body.papel as Papel) ?? 'externo';
 
-    if (!email || !papel) {
-      return NextResponse.json({ ok: false, error: 'email e papel são obrigatórios' }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ ok: false, error: 'missing_email' }, { status: 400 });
     }
 
-    const admin = getServiceSupabase();
-    const origin = new URL(req.url).origin;
-    const redirectTo = `${origin}/auth/confirm?next=/menu`;
-
-    // 1) Convida e cria utilizador pendente
-    const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
-    if (inviteErr) throw inviteErr;
+    // 1) Convida via Admin API (não pede password)
+    const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: `${new URL(req.url).origin}/auth/confirm?next=/menu`,
+    });
+    if (invErr) throw invErr;
 
     const userId = invited?.user?.id;
-    if (!userId) throw new Error('Convite enviado, mas sem user.id de retorno');
+    if (!userId) throw new Error('invite_without_user_id');
 
-    // 2) Metadata
+    // 2) Grava/atualiza profiles
+    //    Nota: garante que empresa_id default está definido por trigger ou aqui ajusta conforme teu multi-tenant
+    const { error: upsertErr } = await admin.from('profiles').upsert(
+      {
+        user_id: userId,
+        papel,
+        nome,
+        nome_exibicao: nome || email.split('@')[0],
+      },
+      { onConflict: 'user_id' }
+    );
+    if (upsertErr) throw upsertErr;
+
+    // 3) Atualiza metadata no Auth (app_role, nome/nome_exibicao)
     const { error: metaErr } = await admin.auth.admin.updateUserById(userId, {
       user_metadata: {
         app_role: papel,
-        nome_exibicao: nome || null,
-        nome: nome || null,
-        empresa_id: empresa_id || null,
+        nome,
+        nome_exibicao: nome || email.split('@')[0],
       },
     });
     if (metaErr) throw metaErr;
 
-    // 3) Profiles upsert idempotente (service role ignora RLS)
-    const upsertPayload: any = {
-      user_id: userId,
-      papel,
-      nome: nome || null,
-      nome_exibicao: nome || null,
-    };
-    if (empresa_id) upsertPayload.empresa_id = empresa_id;
-
-    const { error: profErr } = await admin.from('profiles').upsert(upsertPayload, { onConflict: 'user_id' });
-    if (profErr) throw profErr;
-
-    return NextResponse.json({ ok: true, user_id: userId });
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? String(e) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: e?.message ?? 'invite_failed' },
+      { status: 500 }
+    );
   }
 }
