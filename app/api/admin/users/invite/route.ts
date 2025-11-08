@@ -1,55 +1,48 @@
-// app/api/admin/users/list/route.ts
+// app/api/admin/users/invite/route.ts
 import { NextResponse } from 'next/server';
-import { getServerSupabase, getServiceSupabase } from '@/lib/supabaseServer';
+import { getServiceSupabase } from '@/lib/supabaseServer';
 
-export async function GET() {
+export async function POST(req: Request) {
   try {
-    // 1) tenta com sessão do cookie (admin com RLS)
-    const supa = getServerSupabase();
-    const { data: me } = await supa.auth.getUser();
-    const isLogged = !!me.user;
+    const { email, nome, papel, empresa_id } = await req.json();
 
-    if (isLogged) {
-      // Lista via view segura (recomendada): admin_users_v
-      const { data, error } = await supa
-        .from('admin_users_v')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return NextResponse.json({ ok: true, source: 'rls', data });
+    if (!email || !papel) {
+      return NextResponse.json({ ok: false, error: 'email e papel são obrigatórios' }, { status: 400 });
     }
 
-    // 2) fallback: service role (precisa SUPABASE_SERVICE_ROLE_KEY)
     const admin = getServiceSupabase();
-    const { data: users, error } = await admin.auth.admin.listUsers();
-    if (error) throw error;
 
-    // Junta com profiles (se existir)
-    const ids = users.users.map(u => u.id);
-    let profiles: any[] = [];
-    if (ids.length) {
-      const { data: profs } = await admin
-        .from('profiles')
-        .select('user_id, nome, nome_exibicao, papel, empresa_id')
-        .in('user_id', ids);
-      profiles = profs || [];
-    }
+    const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL || ''}/auth/confirm?next=/menu`;
 
-    const merged = users.users.map(u => {
-      const p = profiles.find(pp => pp.user_id === u.id);
-      return {
-        user_id: u.id,
-        email: u.email,
-        last_sign_in_at: u.last_sign_in_at,
-        papel: p?.papel || null,
-        nome: p?.nome || null,
-        nome_exibicao: p?.nome_exibicao || null,
-        empresa_id: p?.empresa_id || null,
-        created_at: u.created_at,
-      };
+    // Cria user pendente + envia email de confirmação
+    const { data: signData, error: signErr } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: false,
+      user_metadata: {
+        nome_exibicao: nome || null,
+        app_role: papel,      // usado no JWT
+        empresa_id: empresa_id || null
+      },
+      // link de confirmação
+      redirectTo,
     });
 
-    return NextResponse.json({ ok: true, source: 'service', data: merged });
+    if (signErr) throw signErr;
+
+    const newId = signData.user?.id;
+
+    // Cria profile “shadow” (idempotente)
+    if (newId) {
+      await admin.from('profiles').insert({
+        user_id: newId,
+        nome: nome || null,
+        nome_exibicao: nome || null,
+        papel,
+        empresa_id: empresa_id || null,
+      }, { upsert: true });
+    }
+
+    return NextResponse.json({ ok: true, user_id: newId });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message || String(e) }, { status: 500 });
   }
