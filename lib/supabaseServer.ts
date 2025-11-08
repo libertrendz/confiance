@@ -1,35 +1,38 @@
 // lib/supabaseServer.ts
-// Server-side Supabase para App Router, lendo o token do request (Authorization)
-// ou, se faltar, dos cookies http-only (sb-access-token).
-
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-type Opts = { req?: Request };
+export function getServerSupabase() {
+  const cookieStore = cookies();
 
-export function getServerSupabase({ req }: Opts = {}): SupabaseClient {
-  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-  // 1) Tenta header Authorization do próprio request
-  let access = '';
-  if (req) {
-    const h = req.headers.get('authorization') || req.headers.get('Authorization') || '';
-    if (h.startsWith('Bearer ')) access = h.slice('Bearer '.length);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (!supabaseUrl || !supabaseAnon) {
+    throw new Error('Faltam envs do Supabase (URL/ANON).');
   }
 
-  // 2) Se não veio via header, tenta cookie http-only (sb-access-token)
-  if (!access) {
-    try {
-      const c = cookies();
-      access = c.get('sb-access-token')?.value || '';
-    } catch {
-      // nada
-    }
-  }
-
-  return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: access ? { Authorization: `Bearer ${access}` } : {} },
+  return createServerClient(supabaseUrl, supabaseAnon, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        try { cookieStore.set({ name, value, ...options }); } catch {}
+      },
+      remove(name: string, options: CookieOptions) {
+        try { cookieStore.set({ name, value: '', ...options }); } catch {}
+      },
+    },
   });
+}
+
+export function getServiceSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY ausente.');
+  }
+  // Importa on-demand para evitar bundle no client
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 }
