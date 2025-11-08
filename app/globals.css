@@ -1,10 +1,12 @@
-/* ===== CONFIANCE — Design Tokens ===== */
+/* ===== CONFIANCE — Design Tokens (rev) ===== */
 :root{
-  --brand-1:#0A3D91;        /* azul principal */
+  /* Branding */
+  --brand-1:#0e3258;        /* azul oficial */
   --brand-1-contrast:#ffffff;
   --brand-2:#F2B705;        /* dourado */
   --brand-2-contrast:#0b0b0b;
 
+  /* Cores de UI */
   --bg:#f5f7fb;
   --surface:#ffffff;
   --text:#0b1220;
@@ -13,6 +15,7 @@
   --border:#e5e7eb;
   --shadow:0 2px 10px rgba(0,0,0,.05);
 
+  /* Radius e spacing */
   --radius:12px;
   --radius-sm:10px;
 
@@ -20,6 +23,9 @@
   --space-2:12px;
   --space-3:16px;
   --space-4:20px;
+
+  /* Degradê do splash (mesmo tom do azul oficial) */
+  --splash-grad: radial-gradient(1200px 800px at 50% 30%, #18456f 0%, #0e3258 40%, #0b2745 100%);
 }
 
 *{box-sizing:border-box}
@@ -36,34 +42,42 @@ body{
 a{color:inherit;text-decoration:none}
 main{padding:var(--space-3)}
 
-/* ---------- Topbar responsiva ---------- */
+/* ---------- Topbar responsiva (sem estourar o layout) ---------- */
 .topbar{
   position:sticky; top:0; z-index:50;
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:var(--space-3);
   background:var(--surface); border-bottom:1px solid var(--border);
 }
+
 .topbar .brand{
   display:flex; align-items:center; gap:10px;
   font-weight:800; font-size:18px; min-width:0;
 }
 .brand .brand-logo{
-  height:54px; width:auto; display:block; object-fit:contain; /* desktop grande */
+  height:60px; width:auto; display:block; object-fit:contain; /* desktop maior como pedido */
 }
-.topbar .user{ display:flex; align-items:center; gap:10px; min-width:0; }
+
+.topbar .user{ display:flex; align-items:center; gap:10px; min-width:0; margin-left:auto; }
 .topbar .user-email{
   max-width:48vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  color:var(--muted); font-size:14px;
+  color:var(--muted); font-size:14px; font-weight:600;
+}
+.topbar .pill{
+  font-size:12px; font-weight:700;
+  background:#EEF3FF; color:var(--brand-1);
+  padding:6px 10px; border-radius:999px; border:1px solid #D7E3FF;
+  white-space:nowrap;
 }
 .topbar .btn{ height:40px; padding:0 14px; }
 
-/* Mobile – quebra em 2 linhas com controles no lugar */
+/* Mobile – quebra em 2 linhas mantendo ordem: PERFIL | NOME/EMAIL | SAIR */
 @media (max-width: 560px){
   .topbar{ flex-wrap:wrap; row-gap:8px; }
-  .brand .brand-logo{ height:44px; }           /* ainda grande no mobile */
+  .brand .brand-logo{ height:48px; }
   .topbar .brand{ order:1; flex:1 1 auto; }
   .topbar .user{ order:2; width:100%; justify-content:space-between; }
-  .topbar .user-email{ max-width: calc(100% - 110px); } /* espaço pro botão */
+  .topbar .user-email{ max-width: calc(100% - 130px); } /* espaço pro pill + sair */
   .topbar .btn{ height:36px; padding:0 12px; }
 }
 
@@ -96,16 +110,16 @@ main{padding:var(--space-3)}
 .h2{ font-size:16px; font-weight:700 }
 .muted{ color:var(--muted) }
 
-/* ---------- Splash screen ---------- */
+/* ---------- Splash screen (com degradê e logo maior) ---------- */
 .splash{
   position:fixed; inset:0;
-  background: var(--brand-1);
+  background: var(--splash-grad);
   display:flex; align-items:center; justify-content:center;
   z-index: 9999;
   animation: splashIn 1.2s ease forwards;
 }
 .splashLogo{
-  width:260px; max-width: 75vw; height: auto;
+  width:300px; max-width: 76vw; height: auto;
   filter: drop-shadow(0 10px 30px rgba(0,0,0,.3));
   animation: popIn 1.6s cubic-bezier(.2,.8,.2,1) forwards;
 }
