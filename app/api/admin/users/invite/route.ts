@@ -29,32 +29,26 @@ export async function POST(req: Request) {
     if (invErr && !invErr.message.includes('already registered')) {
       throw invErr;
     }
-    const userId = invited?.user?.id;
-    if (!userId) {
-      return NextResponse.json({ error: 'Convite enviado, mas sem user_id' }, { status: 202 });
-    }
 
-    // 2) Upsert em profiles
-    const empresa_id = process.env.CONF_EMPRESA_ID || null;
-    const payload: any = {
-      user_id: userId,
-      papel,
-      nome,
-      nome_exibicao: nome || null,
-      ...(empresa_id ? { empresa_id } : {}),
-    };
+    const userId = invited?.user?.id || null;
 
-    const { error: upErr } = await supa.from('profiles').upsert(payload, { onConflict: 'user_id' });
-    if (upErr) {
-      // Não bloqueia convite; apenas reporta
-      return NextResponse.json({
-        warning: `Convite OK, mas falhou salvar em profiles: ${upErr.message}`,
-        user_id: userId,
-      }, { status: 202 });
+    // 2) Garante registo no profiles (sem quebrar se já existe)
+    if (userId) {
+      const { error: upErr } = await supa
+        .from('profiles')
+        .upsert({
+          user_id: userId,
+          empresa_id,
+          papel,
+          nome,
+          nome_exibicao: nome || null,
+        }, { onConflict: 'user_id' });
+
+      if (upErr) throw upErr;
     }
 
     return NextResponse.json({ ok: true, user_id: userId });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erro desconhecido' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Erro ao salvar utilizador' }, { status: 500 });
   }
 }
