@@ -1,87 +1,66 @@
+// app/api/admin/users/invite/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { getServerSupabase } from '@/lib/supabaseServer';
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  const { email, nome, papel } = body || {};
+  try {
+    const supa = getServerSupabase({ req });
 
-  if (!email || !papel) {
-    return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
+    const body = await req.json().catch(() => ({}));
+    const email: string = (body.email || '').trim().toLowerCase();
+    const nome: string = (body.nome || '').trim();
+    const papel: 'admin' | 'gestor' | 'externo' = body.papel || 'externo';
+
+    if (!email) return NextResponse.json({ error: 'email_required' }, { status: 400 });
+
+    // Quem está convidando
+    const { data: me, error: meErr } = await supa.auth.getUser();
+    if (meErr || !me?.user) return NextResponse.json({ error: 'no_session' }, { status: 401 });
+
+    // Empresa do convidador
+    const { data: myProf, error: profErr } = await supa
+      .from('profiles')
+      .select('empresa_id')
+      .eq('user_id', me.user.id)
+      .maybeSingle();
+    if (profErr) throw profErr;
+
+    const empresa_id = myProf?.empresa_id || null;
+
+    // Cria o utilizador via signUp com redirect para /auth/confirm
+    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
+    const { data: sign, error: signErr } = await supa.auth.signUp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        data: { app_role: papel, nome, nome_exibicao: nome || null },
+      },
+    });
+    if (signErr) return NextResponse.json({ error: 'auth_signup_failed', detail: signErr.message }, { status: 400 });
+
+    const newUserId = sign.user?.id;
+    if (!newUserId) {
+      return NextResponse.json({ error: 'missing_user_id_after_signup' }, { status: 500 });
+    }
+
+    // Garante profile (idempotente por user_id)
+    const { error: upsertErr } = await supa.from('profiles').upsert(
+      {
+        user_id: newUserId,
+        empresa_id,
+        papel,
+        nome,
+        nome_exibicao: nome || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    );
+    if (upsertErr) {
+      return NextResponse.json({ error: 'db_profile_upsert_failed', detail: upsertErr.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ ok: true, user_id: newUserId });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'fail' }, { status: 500 });
   }
-
-  // valida papel permitido
-  if (!['externo', 'gestor', 'admin'].includes(papel)) {
-    return NextResponse.json({ error: 'invalid_papel' }, { status: 400 });
-  }
-
-  const supa = getServerSupabase();
-
-  // quem convida precisa estar autenticado e ter empresa
-  const { data: u } = await supa.auth.getUser();
-  const inviterId = u.user?.id;
-  if (!inviterId) return NextResponse.json({ error: 'no_session' }, { status: 401 });
-
-  const { data: inviterProf, error: profErr } = await supa
-    .from('profiles')
-    .select('empresa_id,papel')
-    .eq('user_id', inviterId)
-    .maybeSingle();
-  if (profErr || !inviterProf?.empresa_id) {
-    return NextResponse.json({ error: 'no_empresa' }, { status: 400 });
-  }
-  if (!['admin', 'gestor'].includes(inviterProf.papel as string)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
-
-  // admin client (service role)
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!, // precisa estar setado no Vercel
-    { auth: { persistSession: false } }
-  );
-
-  // 1) cria ou obtém utilizador
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
-    email_confirm: false, // vai receber confirmação por email
-    user_metadata: {
-      app_role: papel,
-      nome_exibicao: nome ?? null,
-      nome: nome ?? null,
-    },
-  });
-  if (createErr) {
-    return NextResponse.json({ error: `createUser: ${createErr.message}` }, { status: 500 });
-  }
-  const newUserId = created.user?.id;
-  if (!newUserId) {
-    return NextResponse.json({ error: 'no_user_created' }, { status: 500 });
-  }
-
-  // 2) upsert em profiles com a mesma empresa do convidador
-  const { error: upErr } = await admin
-    .from('profiles')
-    .upsert({
-      user_id: newUserId,
-      empresa_id: inviterProf.empresa_id,
-      papel,
-      nome: nome ?? null,
-      nome_exibicao: nome ?? null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
-
-  if (upErr) {
-    return NextResponse.json({ error: `profiles_upsert: ${upErr.message}` }, { status: 500 });
-  }
-
-  // 3) envia email de convite/confirmacão
-  const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/confirm?next=/menu`;
-  const { error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
-  if (inviteErr) {
-    return NextResponse.json({ error: `invite: ${inviteErr.message}` }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, user_id: newUserId });
 }
