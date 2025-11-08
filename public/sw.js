@@ -1,30 +1,17 @@
-// public/sw.js — Service Worker oficial Confiance
-const CACHE = 'confiance-static-v1';
-
-// Arquivos essenciais do app (sempre em cache)
-const CORE_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/favicon.ico',
-  '/logo-confiance.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png'
+// public/sw.js — SW minimalista com versão nova de cache
+const CACHE = 'confiance-static-v5'; // <— bump aqui sempre que layout/js mudar
+const CORE = [
+  '/', '/manifest.webmanifest',
+  '/icon-192.png','/icon-512.png','/apple-touch-icon.png','/favicon.ico'
 ];
 
-// Instala e guarda o essencial
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then((cache) => cache.addAll(CORE_ASSETS))
-      .catch(() => {})
-  );
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)));
   self.skipWaiting();
 });
 
-// Limpa versões antigas
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
@@ -32,36 +19,32 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Estratégia: network-first para HTML, cache-first para o resto
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
+// Network-first para HTML; cache-first pro resto
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
   if (req.method !== 'GET') return;
 
   const accept = req.headers.get('accept') || '';
   const isHTML = accept.includes('text/html');
 
   if (isHTML) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(req, clone)).catch(() => {});
-          return res;
-        })
-        .catch(() => caches.match(req).then((res) => res || caches.match('/')))
+    e.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(()=>{});
+        return res;
+      }).catch(() => caches.match(req).then((r) => r || caches.match('/')))
     );
-  } else {
-    event.respondWith(
-      caches.match(req).then((res) =>
-        res ||
-        fetch(req)
-          .then((res) => {
-            const clone = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, clone)).catch(() => {});
-            return res;
-          })
-          .catch(() => res)
-      )
-    );
+    return;
   }
+
+  e.respondWith(
+    caches.match(req).then((r) =>
+      r || fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(()=>{});
+        return res;
+      })
+    )
+  );
 });
