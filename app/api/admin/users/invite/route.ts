@@ -2,47 +2,58 @@
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
+type Papel = 'admin' | 'gestor' | 'externo';
+
 export async function POST(req: Request) {
   try {
-    const { email, nome, papel } = await req.json();
-    if (!email || !papel) {
-      return NextResponse.json({ ok: false, error: 'missing_email_or_role' }, { status: 400 });
-    }
-    if (!['admin','gestor','externo'].includes(papel)) {
-      return NextResponse.json({ ok: false, error: 'invalid_role' }, { status: 400 });
+    const supa = getServiceSupabase();
+    const body = await req.json().catch(() => ({}));
+
+    const email = String(body?.email || '').trim().toLowerCase();
+    const nome = String(body?.nome || '').trim();
+    const papel = (String(body?.papel || 'externo') as Papel);
+
+    if (!email) return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
+    if (!['admin', 'gestor', 'externo'].includes(papel)) {
+      return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
     }
 
-    const admin = getServiceSupabase();
-    const empresa_id = process.env.CONF_EMPRESA_ID;
-    if (!empresa_id) throw new Error('CONF_EMPRESA_ID ausente');
-
-    // 1) Dispara convite oficial do Auth
-    const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `/auth/confirm?next=/menu`,
-      data: {
-        app_role: papel,
-        nome_exibicao: nome || '',
-        nome: nome || '',
-      },
+    // 1) Envia convite (e seta metadata para o JWT pós-confirmação)
+    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
+    const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { app_role: papel, nome, nome_exibicao: nome || null },
     });
-    if (invErr) throw invErr;
+    if (invErr) {
+      return NextResponse.json({ error: `Invite falhou: ${invErr.message}` }, { status: 500 });
+    }
 
-    const user_id = invited?.user?.id;
-    if (!user_id) throw new Error('invite_ok_but_no_user_id');
+    const userId = invited?.user?.id;
+    if (!userId) {
+      return NextResponse.json({ error: 'Convite enviado, mas sem user_id' }, { status: 202 });
+    }
 
-    // 2) Upsert no profiles (bypass RLS via service role)
-    const { error: upErr } = await admin.from('profiles').upsert({
-      user_id,
-      empresa_id,
+    // 2) Upsert em profiles
+    const empresa_id = process.env.CONF_EMPRESA_ID || null;
+    const payload: any = {
+      user_id: userId,
       papel,
+      nome,
       nome_exibicao: nome || null,
-      nome: nome || null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
-    if (upErr) throw upErr;
+      ...(empresa_id ? { empresa_id } : {}),
+    };
 
-    return NextResponse.json({ ok: true, user_id });
+    const { error: upErr } = await supa.from('profiles').upsert(payload, { onConflict: 'user_id' });
+    if (upErr) {
+      // Não bloqueia convite; apenas reporta
+      return NextResponse.json({
+        warning: `Convite OK, mas falhou salvar em profiles: ${upErr.message}`,
+        user_id: userId,
+      }, { status: 202 });
+    }
+
+    return NextResponse.json({ ok: true, user_id: userId });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'invite_failed' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Erro desconhecido' }, { status: 500 });
   }
 }
