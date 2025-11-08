@@ -1,3 +1,4 @@
+// app/menu/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -11,7 +12,7 @@ export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
-  const [role, setRole] = useState<AppRole>('externo');
+  const [role, setRole] = useState<AppRole | null>(null); // <- sem default
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -24,18 +25,19 @@ export default function MenuPage() {
 
         setEmail(user?.email ?? null);
 
-        // Fallback inicial pelo metadata (pode estar velho)
+        // Papel pelo metadata primeiro
         const meta = (user?.user_metadata || {}) as Record<string, any>;
         let effectiveRole: AppRole =
           (meta.app_role as AppRole) || 'externo';
 
-        let displayName =
-          (meta.nome_exibicao as string)
-          || (meta.nome as string)
-          || (meta.name as string)
-          || null;
+        // Nome de exibição (metadata)
+        const metaNome =
+          (meta.nome_exibicao as string) ||
+          (meta.nome as string) ||
+          (meta.name as string) ||
+          null;
 
-        // DB vence o metadata: lê profiles
+        // Complementa com profiles
         if (uid) {
           const { data: prof } = await supa
             .from('profiles')
@@ -46,18 +48,19 @@ export default function MenuPage() {
           if (prof?.papel && ['admin','gestor','externo'].includes(prof.papel)) {
             effectiveRole = prof.papel as AppRole;
           }
-          if (prof?.nome_exibicao || prof?.nome) {
-            displayName = prof?.nome_exibicao || prof?.nome || displayName;
-          }
+          const dbNome = prof?.nome_exibicao || prof?.nome || null;
+          setNome(metaNome || dbNome || null);
+        } else {
+          setNome(metaNome || null);
         }
 
-        setRole(effectiveRole);
-        setNome(displayName);
-
+        // Se for ADM/Gestor, redireciona ANTES de renderizar qualquer coisa.
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
         }
+
+        setRole(effectiveRole);
       } finally {
         if (alive) setReady(true);
       }
@@ -70,7 +73,7 @@ export default function MenuPage() {
     window.location.replace('/login');
   }
 
-  if (!ready) {
+  if (!ready || role === null) {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui' }}>
         <p style={{ color: '#666' }}>A carregar…</p>
@@ -112,14 +115,7 @@ export default function MenuPage() {
           {role.toUpperCase()}
         </span>
 
-        <div
-          style={{
-            minWidth: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
+        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span
             style={{
               color: '#0e3258',
