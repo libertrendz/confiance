@@ -1,58 +1,53 @@
 // app/adm/layout.tsx
+'use client';
+
 import Link from 'next/link';
-import './adm.css';
+import { usePathname } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const path = usePathname();
 
-export default function AdmLayout({ children }: { children: React.ReactNode }) {
+  const Item = ({ href, label }: { href: string; label: string }) => {
+    const active = path?.startsWith(href);
+    return (
+      <Link
+        href={href}
+        style={{
+          display: 'block',
+          padding: '10px 12px',
+          borderRadius: 10,
+          textDecoration: 'none',
+          fontWeight: 600,
+          color: active ? '#fff' : '#0e3258',
+          background: active ? '#0e3258' : 'transparent',
+          border: active ? 'none' : '1px solid #D7E3FF',
+        }}
+      >
+        {label}
+      </Link>
+    );
+  };
+
   return (
-    <div className="adm-shell">
-      <aside className="adm-aside">
-        <div className="adm-brand">
-          <img src="/logo-confiance.png" alt="CONFIANCE" />
+    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: '100dvh' }}>
+      <aside style={{ padding: 16, borderRight: '1px solid #E9EEF7', background: '#F8FAFF' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 34 }} />
+          <span style={{ fontWeight: 800, color: '#0e3258' }}>Admin</span>
         </div>
-
-        <nav className="adm-nav">
-          <Section title="Geral">
-            <NavItem href="/adm/dashboard" label="Dashboard" />
-            <NavItem href="/adm/utilizadores" label="Utilizadores" />
-          </Section>
-
-          <Section title="Operação">
-            <NavItem href="/adm/ponto" label="Ponto" />
-            <NavItem href="/adm/fornecedores" label="Fornecedores" />
-            <NavItem href="/adm/clientes" label="Clientes" />
-            <NavItem href="/adm/orcamentos" label="Orçamentos & Contratos" />
-            <NavItem href="/adm/financeiro" label="Financeiro" />
-            <NavItem href="/adm/ativos" label="Ativos" />
-            <div className="nav-sub">
-              <NavItem href="/adm/ativos/ferramentas" label="• Ferramentas" />
-              <NavItem href="/adm/ativos/viaturas"    label="• Viaturas" />
-            </div>
-          </Section>
-
-          <Section title="Configuração">
-            <NavItem href="/adm/configuracoes" label="Configurações" />
-          </Section>
+        <nav style={{ display: 'grid', gap: 8 }}>
+          <Item href="/adm/dashboard" label="Dashboard" />
+          <Item href="/adm/utilizadores" label="Utilizadores" />
+          <Item href="/adm/ponto" label="Ponto" />
+          <Item href="/adm/fornecedores" label="Fornecedores" />
+          <Item href="/adm/clientes" label="Clientes" />
+          <Item href="/adm/orcamentos" label="Orçamentos & Contratos" />
+          <Item href="/adm/financeiro" label="Financeiro" />
+          <Item href="/adm/config" label="Configurações" />
+          <Item href="/adm/ativos" label="Ativos (viaturas/ferramentas)" />
         </nav>
       </aside>
-
-      <section className="adm-main">{children}</section>
+      <section style={{ padding: 18 }}>{children}</section>
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="adm-section">
-      <div className="adm-section-title">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function NavItem({ href, label }: { href: string; label: string }) {
-  return (
-    <Link className="adm-nav-item" href={href}>{label}</Link>
   );
 }
