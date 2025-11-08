@@ -2,17 +2,22 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * Cliente ADMIN (Service Role). Uso EXCLUSIVO em rotas server-side.
- * Nunca importa este módulo do client/browser.
+ * Cliente ADMIN (Service Role), uso EXCLUSIVO em rotas server-side.
+ * Lê a env canônica SUPABASE_SERVICE_ROLE, com fallbacks para históricos.
+ * Nunca importe isso no client/browser.
  */
 export function getServiceSupabase() {
-  // Aceita SUPABASE_URL ou cai para NEXT_PUBLIC_SUPABASE_URL
   const url =
     process.env.SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     '';
 
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE || '';
+  // Canônica + compatibilidade retroativa
+  const serviceRole =
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SERVICE_ROLE ||
+    '';
 
   if (!serviceRole) {
     throw new Error('Env ausente: SUPABASE_SERVICE_ROLE');
