@@ -36,17 +36,17 @@ export default function MenuPage() {
           (meta.name as string) ||
           null;
 
-        // Complementa com profiles
+        // Complementa com profiles (tabela: profiles.user_id / profiles.papel / profiles.nome_exibicao / profiles.nome)
         if (uid) {
           const { data: prof } = await supa
             .from('profiles')
-            .select('papel, nome_exibicao, nome') // <- AQUI: PAPEL
+            .select('papel, nome_exibicao, nome')
             .eq('user_id', uid)
             .maybeSingle();
 
-          const papelDb = prof?.papel as AppRole | undefined;
-          if (papelDb && ['admin', 'gestor', 'externo'].includes(papelDb)) {
-            effectiveRole = papelDb;
+          const dbRole = prof?.papel as AppRole | undefined;
+          if (dbRole && ['admin', 'gestor', 'externo'].includes(dbRole)) {
+            effectiveRole = dbRole;
           }
 
           const dbNome = prof?.nome_exibicao || prof?.nome || null;
@@ -55,7 +55,7 @@ export default function MenuPage() {
           setNome(metaNome || null);
         }
 
-        // Redireciona ADM/Gestor antes de renderizar
+        // Admin/Gestor vai direto para o layout ADM
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
@@ -66,11 +66,15 @@ export default function MenuPage() {
         if (alive) setReady(true);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
   async function sair() {
-    try { await supa.auth.signOut(); } catch {}
+    try {
+      await supa.auth.signOut();
+    } catch {}
     window.location.replace('/login');
   }
 
@@ -82,6 +86,7 @@ export default function MenuPage() {
     );
   }
 
+  // Layout do cabeçalho: [ PERFIL ] [ NOME/EMAIL (ellipsis) ] [ SAIR ]
   return (
     <main
       style={{
@@ -92,13 +97,14 @@ export default function MenuPage() {
       }}
     >
       <header
+        className="topbar"
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto 1fr auto',
           alignItems: 'center',
-          columnGap: 10,
-          rowGap: 8,
-          marginBottom: 16,
+          gap: 10,
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
         }}
       >
         <span
@@ -136,10 +142,11 @@ export default function MenuPage() {
         <div>
           <button
             onClick={sair}
+            className="btn btn-ghost"
             style={{
               padding: '8px 12px',
               borderRadius: 10,
-              border: '1px solid '#ddd'",
+              border: '1px solid var(--border)',
               background: '#fff',
               cursor: 'pointer',
               fontWeight: 600,
@@ -149,26 +156,16 @@ export default function MenuPage() {
             Sair
           </button>
         </div>
-
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-              @media (max-width: 420px) {
-                header { grid-template-columns: 1fr auto; }
-                header > span:nth-child(1) { order: 1; }
-                header > div:nth-child(2) { order: 3; grid-column: 1 / span 2; }
-                header > div:nth-child(3) { order: 2; }
-              }
-            `,
-          }}
-        />
       </header>
 
+      {/* Cards do colaborador/externo */}
       <section
+        className="grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
           gap: 12,
+          marginTop: 16,
         }}
       >
         <Card
@@ -188,9 +185,18 @@ export default function MenuPage() {
 
 type CardAction = { href: string; label: string; kind?: 'primary' | 'accent' | 'ghost' };
 
-function Card({ title, desc, actions = [] }: { title: string; desc: string; actions?: CardAction[] }) {
+function Card({
+  title,
+  desc,
+  actions = [],
+}: {
+  title: string;
+  desc: string;
+  actions?: CardAction[];
+}) {
   return (
     <article
+      className="card"
       style={{
         border: '1px solid #E9EEF7',
         borderRadius: 16,
@@ -204,7 +210,16 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
       }}
     >
       <div>
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0e3258' }}>{title}</h3>
+        <h3
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 800,
+            color: '#0e3258',
+          }}
+        >
+          {title}
+        </h3>
         <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>{desc}</p>
       </div>
       {!!actions.length && (
@@ -218,8 +233,9 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
                 fontSize: 13,
                 padding: '8px 12px',
                 borderRadius: 10,
-                border: a.kind === 'primary' ? 'none' : '1px solid var(--border)',
-                background: a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff',
+                border: a.kind === 'primary' ? 'none' : '1px solid #D7E3FF',
+                background:
+                  a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff',
                 color: a.kind === 'primary' ? '#fff' : '#0e3258',
               }}
             >
