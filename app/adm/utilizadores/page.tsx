@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
 type Papel = 'admin' | 'gestor' | 'externo';
+
 type Row = {
   user_id: string;
   email: string | null;
@@ -32,6 +33,14 @@ export default function UtilizadoresAdmPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Util para normalizar resposta de /api/admin/users/list
+  function normalizeListPayload(payload: any): Row[] {
+    if (Array.isArray(payload)) return payload as Row[];
+    if (payload && Array.isArray(payload.rows)) return payload.rows as Row[];
+    return [];
+    // se vier {ok:true, rows:[...]} também funciona
+  }
+
   async function load() {
     setLoadingList(true);
     setErr(null);
@@ -39,7 +48,7 @@ export default function UtilizadoresAdmPage() {
       const res = await fetch('/api/admin/users/list', { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Falha ao listar');
-      setList(data);
+      setList(normalizeListPayload(data));
     } catch (e: any) {
       setErr(e?.message || 'Falha ao listar');
       setList([]);
@@ -50,6 +59,7 @@ export default function UtilizadoresAdmPage() {
 
   async function doInvite(e: React.FormEvent) {
     e.preventDefault();
+    if (inviting) return;
     setInviting(true);
     setErr(null);
     setMsg(null);
@@ -72,6 +82,7 @@ export default function UtilizadoresAdmPage() {
   }
 
   async function doDelete(user_id: string) {
+    if (!user_id) return;
     if (!confirm('Eliminar utilizador?')) return;
     try {
       const res = await fetch('/api/admin/users/delete', {
@@ -95,7 +106,7 @@ export default function UtilizadoresAdmPage() {
 
       {/* CONVITE */}
       <section className="card" style={{ marginBottom: 16 }}>
-        <h2 className="h2">Convidar utilizador</h2>
+        <h2 className="h2" style={{ marginTop: 0 }}>Convidar utilizador</h2>
         <form
           onSubmit={doInvite}
           style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 160px auto' }}
@@ -106,7 +117,7 @@ export default function UtilizadoresAdmPage() {
               type="email"
               required
               value={invite.email}
-              onChange={(e) => setInvite((i) => ({ ...i, email: e.target.value }))}
+              onChange={(e) => setInvite((i) => ({ ...i, email: e.target.value.trim() }))}
               style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: '10px' }}
             />
           </div>
@@ -151,7 +162,7 @@ export default function UtilizadoresAdmPage() {
       {/* LISTA */}
       <section className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <h2 className="h2">Lista</h2>
+          <h2 className="h2" style={{ margin: 0 }}>Lista</h2>
           <button className="btn btn-ghost" onClick={load} disabled={loadingList}>
             {loadingList ? 'A carregar…' : 'Recarregar'}
           </button>
@@ -184,7 +195,7 @@ export default function UtilizadoresAdmPage() {
                       <a
                         href={`/adm/utilizadores/${r.user_id}/edit`}
                         className="btn btn-ghost"
-                        aria-label="Editar"
+                        aria-label={`Editar ${r.email ?? r.user_id}`}
                       >
                         Editar
                       </a>
@@ -192,7 +203,7 @@ export default function UtilizadoresAdmPage() {
                         onClick={() => doDelete(r.user_id)}
                         className="btn btn-ghost"
                         style={{ marginLeft: 6 }}
-                        aria-label="Eliminar"
+                        aria-label={`Eliminar ${r.email ?? r.user_id}`}
                       >
                         Eliminar
                       </button>
