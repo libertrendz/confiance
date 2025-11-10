@@ -1,77 +1,71 @@
 // app/api/admin/users/create/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getAdminSupabase } from '@/lib/supabaseServer';
+import { getServiceSupabase } from '@/lib/supabaseServer';
 
-const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || '';
-
-async function getCaller(token: string) {
-  const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data, error } = await supa.auth.getUser(token);
-  if (error) throw error;
-  return data.user;
-}
+type Papel = 'admin' | 'gestor' | 'externo';
 
 export async function POST(req: Request) {
   try {
-    const auth = req.headers.get('authorization') || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!token) return NextResponse.json({ error: 'missing_token' }, { status: 401 });
+    const body = await req.json();
+    const email = String(body?.email || '').trim().toLowerCase();
+    const nome = String(body?.nome || '').trim();
+    const papel = (String(body?.papel || 'externo') as Papel);
+    const empresa_id = process.env.CONF_EMPRESA_ID || null;
 
-    const caller = await getCaller(token);
-    const callerRole = (caller.user_metadata?.app_role as string) || 'externo';
-    const empresaId = (caller.user_metadata?.empresa_id as string) || null;
-    if (callerRole !== 'admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-    if (!empresaId) return NextResponse.json({ error: 'missing_empresa_id' }, { status: 400 });
+    if (!email) return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
+    if (!['admin', 'gestor', 'externo'].includes(papel))
+      return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
 
-    const body = await req.json().catch(() => ({}));
-    const email = String(body.email || '').trim().toLowerCase();
-    const nome  = String(body.nome || 'Utilizador');
-    const papel = String(body.papel || 'externo') as 'externo'|'gestor'|'admin';
-    if (!email || !email.includes('@')) {
-      return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
+    const supa = getServiceSupabase();
+    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
+
+    // 1) Envia convite (idempotente). Se já existir, segue o fluxo igual.
+    const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { app_role: papel, nome, nome_exibicao: nome || null },
+    });
+    if (invErr && !invErr.message.includes('already registered')) {
+      return NextResponse.json({ error: invErr.message }, { status: 500 });
     }
 
-    const admin = getAdminSupabase();
-
-    const inv = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${SITE}/login`,
-    });
-    if (inv.error) {
+    // 2) Descobre o user_id (do convite ou consultando auth.users)
+    let userId = invited?.user?.id || null;
+    if (!userId) {
+      const { data: authUser, error: findErr } = await supa
+        .schema('auth')
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+      if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
+      userId = authUser?.id || null;
+    }
+    if (!userId) {
+      // Convite foi enviado mas ainda sem criação do registo em auth.users
       return NextResponse.json(
-        { error: 'invite_failed', details: inv.error.message },
-        { status: 400 },
+        { ok: true, info: 'Convite enviado. O perfil será criado após confirmação do email.' },
+        { status: 202 }
       );
     }
 
-    const uid = inv.data.user.id;
+    // 3) Upsert em profiles (idempotente)
+    const payload: any = {
+      user_id: userId,
+      papel,
+      nome: nome || null,
+      nome_exibicao: nome || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (empresa_id) payload.empresa_id = empresa_id;
 
-    const upm = await admin.auth.admin.updateUserById(uid, {
-      user_metadata: { app_role: papel, empresa_id: empresaId },
-    });
-    if (upm.error) {
-      return NextResponse.json(
-        { error: 'metadata_failed', details: upm.error.message },
-        { status: 400 },
-      );
-    }
-
-    const up = await admin
+    const { error: upErr } = await supa
       .from('profiles')
-      .upsert({ user_id: uid, empresa_id: empresaId, nome, papel }, { onConflict: 'user_id' });
-    if (up.error) {
-      return NextResponse.json(
-        { error: 'profiles_failed', details: up.error.message },
-        { status: 400 },
-      );
-    }
+      .upsert(payload, { onConflict: 'user_id' });
 
-    return NextResponse.json({ ok: true, user_id: uid });
+    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: 'unexpected', details: e?.message }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Falha ao criar utilizador' }, { status: 500 });
   }
 }
