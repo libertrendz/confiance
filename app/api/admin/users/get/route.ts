@@ -4,39 +4,23 @@ import { getServiceSupabase } from '@/lib/supabaseServer';
 
 export async function GET(req: Request) {
   try {
+    const supa = getServiceSupabase();
     const { searchParams } = new URL(req.url);
     const id = String(searchParams.get('id') || '');
 
     if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
 
-    const supa = getServiceSupabase();
-
     const { data, error } = await supa
-      .rpc('exec_sql', {
-        q: `
-        select 
-          u.id as user_id,
-          u.email,
-          u.last_sign_in_at,
-          p.papel,
-          p.empresa_id,
-          p.nome,
-          p.nome_exibicao,
-          p.created_at,
-          p.updated_at,
-          p.id as profile_id
-        from auth.users u
-        left join public.profiles p on p.user_id = u.id
-        where u.id = $1
-        `,
-        params: [id],
-      });
+      .from('v_adm_users')
+      .select('*')
+      .eq('user_id', id)
+      .maybeSingle();
 
-    if (error) throw error;
-    if (!data?.length) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
-    return NextResponse.json(data[0]);
+    return NextResponse.json(data, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'erro' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'get_failed' }, { status: 500 });
   }
 }
