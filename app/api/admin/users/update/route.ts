@@ -6,49 +6,37 @@ type Papel = 'admin' | 'gestor' | 'externo';
 
 export async function POST(req: Request) {
   try {
-    const supa = getServiceSupabase();
-    const body = await req.json().catch(() => ({}));
+    const { user_id, nome, nome_exibicao, papel } = await req.json();
 
-    const user_id = String(body?.user_id || '');
     if (!user_id) return NextResponse.json({ error: 'user_id obrigatório' }, { status: 400 });
-
-    const updates: any = {};
-    if (body?.nome !== undefined) updates.nome = String(body.nome || '');
-    if (body?.nome_exibicao !== undefined) updates.nome_exibicao = String(body.nome_exibicao || '');
-    if (body?.papel !== undefined) {
-      const papel = String(body.papel) as Papel;
-      if (!['admin', 'gestor', 'externo'].includes(papel)) {
-        return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
-      }
-      updates.papel = papel;
+    if (papel && !['admin','gestor','externo'].includes(papel)) {
+      return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
     }
 
-    if (!Object.keys(updates).length) {
-      return NextResponse.json({ ok: true, message: 'Nada para atualizar' });
+    const supa = getServiceSupabase();
+
+    // Atualiza metadata
+    if (papel || nome || nome_exibicao) {
+      const meta: Record<string, any> = {};
+      if (papel) meta.app_role = papel as Papel;
+      if (nome !== undefined) meta.nome = nome || null;
+      if (nome_exibicao !== undefined) meta.nome_exibicao = nome_exibicao || null;
+
+      const { error: mErr } = await supa.auth.admin.updateUserById(user_id, { user_metadata: meta });
+      if (mErr) return NextResponse.json({ error: `Falha metadata: ${mErr.message}` }, { status: 400 });
     }
 
-    updates.updated_at = new Date().toISOString();
+    // Upsert em profiles
+    const payload: any = { user_id };
+    if (papel) payload.papel = papel;
+    if (nome !== undefined) payload.nome = nome || null;
+    if (nome_exibicao !== undefined) payload.nome_exibicao = nome_exibicao || null;
 
-    // Atualiza profiles
-    const { error: upErr } = await supa
-      .from('profiles')
-      .update(updates)
-      .eq('user_id', user_id);
-    if (upErr) throw new Error(upErr.message);
-
-    // Sincroniza metadata do Auth
-    const meta: any = {};
-    if (updates.papel) meta.app_role = updates.papel;
-    if (updates.nome_exibicao) meta.nome_exibicao = updates.nome_exibicao;
-    if (updates.nome) meta.nome = updates.nome;
-
-    if (Object.keys(meta).length) {
-      const { error: metaErr } = await supa.auth.admin.updateUserById(user_id, { user_metadata: meta });
-      if (metaErr) throw new Error(metaErr.message);
-    }
+    const { error: pErr } = await supa.from('profiles').upsert(payload, { onConflict: 'user_id' });
+    if (pErr) return NextResponse.json({ error: `Falha profile: ${pErr.message}` }, { status: 400 });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erro ao atualizar' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Erro inesperado' }, { status: 500 });
   }
 }
