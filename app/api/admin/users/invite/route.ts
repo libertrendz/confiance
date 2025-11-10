@@ -20,20 +20,18 @@ export async function POST(req: Request) {
     const origin = new URL(req.url).origin;
     const redirectTo = `${origin}/auth/confirm?next=/menu`;
 
-    // 1) Envia convite (idempotente). Se já existir, ignora o erro “already registered”.
+    // 1) Convida (idempotente)
     const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: { app_role: papel, nome, nome_exibicao: nome || null },
     });
     if (invErr && !invErr.message?.includes('already registered')) {
-      return NextResponse.json({ error: invErr.message }, { status: 500 });
+      return NextResponse.json({ error: `Admin.inviteUserByEmail: ${invErr.message}` }, { status: 500 });
     }
 
     // 2) Descobre o user_id
     let userId: string | null = invited?.user?.id ?? null;
-
     if (!userId) {
-      // Leitura direta da tabela auth.users com service role
       const { data: authUser, error: findErr } = await supa
         .schema('auth')
         .from('users')
@@ -41,21 +39,19 @@ export async function POST(req: Request) {
         .eq('email', email)
         .maybeSingle();
 
-      if (findErr) {
-        return NextResponse.json({ error: findErr.message }, { status: 500 });
-      }
+      if (findErr) return NextResponse.json({ error: `auth.users lookup: ${findErr.message}` }, { status: 500 });
       userId = authUser?.id ?? null;
     }
 
-    // Se ainda não há user_id, o convite foi enviado mas a conta só nasce após confirmação do email.
+    // 3) Se ainda não há id, convite foi enviado mas a conta só nasce após confirmar o email
     if (!userId) {
       return NextResponse.json(
-        { ok: true, info: 'Convite enviado. O perfil será criado após a confirmação de email.' },
+        { ok: true, info: 'Convite enviado. O perfil será criado após a confirmação do email.' },
         { status: 202 }
       );
     }
 
-    // 3) Upsert em profiles (idempotente, por user_id)
+    // 4) Upsert em profiles (idempotente por user_id)
     const payload: Record<string, any> = {
       user_id: userId,
       papel,
@@ -69,9 +65,7 @@ export async function POST(req: Request) {
       .from('profiles')
       .upsert(payload, { onConflict: 'user_id' });
 
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
-    }
+    if (upErr) return NextResponse.json({ error: `profiles.upsert: ${upErr.message}` }, { status: 500 });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
