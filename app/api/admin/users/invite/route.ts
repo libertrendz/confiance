@@ -1,4 +1,3 @@
-// app/api/admin/users/invite/route.ts
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
@@ -20,7 +19,7 @@ export async function POST(req: Request) {
     const origin = new URL(req.url).origin;
     const redirectTo = `${origin}/auth/confirm?next=/menu`;
 
-    // 1) Convida (idempotente)
+    // 1) Convida; se já existir, não falha
     const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
       redirectTo,
       data: { app_role: papel, nome, nome_exibicao: nome || null },
@@ -29,7 +28,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Admin.inviteUserByEmail: ${invErr.message}` }, { status: 500 });
     }
 
-    // 2) Descobre o user_id
+    // 2) user_id
     let userId: string | null = invited?.user?.id ?? null;
     if (!userId) {
       const { data: authUser, error: findErr } = await supa
@@ -38,20 +37,19 @@ export async function POST(req: Request) {
         .select('id')
         .eq('email', email)
         .maybeSingle();
-
       if (findErr) return NextResponse.json({ error: `auth.users lookup: ${findErr.message}` }, { status: 500 });
       userId = authUser?.id ?? null;
     }
 
-    // 3) Se ainda não há id, convite foi enviado mas a conta só nasce após confirmar o email
+    // 3) Se ainda não há id, convite enviado; perfil nasce ao confirmar
     if (!userId) {
       return NextResponse.json(
-        { ok: true, info: 'Convite enviado. O perfil será criado após a confirmação do email.' },
+        { ok: true, info: 'Convite enviado. O perfil será criado após confirmação do email.' },
         { status: 202 }
       );
     }
 
-    // 4) Upsert em profiles (idempotente por user_id)
+    // 4) Upsert em profiles (service role ignora RLS)
     const payload: Record<string, any> = {
       user_id: userId,
       papel,
@@ -69,6 +67,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Falha ao convidar' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Falha ao adicionar utilizador' }, { status: 500 });
   }
 }
