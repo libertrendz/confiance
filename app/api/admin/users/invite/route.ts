@@ -14,7 +14,9 @@ export async function POST(req: Request) {
     const papel = (String(body?.papel || 'externo') as Papel);
     const empresa_id = process.env.CONF_EMPRESA_ID || null;
 
-    if (!email) return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
+    if (!email)
+      return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
+
     if (!['admin', 'gestor', 'externo'].includes(papel))
       return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
 
@@ -32,17 +34,19 @@ export async function POST(req: Request) {
 
     const userId = invited?.user?.id || null;
 
-    // 2) Garante registo no profiles (sem quebrar se já existe)
+    // 2) Upsert em profiles
     if (userId) {
+      const payload: any = {
+        user_id: userId,
+        empresa_id,
+        papel,
+        nome,
+        nome_exibicao: nome || null,
+      };
+
       const { error: upErr } = await supa
         .from('profiles')
-        .upsert({
-          user_id: userId,
-          empresa_id,
-          papel,
-          nome,
-          nome_exibicao: nome || null,
-        }, { onConflict: 'user_id' });
+        .upsert(payload, { onConflict: 'user_id' });
 
       if (upErr) throw upErr;
     }
