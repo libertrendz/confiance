@@ -1,7 +1,7 @@
 // app/api/admin/users/create/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getAdminSupabase } from '@/lib/supabaseAdmin';
+import { getAdminSupabase } from '@/lib/supabaseServer';
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
