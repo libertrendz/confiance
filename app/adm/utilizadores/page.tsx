@@ -9,7 +9,7 @@ type Row = {
   user_id: string;
   email: string | null;
   last_sign_in_at: string | null;
-  papel: Papel;
+  papel: Papel | null;
   empresa_id: string | null;
   nome: string | null;
   nome_exibicao: string | null;
@@ -22,6 +22,7 @@ export default function UtilizadoresAdmPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [list, setList] = useState<Row[] | null>(null);
   const [loadingList, setLoadingList] = useState(false);
+
   const [invite, setInvite] = useState<{ email: string; nome: string; papel: Papel }>({
     email: '',
     nome: '',
@@ -67,6 +68,22 @@ export default function UtilizadoresAdmPage() {
       setErr(e?.message || 'Falha ao convidar');
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function doDelete(user_id: string) {
+    if (!confirm('Eliminar utilizador?')) return;
+    try {
+      const res = await fetch('/api/admin/users/delete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ user_id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Falha ao eliminar');
+      await load();
+    } catch (e: any) {
+      alert(e?.message || 'Falha ao eliminar');
     }
   }
 
@@ -159,19 +176,26 @@ export default function UtilizadoresAdmPage() {
                   <tr key={r.user_id} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '8px' }}>{r.nome_exibicao || r.nome || '—'}</td>
                     <td style={{ padding: '8px' }}>{r.email || '—'}</td>
-                    <td style={{ padding: '8px', textTransform: 'capitalize' }}>{r.papel}</td>
+                    <td style={{ padding: '8px', textTransform: 'capitalize' }}>{r.papel || '—'}</td>
                     <td style={{ padding: '8px' }}>
                       {r.last_sign_in_at ? new Date(r.last_sign_in_at).toLocaleString() : '—'}
                     </td>
                     <td style={{ padding: '8px', textAlign: 'right' }}>
-                      <a href={`/adm/utilizadores/editar?id=${r.user_id}`} className="btn btn-ghost">Editar</a>
                       <a
-                        href={`/adm/utilizadores/deletar?id=${r.user_id}`}
+                        href={`/adm/utilizadores/${r.user_id}/edit`}
+                        className="btn btn-ghost"
+                        aria-label="Editar"
+                      >
+                        Editar
+                      </a>
+                      <button
+                        onClick={() => doDelete(r.user_id)}
                         className="btn btn-ghost"
                         style={{ marginLeft: 6 }}
+                        aria-label="Eliminar"
                       >
                         Eliminar
-                      </a>
+                      </button>
                     </td>
                   </tr>
                 ))}
