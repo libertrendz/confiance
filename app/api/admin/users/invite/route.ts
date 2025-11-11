@@ -2,67 +2,62 @@
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type Papel = 'admin' | 'gestor' | 'externo';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const email = String(body?.email || '').trim().toLowerCase();
-    const nome  = String(body?.nome  || '').trim();
-    const papel = (String(body?.papel || 'externo') as Papel);
-    const empresa_id = process.env.CONF_EMPRESA_ID || null;
+    const nome = String(body?.nome || '').trim() || null;
+    const papel: Papel = (body?.papel || 'externo') as Papel;
 
     if (!email) return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
-    if (!['admin','gestor','externo'].includes(papel)) {
+    if (!['admin', 'gestor', 'externo'].includes(papel))
       return NextResponse.json({ error: 'Papel inválido' }, { status: 400 });
-    }
 
-    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
     const supa = getServiceSupabase();
+    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
 
-    // 1) Envia convite. Se já existir, seguimos assim mesmo.
+    // 1) Envia convite; se já existir, segue o baile
     const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
       redirectTo,
-      data: { app_role: papel, nome, nome_exibicao: nome || null },
+      data: { app_role: papel, nome, nome_exibicao: nome },
     });
     if (invErr && !invErr.message?.includes('already registered')) {
-      return NextResponse.json({ error: invErr.message }, { status: 500 });
+      return NextResponse.json({ error: `Invite falhou: ${invErr.message}` }, { status: 400 });
     }
 
-    // 2) Descobre/garante o user_id
+    // Pega o ID do user (se já existia, o invite não retorna; buscamos)
     let userId = invited?.user?.id || null;
     if (!userId) {
-      const lu: any = await supa.auth.admin.listUsers({ page: 1, perPage: 1000 } as any);
-      const found = (lu?.data?.users || []).find((u: any) => (u.email || '').toLowerCase() === email);
-      userId = found?.id || null;
+      const { data: lu, error: le } = await supa.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (le) return NextResponse.json({ error: `Lookup falhou: ${le.message}` }, { status: 400 });
+      userId = lu.users.find(u => u.email?.toLowerCase() === email)?.id || null;
     }
     if (!userId) {
-      // Convite enviado mas ainda sem user criado (acontece antes da confirmação)
-      return NextResponse.json({ message: 'Convite enviado', status: 'pending' }, { status: 202 });
+      // convite enviado mas sem id — aceitável
+      return NextResponse.json({ ok: true, note: 'Convite enviado; user_id ainda indisponível.' }, { status: 202 });
     }
 
-    // 3) Upsert no profiles, conflict em user_id
-    const payload: any = {
+    // 2) Upsert em profiles com empresa default; evita violação de FK e RLS
+    const payload = {
       user_id: userId,
-      empresa_id,
       papel,
-      nome: nome || null,
-      nome_exibicao: nome || null,
+      nome,
+      nome_exibicao: nome,
+      // empresa_id vem por DEFAULT (get_default_empresa_id), não força aqui
     };
-    const { error: upErr } = await supa
-      .from('profiles')
+    const { error: upErr } = await supa.from('profiles')
       .upsert(payload, { onConflict: 'user_id' });
     if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
+      return NextResponse.json({ error: `Upsert profile falhou: ${upErr.message}` }, { status: 400 });
     }
-
-    // 4) Escreve metadata (fonte da verdade no JWT)
-    await supa.auth.admin.updateUserById(userId, {
-      user_metadata: { app_role: papel, nome, nome_exibicao: nome || null }
-    });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erro inesperado' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Erro desconhecido' }, { status: 500 });
   }
 }
