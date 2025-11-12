@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type FormaPagamento = 'à vista' | 'parcelado';
+type FormaPagamento = 'À VISTA' | 'PARCELADO';
 
 export default function FornecedorNewPage() {
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function FornecedorNewPage() {
   const [morada, setMorada] = useState('');
   const [concelho, setConcelho] = useState('');
   const [cod_postal, setCodPostal] = useState('');
-  const [forma_pagamento, setFormaPagamento] = useState<FormaPagamento>('à vista');
+  const [forma_pagamento, setFormaPagamento] = useState<FormaPagamento>('À VISTA');
   const [observacoes, setObservacoes] = useState('');
   const [ativo, setAtivo] = useState(true);
 
@@ -32,7 +32,6 @@ export default function FornecedorNewPage() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          // não envio “codigo”; o trigger gera F### automaticamente
           denominacao,
           tipo_fornecimento,
           nif,
@@ -42,14 +41,13 @@ export default function FornecedorNewPage() {
           morada,
           concelho,
           cod_postal,
-          forma_pagamento,
+          forma_pagamento, // já vem em MAIÚSCULAS
           observacoes,
           ativo,
         }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Falha ao criar fornecedor');
-      // volta para a lista
       router.replace('/adm/fornecedores');
     } catch (e: any) {
       setErr(e?.message || 'Falha ao criar fornecedor');
@@ -110,9 +108,13 @@ export default function FornecedorNewPage() {
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label style={label}>Forma de pagamento</label>
-            <select style={input as any} value={forma_pagamento} onChange={e=>setFormaPagamento(e.target.value as FormaPagamento)}>
-              <option value="à vista">à vista</option>
-              <option value="parcelado">parcelado</option>
+            <select
+              style={input as any}
+              value={forma_pagamento}
+              onChange={e=>setFormaPagamento(e.target.value as FormaPagamento)}
+            >
+              <option value="À VISTA">À VISTA</option>
+              <option value="PARCELADO">PARCELADO</option>
             </select>
           </div>
           <div>
