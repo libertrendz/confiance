@@ -1,36 +1,67 @@
+// app/api/admin/fornecedores/create/route.ts
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
-const UUID_RE = /^[0-9a-f-]{36}$/i;
+const EMPRESA = process.env.CONF_EMPRESA_ID!;
+
+function nz(v: any) {
+  const s = (v ?? '').toString().trim();
+  return s.length ? s : null;
+}
 
 export async function POST(req: Request) {
   try {
-    const raw = process.env.CONF_EMPRESA_ID || '';
-    const empresa_id = raw.trim();
-    if (!UUID_RE.test(empresa_id)) {
-      return NextResponse.json({ ok: false, error: `CONF_EMPRESA_ID inválido` }, { status: 500 });
+    if (!EMPRESA) {
+      return NextResponse.json({ error: 'CONF_EMPRESA_ID ausente' }, { status: 400 });
     }
 
-    const body = await req.json();
-    const denominacao = String(body?.denominacao || '').trim();
-    const nif = String(body?.nif || '').trim() || null;
-    const email = String(body?.email || '').trim() || null;
-    const telefone = String(body?.telefone || '').trim() || null;
+    const body = await req.json().catch(() => ({}));
+    // Normalização leve
+    const payload = {
+      empresa_id: EMPRESA,
+      denominacao: nz(body.denominacao),
+      tipo_fornecimento: nz(body.tipo_fornecimento),
+      nif: nz(body.nif),
+      email: nz(body.email),
+      telefone: nz(body.telefone),
+      nome_contacto: nz(body.nome_contacto),
+      morada: nz(body.morada),
+      concelho: nz(body.concelho),
+      cod_postal: nz(body.cod_postal),
+      forma_pagamento: nz(body.forma_pagamento),
+      observacoes: nz(body.observacoes),
+      ativo: typeof body.ativo === 'boolean' ? body.ativo : true,
+      // codigo NÃO vai aqui; trigger gera F### automaticamente
+    };
 
-    if (!denominacao) return NextResponse.json({ ok: false, error: 'Denominação obrigatória' }, { status: 400 });
+    // Validações mínimas para não bater nas CHECK constraints
+    if (!payload.denominacao) {
+      return NextResponse.json({ error: 'Denominação é obrigatória' }, { status: 400 });
+    }
+    if (payload.nif && !/^\d{9}$/.test(payload.nif)) {
+      return NextResponse.json({ error: 'NIF inválido (esperado 9 dígitos)' }, { status: 400 });
+    }
+    if (payload.telefone && !/^\d{9}$/.test(payload.telefone)) {
+      return NextResponse.json({ error: 'Telefone inválido (esperado 9 dígitos)' }, { status: 400 });
+    }
+    if (payload.cod_postal && !/^\d{4}-\d{3}$/.test(payload.cod_postal)) {
+      return NextResponse.json({ error: 'Código postal inválido (formato XXXX-XXX)' }, { status: 400 });
+    }
 
     const supa = getServiceSupabase();
-    // código é gerado por trigger/seq no DB (já tens isso). Se não tiver, dá para gerar via RPC.
+
     const { data, error } = await supa
       .from('fornecedores')
-      .insert([{ empresa_id, denominacao, nif, email, telefone, ativo: true }])
-      .select('id')
+      .insert(payload)
+      .select('id, codigo')
       .single();
 
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
-    return NextResponse.json({ ok: true, id: data?.id });
+    return NextResponse.json({ ok: true, id: data?.id, codigo: data?.codigo });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'Erro inesperado' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Erro inesperado' }, { status: 500 });
   }
 }
