@@ -38,7 +38,7 @@ export async function POST() {
   try {
     const supa = getServiceSupabase();
 
-    const CSV_PATH = path.join(process.cwd(), 'app', 'data', 'fornecedores_oficial.csv');
+    const CSV_PATH = path.join(process.cwd(), 'app', 'data', 'fornecedores.csv');
     const buf = await readFile(CSV_PATH);
     const rows = parseCSV(buf.toString('utf8'));
 
