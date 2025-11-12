@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type Row = {
   id: string;
@@ -90,14 +90,14 @@ export default function FornecedoresPage() {
     }
   }
 
-  useEffect(() => { load(); }, []); // primeira carga
+  useEffect(() => { load(); }, []);
 
   return (
     <main style={{ padding: 18 }}>
       <h1 className="h1" style={{ marginBottom: 12 }}>Fornecedores</h1>
       <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>Lista oficial por empresa.</p>
 
-      {/* Pesquisa + Recarregar */}
+      {/* Pesquisa + Recarregar + Adicionar */}
       <div className="card" style={{ marginBottom: 12, display: 'grid', gap: 10, gridTemplateColumns: '1fr auto auto' }}>
         <input
           placeholder="Pesquisar por denominação, NIF, telefone, email…"
@@ -112,13 +112,12 @@ export default function FornecedoresPage() {
         <a className="btn btn-primary" href="/adm/fornecedores/new">Adicionar</a>
       </div>
 
-      {/* Criação rápida inline */}
+      {/* Criação rápida */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2">Criar rápido</h2>
         <form onSubmit={createQuick} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 160px 160px 160px auto' }}>
           <input
-            placeholder="Denominação"
-            required
+            placeholder="Denominação" required
             value={newForm.denominacao}
             onChange={e => setNewForm(f => ({ ...f, denominacao: e.target.value }))}
             style={{ padding: 10, border: '1px solid var(--border)', borderRadius: 10 }}
@@ -130,8 +129,7 @@ export default function FornecedoresPage() {
             style={{ padding: 10, border: '1px solid var(--border)', borderRadius: 10 }}
           />
           <input
-            placeholder="Email"
-            type="email"
+            placeholder="Email" type="email"
             value={newForm.email}
             onChange={e => setNewForm(f => ({ ...f, email: e.target.value }))}
             style={{ padding: 10, border: '1px solid var(--border)', borderRadius: 10 }}
@@ -152,7 +150,7 @@ export default function FornecedoresPage() {
       {/* Tabela */}
       <section className="card">
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: 8 }}>Código</th>
@@ -173,9 +171,32 @@ export default function FornecedoresPage() {
                   <td style={{ padding: 8 }}>{r.telefone || '—'}</td>
                   <td style={{ padding: 8 }}>{r.email || '—'}</td>
                   <td style={{ padding: 8 }}>{r.ativo ? 'Sim' : 'Não'}</td>
-                  <td style={{ padding: 8, textAlign: 'right' }}>
-                    <a className="btn btn-ghost" href={`/adm/fornecedores/${r.id}/edit`}>Editar</a>
-                    <button className="btn btn-ghost" style={{ marginLeft: 6 }} onClick={() => remove(r.id)}>
+                  <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <a
+                      className="btn"
+                      href={`/adm/fornecedores/${r.id}/edit`}
+                      style={{
+                        background: 'var(--brand-1)',
+                        color: 'var(--brand-1-contrast)',
+                        borderColor: 'transparent',
+                        height: 34,
+                        padding: '0 12px'
+                      }}
+                    >
+                      Editar
+                    </a>
+                    <button
+                      className="btn"
+                      onClick={() => remove(r.id)}
+                      style={{
+                        marginLeft: 8,
+                        background: 'transparent',
+                        color: 'var(--brand-1)',
+                        borderColor: 'var(--brand-2)',
+                        height: 34,
+                        padding: '0 12px'
+                      }}
+                    >
                       Eliminar
                     </button>
                   </td>
