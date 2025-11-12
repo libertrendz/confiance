@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-type Detail = {
+type FormaPagamento = 'À VISTA' | 'PARCELADO';
+
+type Fornecedor = {
   id: string;
   codigo: string | null;
-  denominacao: string | null;
+  denominacao: string;
   tipo_fornecimento: string | null;
   nif: string | null;
   email: string | null;
@@ -14,47 +17,81 @@ type Detail = {
   morada: string | null;
   concelho: string | null;
   cod_postal: string | null;
-  forma_pagamento: string | null;
+  forma_pagamento: FormaPagamento | null;
   observacoes: string | null;
-  ativo: boolean | null;
+  ativo: boolean;
 };
 
-export default function FornecedorEditPage({ params }: { params: { id: string } }) {
-  const id = params.id;
-  const [data, setData] = useState<Detail | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+export default function FornecedorEditPage() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const id = sp.get('id');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setErr(null);
-    try {
-      const res = await fetch(`/api/admin/fornecedores/detail?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
-      const j = await res.json();
-      if (!res.ok || !j?.ok) throw new Error(j?.error || 'Falha ao carregar');
-      setData(j.row);
-    } catch (e: any) {
-      setErr(e?.message || 'Falha ao carregar');
-    } finally {
-      setLoading(false);
-    }
+  const [form, setForm] = useState<Fornecedor | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!id) {
+        setErr('ID em falta.');
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/admin/fornecedores/detail?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error || 'Falha ao carregar');
+        const f: Fornecedor = j;
+        if (!alive) return;
+        setForm({
+          ...f,
+          forma_pagamento: (f.forma_pagamento?.toUpperCase() as FormaPagamento) || 'À VISTA',
+        });
+      } catch (e: any) {
+        setErr(e?.message || 'Falha ao carregar');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [id]);
+
+  function v<T extends keyof Fornecedor>(key: T, value: Fornecedor[T]) {
+    setForm(f => (f ? { ...f, [key]: value } : f));
   }
 
-  async function save(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form) return;
     setSaving(true);
     setErr(null);
     try {
       const res = await fetch('/api/admin/fornecedores/update', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          id: form.id,
+          denominacao: form.denominacao,
+          tipo_fornecimento: form.tipo_fornecimento,
+          nif: form.nif,
+          email: form.email,
+          telefone: form.telefone,
+          nome_contacto: form.nome_contacto,
+          morada: form.morada,
+          concelho: form.concelho,
+          cod_postal: form.cod_postal,
+          forma_pagamento: form.forma_pagamento, // será normalizado no endpoint
+          observacoes: form.observacoes,
+          ativo: form.ativo,
+        }),
       });
       const j = await res.json();
-      if (!res.ok || !j?.ok) throw new Error(j?.error || 'Falha ao guardar');
-      alert('Guardado.');
-      window.location.href = '/adm/fornecedores';
+      if (!res.ok) throw new Error(j?.error || 'Falha ao guardar');
+      // Redirect para a lista após sucesso
+      router.replace('/adm/fornecedores');
     } catch (e: any) {
       setErr(e?.message || 'Falha ao guardar');
     } finally {
@@ -62,89 +99,94 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
     }
   }
 
-  useEffect(() => { load(); }, [id]);
+  const input = { width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: 10 } as const;
+  const label = { display: 'block', marginBottom: 6, color: 'var(--muted)', fontSize: 12, fontWeight: 600 } as const;
 
   if (loading) return <main style={{ padding: 18 }}><p className="muted">A carregar…</p></main>;
-
-  if (!data) {
-    return (
-      <main style={{ padding: 18 }}>
-        <p style={{ color: 'crimson' }}>{err || 'Falha ao carregar'}</p>
-      </main>
-    );
-  }
+  if (err) return <main style={{ padding: 18 }}><p style={{ color: 'crimson' }}>{err}</p></main>;
+  if (!form) return <main style={{ padding: 18 }}><p style={{ color: 'crimson' }}>Fornecedor não encontrado.</p></main>;
 
   return (
     <main style={{ padding: 18 }}>
-      <h1 className="h1" style={{ marginBottom: 12 }}>Editar fornecedor</h1>
+      <h1 className="h1" style={{ marginBottom: 12 }}>Editar Fornecedor {form.codigo ? `· ${form.codigo}` : ''}</h1>
 
-      <form onSubmit={save} className="card" style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '160px 1fr 1fr' }}>
-          <Input label="Código" value={data.codigo || ''} onChange={v => setData(d => d ? { ...d, codigo: v } : d)} />
-          <Input label="Denominação" value={data.denominacao || ''} onChange={v => setData(d => d ? { ...d, denominacao: v } : d)} required />
-          <Input label="Tipo fornecimento" value={data.tipo_fornecimento || ''} onChange={v => setData(d => d ? { ...d, tipo_fornecimento: v } : d)} />
+      <form onSubmit={onSubmit} className="card" style={{ display: 'grid', gap: 12 }}>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={label}>Denominação *</label>
+            <input style={input} value={form.denominacao} onChange={e=>v('denominacao', e.target.value)} required />
+          </div>
+          <div>
+            <label style={label}>Tipo de fornecimento</label>
+            <input style={input} value={form.tipo_fornecimento ?? ''} onChange={e=>v('tipo_fornecimento', e.target.value)} />
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '160px 1fr 1fr' }}>
-          <Input label="NIF" value={data.nif || ''} onChange={v => setData(d => d ? { ...d, nif: v } : d)} />
-          <Input label="Email" type="email" value={data.email || ''} onChange={v => setData(d => d ? { ...d, email: v } : d)} />
-          <Input label="Telefone" value={data.telefone || ''} onChange={v => setData(d => d ? { ...d, telefone: v } : d)} />
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={label}>NIF (9 dígitos)</label>
+            <input style={input} value={form.nif ?? ''} onChange={e=>v('nif', e.target.value)} inputMode="numeric" />
+          </div>
+          <div>
+            <label style={label}>Telefone (9 dígitos)</label>
+            <input style={input} value={form.telefone ?? ''} onChange={e=>v('telefone', e.target.value)} inputMode="tel" />
+          </div>
+          <div>
+            <label style={label}>Email</label>
+            <input style={input} value={form.email ?? ''} onChange={e=>v('email', e.target.value)} type="email" />
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 160px' }}>
-          <Input label="Nome contacto" value={data.nome_contacto || ''} onChange={v => setData(d => d ? { ...d, nome_contacto: v } : d)} />
-          <Input label="Concelho" value={data.concelho || ''} onChange={v => setData(d => d ? { ...d, concelho: v } : d)} />
-          <Input label="Cód. Postal" value={data.cod_postal || ''} onChange={v => setData(d => d ? { ...d, cod_postal: v } : d)} />
+        <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={label}>Morada</label>
+            <input style={input} value={form.morada ?? ''} onChange={e=>v('morada', e.target.value)} />
+          </div>
+          <div>
+            <label style={label}>Concelho</label>
+            <input style={input} value={form.concelho ?? ''} onChange={e=>v('concelho', e.target.value)} />
+          </div>
+          <div>
+            <label style={label}>Código Postal (XXXX-XXX)</label>
+            <input style={input} value={form.cod_postal ?? ''} onChange={e=>v('cod_postal', e.target.value)} placeholder="0000-000" />
+          </div>
         </div>
 
-        <Input label="Morada" value={data.morada || ''} onChange={v => setData(d => d ? { ...d, morada: v } : d)} />
-
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
-          <Input label="Forma pagamento" value={data.forma_pagamento || ''} onChange={v => setData(d => d ? { ...d, forma_pagamento: v } : d)} />
-          <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={!!data.ativo}
-              onChange={e => setData(d => d ? { ...d, ativo: e.target.checked } : d)}
-            />
-            Ativo
-          </label>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={label}>Forma de pagamento</label>
+            <select
+              style={input as any}
+              value={form.forma_pagamento ?? 'À VISTA'}
+              onChange={e=>v('forma_pagamento', e.target.value as FormaPagamento)}
+            >
+              <option value="À VISTA">À VISTA</option>
+              <option value="PARCELADO">PARCELADO</option>
+            </select>
+          </div>
+          <div>
+            <label style={label}>Ativo</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input id="ativo" type="checkbox" checked={!!form.ativo} onChange={e=>v('ativo', e.target.checked)} />
+              <label htmlFor="ativo">Fornecedor ativo</label>
+            </div>
+          </div>
         </div>
 
         <div>
-          <label className="muted">Observações</label>
-          <textarea
-            value={data.observacoes || ''}
-            onChange={e => setData(d => d ? { ...d, observacoes: e.target.value } : d)}
-            style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: 10, minHeight: 100 }}
-          />
+          <label style={label}>Observações</label>
+          <textarea style={{ ...input, minHeight: 90 }} value={form.observacoes ?? ''} onChange={e=>v('observacoes', e.target.value)} />
         </div>
 
         {err && <p style={{ color: 'crimson' }}>{err}</p>}
-        <div style={{ display: 'flex', gap: 8 }}>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <a className="btn btn-ghost" href="/adm/fornecedores">Cancelar</a>
           <button className="btn btn-primary" disabled={saving} type="submit">
             {saving ? 'A guardar…' : 'Guardar'}
           </button>
-          <a className="btn btn-ghost" href="/adm/fornecedores">Cancelar</a>
         </div>
       </form>
     </main>
-  );
-}
-
-function Input({
-  label, value, onChange, type = 'text', required = false,
-}: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean }) {
-  return (
-    <div>
-      <label className="muted">{label}{required ? ' *' : ''}</label>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: 10 }}
-      />
-    </div>
   );
 }
