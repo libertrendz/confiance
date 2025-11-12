@@ -6,7 +6,7 @@ import { getServiceSupabase } from '@/lib/supabaseServer';
 
 type Row = {
   id?: string | null;
-  empresa_id?: string | null;         // será ignorado
+  empresa_id?: string | null;         // ignorado, forçamos ENV
   nif?: string | null;
   email?: string | null;
   telefone?: string | null;
@@ -29,65 +29,56 @@ function clean(s: any): string | null {
   if (s === undefined || s === null) return null;
   let v = String(s).trim();
   if (!v) return null;
-  // remove aspas envolventes comuns
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1).trim();
-  }
-  // remove aspas “inteligentes”
+  // tira aspas comuns ou “inteligentes”
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1,-1).trim();
   v = v.replace(/^[“”‘’]|[“”‘’]$/g, '').trim();
-  if (!v) return null;
-  return v;
+  return v || null;
 }
 
 export async function POST() {
   try {
     const empresaEnv = clean(process.env.CONF_EMPRESA_ID);
     if (!empresaEnv || !UUID_RE.test(empresaEnv)) {
-      return NextResponse.json({ error: 'CONF_EMPRESA_ID inválido ou ausente (precisa ser UUID sem aspas).' }, { status: 400 });
+      return NextResponse.json({ error: 'CONF_EMPRESA_ID inválido (UUID sem aspas).' }, { status: 400 });
     }
 
-    // Lê o CSV “embarcado” no repositório
+    // 2.1) Seta JWT na sessão para satisfazer triggers/RLS que consultam request.jwt.claims
+    const supa = getServiceSupabase();
+    const { error: jwtErr } = await supa.rpc('api_set_jwt', { p_empresa_id: empresaEnv });
+    if (jwtErr) {
+      return NextResponse.json({ error: `Falha ao setar JWT de sessão: ${jwtErr.message}` }, { status: 500 });
+    }
+
+    // 2.2) Lê o CSV versionado
     const csvPath = join(process.cwd(), 'app', 'api', 'admin', 'fornecedores', 'seed', 'fornecedores.csv');
     const csvText = readFileSync(csvPath, 'utf8');
 
-    // Parser CSV simples (aceita vírgula como separador; cabeçalho obrigatório)
     const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (!lines.length) {
-      return NextResponse.json({ error: 'CSV vazio.' }, { status: 400 });
-    }
+    if (!lines.length) return NextResponse.json({ error: 'CSV vazio.' }, { status: 400 });
 
     const header = lines[0].split(',').map(h => clean(h)?.toLowerCase() || '');
     const rows: Row[] = [];
     for (let i = 1; i < lines.length; i++) {
-      const raw = lines[i];
-      // split básico; se teu CSV tiver vírgulas dentro de aspas, depois melhoramos com um parser, por ora resolvemos o bug crítico
-      const cols = raw.split(',');
+      const cols = lines[i].split(',');
       const obj: any = {};
-      for (let c = 0; c < header.length; c++) {
-        const key = header[c] || `col_${c}`;
-        obj[key] = clean(cols[c]);
-      }
+      for (let c = 0; c < header.length; c++) obj[header[c] || `col_${c}`] = clean(cols[c]);
       rows.push(obj);
     }
 
-    // Normaliza para upsert: ignora empresa_id do CSV, força o do ENV, limpa boolean e datas
     const payload = rows.map(r => {
-      // ativo: true/false
       let ativo: boolean | null = null;
       const a = (r.ativo || '')?.toLowerCase();
-      if (a === 'true' || a === '1' || a === 't' || a === 'sim' || a === 'yes') ativo = true;
-      else if (a === 'false' || a === '0' || a === 'f' || a === 'nao' || a === 'não' || a === 'no') ativo = false;
+      if (['true','1','t','sim','yes'].includes(a)) ativo = true;
+      else if (['false','0','f','nao','não','no'].includes(a)) ativo = false;
 
       return {
-        // id e empresa_id da linha são ignorados; id só se for UUID válido
         id: r.id && UUID_RE.test(r.id) ? r.id : null,
-        empresa_id: empresaEnv,
+        empresa_id: empresaEnv,                 // força ENV
         nif: r.nif || null,
         email: r.email || null,
         telefone: r.telefone || null,
         morada: r.morada || null,
         ativo: ativo ?? true,
-        // created_at / updated_at: deixamos para defaults/trigger; só passa se tiver valor plausível
         created_at: null,
         updated_at: null,
         denominacao: r.denominacao || null,
@@ -98,30 +89,23 @@ export async function POST() {
         codigo: r.codigo || null,
         forma_pagamento: r.forma_pagamento || null,
       };
-    });
+    }).filter(p => p.denominacao || p.nif);
 
-    // Remove linhas completamente vazias (denominacao e nif nulos)
-    const toUpsert = payload.filter(p => (p.denominacao && p.denominacao.length > 0) || (p.nif && p.nif.length > 0));
-    if (!toUpsert.length) {
-      return NextResponse.json({ error: 'Nenhuma linha útil após normalização.' }, { status: 400 });
-    }
+    if (!payload.length) return NextResponse.json({ error: 'Nenhuma linha útil após normalização.' }, { status: 400 });
 
-    const supa = getServiceSupabase();
-
-    // Primeiro, UPDATE quando já existir por (empresa_id, nif) OU fallback (empresa_id, denominacao)
-    // Fase 1: update por NIF
-    const byNif = toUpsert.filter(x => x.nif);
+    // 2.3) Upsert com chaves certas
+    // Por NIF
+    const byNif = payload.filter(x => x.nif);
     if (byNif.length) {
       const { error: u1 } = await supa
         .from('fornecedores')
         .upsert(byNif, { onConflict: 'empresa_id,nif', ignoreDuplicates: false })
         .select('id')
-        .limit(1); // força execução
+        .limit(1);
       if (u1) throw u1;
     }
-
-    // Fase 2: update por denominacao quando NIF faltar
-    const byDen = toUpsert.filter(x => !x.nif && x.denominacao);
+    // Fallback por denominação quando não há NIF
+    const byDen = payload.filter(x => !x.nif && x.denominacao);
     if (byDen.length) {
       const { error: u2 } = await supa
         .from('fornecedores')
@@ -131,7 +115,7 @@ export async function POST() {
       if (u2) throw u2;
     }
 
-    return NextResponse.json({ ok: true, total: toUpsert.length });
+    return NextResponse.json({ ok: true, total: payload.length });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Seed falhou' }, { status: 500 });
   }
