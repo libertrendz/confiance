@@ -1,14 +1,23 @@
-// app/api/admin/fornecedores/update/route.ts
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
+
+const UUID_RE = /^[0-9a-f-]{36}$/i;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const id = String(body?.id || '').trim();
-    if (!id) return NextResponse.json({ error: 'ID em falta' }, { status: 400 });
+    if (!UUID_RE.test(id)) return NextResponse.json({ ok: false, error: 'ID inválido' }, { status: 400 });
 
-    const payload = {
+    const raw = process.env.CONF_EMPRESA_ID || '';
+    const empresa_id = raw.trim();
+    if (!UUID_RE.test(empresa_id)) {
+      return NextResponse.json({ ok: false, error: `CONF_EMPRESA_ID inválido` }, { status: 500 });
+    }
+
+    // Campos permitidos
+    const payload: any = {
+      codigo: body?.codigo ?? null,
       denominacao: body?.denominacao ?? null,
       tipo_fornecimento: body?.tipo_fornecimento ?? null,
       nif: body?.nif ?? null,
@@ -20,23 +29,20 @@ export async function POST(req: Request) {
       cod_postal: body?.cod_postal ?? null,
       forma_pagamento: body?.forma_pagamento ?? null,
       observacoes: body?.observacoes ?? null,
-      ativo: typeof body?.ativo === 'boolean' ? body.ativo : true,
-      updated_at: new Date().toISOString(),
+      ativo: body?.ativo ?? true,
     };
 
     const supa = getServiceSupabase();
-    const empresa_id = process.env.CONF_EMPRESA_ID!;
-    if (!empresa_id) return NextResponse.json({ error: 'Empresa não configurada' }, { status: 500 });
-
     const { error } = await supa
       .from('fornecedores')
       .update(payload)
-      .eq('id', id)
-      .eq('empresa_id', empresa_id);
+      .eq('empresa_id', empresa_id)
+      .eq('id', id);
 
-    if (error) throw error;
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Falha ao atualizar' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || 'Erro inesperado' }, { status: 500 });
   }
 }
