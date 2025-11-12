@@ -2,18 +2,23 @@
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET() {
   try {
-    const empresa_id = process.env.CONF_EMPRESA_ID || null;
-    if (!empresa_id) {
-      return NextResponse.json({ ok: false, error: 'CONF_EMPRESA_ID ausente' }, { status: 500 });
+    const raw = process.env.CONF_EMPRESA_ID || '';
+    const empresa_id = raw.trim();
+
+    if (!UUID_RE.test(empresa_id)) {
+      return NextResponse.json(
+        { ok: false, error: `CONF_EMPRESA_ID inválido: "${raw}"` },
+        { status: 500 }
+      );
     }
 
     const supa = getServiceSupabase();
-
-    // Service role ignora RLS. Filtramos por empresa_id no servidor, sem depender de JWT.
     const { data, error } = await supa
-      .from('fornecedores')
+      .from('fornecedores') // TABELA direta, não usa view nenhuma
       .select('id,codigo,denominacao,nif,telefone,email,ativo')
       .eq('empresa_id', empresa_id)
       .order('codigo', { ascending: true });
