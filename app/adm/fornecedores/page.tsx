@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 
 type Row = {
@@ -9,24 +10,43 @@ type Row = {
   email: string | null;
   telefone: string | null;
   ativo: boolean | null;
+  updated_at: string | null;
 };
 
-export default function FornecedoresPage() {
-  const [q, setQ] = useState('');
+export default function FornecedoresListPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
+    setErr(null);
     try {
-      const res = await fetch(`/api/admin/fornecedores/list?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+      const res = await fetch('/api/admin/fornecedores/list', { cache: 'no-store' });
       const j = await res.json();
-      if (j.error) throw new Error(j.error);
-      setRows(j.rows || []);
-    } catch (e:any) {
-      alert(e.message || 'Falha ao listar');
+      if (!res.ok || j?.error) throw new Error(j?.error || 'Falha ao listar');
+      setRows(j.rows as Row[]);
+    } catch (e: any) {
+      setErr(e?.message ?? 'Falha ao listar');
+      setRows([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function remover(id: string) {
+    if (!confirm('Eliminar fornecedor?')) return;
+    try {
+      const res = await fetch('/api/admin/fornecedores/delete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const j = await res.json();
+      if (!res.ok || j?.error) throw new Error(j?.error || 'Falha ao eliminar');
+      await load();
+    } catch (e: any) {
+      alert(e?.message ?? 'Falha ao eliminar');
     }
   }
 
@@ -34,51 +54,49 @@ export default function FornecedoresPage() {
 
   return (
     <main style={{ padding: 18 }}>
-      <h1 className="h1" style={{ marginBottom: 12 }}>Fornecedores</h1>
-
-      <section className="card" style={{ marginBottom: 12 }}>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <input
-            placeholder="Pesquisar por nome"
-            value={q}
-            onChange={e=>setQ(e.target.value)}
-            style={{ flex:1, padding:10, border:'1px solid var(--border)', borderRadius:10 }}
-          />
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h1 className="h1">Fornecedores</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost" onClick={load} disabled={loading}>
-            {loading ? 'A carregar…' : 'Pesquisar'}
+            {loading ? 'A carregar…' : 'Recarregar'}
           </button>
-          <a className="btn btn-primary" href="/adm/fornecedores/new">Novo fornecedor</a>
+          {/* Quando houver criação, aponta para /adm/fornecedores/new */}
+          {/* <a className="btn btn-primary" href="/adm/fornecedores/new">Novo</a> */}
         </div>
-      </section>
+      </header>
 
       <section className="card">
-        <div style={{ overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+        {err && <p style={{ color: 'crimson', marginBottom: 8 }}>{err}</p>}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ textAlign:'left', borderBottom:'1px solid var(--border)' }}>
-                <th style={{ padding:8 }}>Código</th>
-                <th style={{ padding:8 }}>Denominação</th>
-                <th style={{ padding:8 }}>NIF</th>
-                <th style={{ padding:8 }}>Email</th>
-                <th style={{ padding:8 }}>Telefone</th>
-                <th style={{ padding:8, textAlign:'right' }}>Ações</th>
+              <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                <th style={th}>Código</th>
+                <th style={th}>Denominação</th>
+                <th style={th}>NIF</th>
+                <th style={th}>Telefone</th>
+                <th style={th}>Email</th>
+                <th style={th}>Ativo</th>
+                <th style={{ ...th, textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(r=>(
-                <tr key={r.id} style={{ borderTop:'1px solid var(--border)' }}>
-                  <td style={{ padding:8 }}>{r.codigo || '—'}</td>
-                  <td style={{ padding:8 }}>{r.denominacao || '—'}</td>
-                  <td style={{ padding:8 }}>{r.nif || '—'}</td>
-                  <td style={{ padding:8 }}>{r.email || '—'}</td>
-                  <td style={{ padding:8 }}>{r.telefone || '—'}</td>
-                  <td style={{ padding:8, textAlign:'right' }}>
-                    <a className="btn btn-ghost" href={`/adm/fornecedores/${r.id}`}>Editar</a>
+              {rows.map(r => (
+                <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={td}>{r.codigo ?? '—'}</td>
+                  <td style={td}>{r.denominacao ?? '—'}</td>
+                  <td style={td}>{r.nif ?? '—'}</td>
+                  <td style={td}>{r.telefone ?? '—'}</td>
+                  <td style={td}>{r.email ?? '—'}</td>
+                  <td style={td}>{(r.ativo ?? true) ? 'Sim' : 'Não'}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    <a className="btn btn-ghost" href={`/adm/fornecedores/${r.id}`} aria-label="Editar">Editar</a>
+                    <button className="btn btn-ghost" style={{ marginLeft: 6 }} onClick={() => remover(r.id)} aria-label="Eliminar">Eliminar</button>
                   </td>
                 </tr>
               ))}
               {!rows.length && !loading && (
-                <tr><td colSpan={6} style={{ padding:10, color:'#667085' }}>Sem registos.</td></tr>
+                <tr><td colSpan={7} style={{ padding: 12 }} className="muted">Sem registos.</td></tr>
               )}
             </tbody>
           </table>
@@ -87,3 +105,6 @@ export default function FornecedoresPage() {
     </main>
   );
 }
+
+const th: React.CSSProperties = { padding: '8px' };
+const td: React.CSSProperties = { padding: '8px' };
