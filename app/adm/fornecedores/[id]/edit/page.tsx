@@ -3,8 +3,8 @@
 
 import { useEffect, useState } from 'react';
 
-export default function FornecedorEditPage({ searchParams }: any) {
-  const id = searchParams?.id || null;
+export default function FornecedorEditPage({ params }: { params: { id: string } }) {
+  const id = params?.id;
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -14,7 +14,12 @@ export default function FornecedorEditPage({ searchParams }: any) {
     let alive = true;
     (async () => {
       try {
+        if (!id) throw new Error('ID em falta');
         const res = await fetch(`/api/admin/fornecedores/get?id=${encodeURIComponent(id)}`, { cache:'no-store' });
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          throw new Error(`Resposta inválida do servidor (${res.status})`);
+        }
         const j = await res.json();
         if (!res.ok) throw new Error(j?.error || 'Falha ao carregar');
         if (alive) setForm(j);
