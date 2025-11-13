@@ -1,91 +1,144 @@
-// app/adm/layout.tsx
-'use client';
+/* ===== CONFIANCE — Design Tokens (rev) ===== */
+:root{
+  /* Branding */
+  --brand-1:#0e3258;        /* azul oficial */
+  --brand-1-contrast:#ffffff;
+  --brand-2:#F2B705;        /* dourado */
+  --brand-2-contrast:#0b0b0b;
 
-import { useEffect, useMemo, useState } from 'react';
-import getBrowserSupabase from '@/lib/supa';
+  /* Cores de UI */
+  --bg:#f5f7fb;
+  --surface:#ffffff;
+  --text:#0b1220;
+  --muted:#667085;
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supa = useMemo(() => getBrowserSupabase(), []);
-  const [email, setEmail] = useState<string | null>(null);
+  --border:#e5e7eb;
+  --shadow:0 2px 10px rgba(0,0,0,.05);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data } = await supa.auth.getUser();
-      if (!alive) return;
-      setEmail(data.user?.email ?? null);
-    })();
-    return () => { alive = false; };
-  }, [supa]);
+  /* Radius e spacing */
+  --radius:12px;
+  --radius-sm:10px;
 
-  async function sair() {
-    try { await supa.auth.signOut(); } catch {}
-    window.location.replace('/login');
-  }
+  --space-1:8px;
+  --space-2:12px;
+  --space-3:16px;
+  --space-4:20px;
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: '100vh' }}>
-      {/* SIDEBAR */}
-      <aside
-        style={{
-          position: 'sticky', top: 0, alignSelf: 'start',
-          display: 'flex', flexDirection: 'column',
-          height: '100vh',
-          background: '#0e3258', color: '#fff',
-          padding: 16, gap: 8,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <img src="/logo-confiance.png" alt="CONFIANCE" style={{ height: 42 }} />
-        </div>
-
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <a href="/adm/dashboard" style={linkStyle}>Dashboard</a>
-          <a href="/adm/utilizadores" style={linkStyle}>Utilizadores</a>
-          <a href="/adm/ponto" style={linkStyle}>Ponto (ADM)</a>
-          <a href="/adm/fornecedores" style={linkStyle}>Fornecedores</a>
-          <a href="/adm/clientes" style={linkStyle}>Clientes</a>
-          <a href="/adm/orcamentos" style={linkStyle}>Orçamentos & Contratos</a>
-          <a href="/adm/financeiro" style={linkStyle}>Financeiro</a>
-          <a href="/adm/ativos" style={linkStyle}>Gestão de Ativos</a>
-          <a href="/adm/configuracoes" style={linkStyle}>Configurações</a>
-        </nav>
-
-        <div style={{ flex: 1 }} />
-
-        {/* rodapé sidebar */}
-        <div style={{ borderTop: '1px solid rgba(255,255,255,.15)', paddingTop: 12 }}>
-          <div style={{ fontSize: 12, opacity: .8, marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {email ?? '—'}
-          </div>
-          <button
-            onClick={sair}
-            style={{
-              width: '100%',
-              height: 40,
-              background: '#FFD24D',
-              color: '#0e3258',
-              borderRadius: 10,
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Sair
-          </button>
-        </div>
-      </aside>
-
-      {/* CONTEÚDO */}
-      <div style={{ padding: 16 }}>{children}</div>
-    </div>
-  );
+  /* Degradê do splash (mesmo tom do azul oficial) */
+  --splash-grad: radial-gradient(1200px 800px at 50% 30%, #18456f 0%, #0e3258 40%, #0b2745 100%);
 }
 
-const linkStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  color: '#fff',
-  textDecoration: 'none',
-  opacity: .95,
-};
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+  color:var(--text);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  font-size: 15px; /* -1 ponto em tudo */
+}
+
+a{color:inherit;text-decoration:none}
+main{padding:var(--space-3)}
+
+/* ---------- Topbar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:var(--space-3);
+  background:var(--surface); border-bottom:1px solid var(--border);
+}
+
+.topbar .brand{
+  display:flex; align-items:center; gap:12px;
+  font-weight:800; min-width:0;
+}
+.brand .brand-logo{
+  height:72px; width:auto; display:block; object-fit:contain; /* ~60% maior que o antigo 45px */
+}
+.brand .brand-name{
+  font-size:22px; font-weight:900; letter-spacing:.5px; color:var(--brand-1);
+}
+
+.topbar .user{ display:flex; align-items:center; gap:10px; min-width:0; margin-left:auto; }
+.topbar .user-email{
+  max-width:48vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--muted); font-size:13px; font-weight:600;
+}
+.topbar .pill{
+  font-size:11px; font-weight:800;
+  background:#EEF3FF; color:var(--brand-1);
+  padding:6px 10px; border-radius:999px; border:1px solid #D7E3FF;
+  white-space:nowrap;
+}
+.topbar .btn{ height:36px; padding:0 12px; }
+
+/* Mobile */
+@media (max-width: 560px){
+  .topbar{ flex-wrap:wrap; row-gap:8px; }
+  .brand .brand-logo{ height:58px; }
+  .brand .brand-name{ font-size:20px; }
+  .topbar .user{ width:100%; justify-content:space-between; }
+  .topbar .user-email{ max-width: calc(100% - 140px); }
+}
+
+/* ---------- Botões ---------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  height:36px; padding:0 12px; border-radius:var(--radius-sm);
+  border:1px solid transparent; background:var(--surface); color:var(--text);
+  cursor:pointer; transition:filter .15s ease, background .15s ease, border-color .15s ease;
+  font-size:14px;
+}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-primary{background:var(--brand-1);color:var(--brand-1-contrast)}
+.btn-primary:hover{filter:brightness(1.05)}
+.btn-accent{background:var(--brand-2);color:var(--brand-2-contrast)}
+.btn-ghost{background:transparent;border-color:var(--border)}
+.btn-ghost:hover{background:#f1f5f9}
+
+/* ---------- Cards e grid ---------- */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:var(--space-3); box-shadow:var(--shadow);
+  transition:transform .06s ease, box-shadow .06s ease, border-color .06s ease;
+}
+.card:hover{ transform:translateY(-1px); border-color:#d8dde4 }
+.grid{ display:grid; gap:var(--space-3) }
+@media (min-width:980px){
+  .grid.cols-2{ grid-template-columns:1fr 1fr; max-width:960px; margin:0 auto }
+}
+.h1{ font-size:21px; font-weight:800 }
+.h2{ font-size:15px; font-weight:700 }
+.muted{ color:var(--muted) }
+
+/* ---------- Splash ---------- */
+.splash{
+  position:fixed; inset:0;
+  background: var(--splash-grad);
+  display:flex; align-items:center; justify-content:center;
+  z-index: 9999;
+  animation: splashIn 1.2s ease forwards;
+}
+.splashLogo{
+  width:300px; max-width: 76vw; height: auto;
+  filter: drop-shadow(0 10px 30px rgba(0,0,0,.3));
+  animation: popIn 1.6s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.splash.splash-leave{ animation: splashOut .7s ease forwards; }
+
+@keyframes popIn{
+  0%{ transform: scale(.85); opacity: 0; }
+  40%{ transform: scale(1.05); opacity: 1; }
+  100%{ transform: scale(1.0); opacity: 1; }
+}
+@keyframes splashIn{
+  0%{ opacity: 0; }
+  100%{ opacity: 1; }
+}
+@keyframes splashOut{
+  0%{ opacity: 1; }
+  100%{ opacity: 0; visibility: hidden; }
+}
