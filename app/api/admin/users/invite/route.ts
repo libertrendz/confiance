@@ -9,10 +9,15 @@ type Papel = 'admin' | 'gestor' | 'externo';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const email = String(body?.email || '').trim().toLowerCase();
-    const nome = String(body?.nome || '').trim() || null;
-    const papel: Papel = (body?.papel || 'externo') as Papel;
+    const body = await req.json().catch(() => ({} as any));
+
+    const rawEmail = (body as any)?.email ?? '';
+    const email = String(rawEmail).trim().toLowerCase();
+
+    const rawNome = (body as any)?.nome ?? '';
+    const nome = String(rawNome).trim() || null;
+
+    const papel = String((body as any)?.papel || 'externo') as Papel;
 
     if (!email) {
       return NextResponse.json({ error: 'Email obrigatório' }, { status: 400 });
@@ -25,11 +30,10 @@ export async function POST(req: Request) {
     const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
 
     // 1) Envia convite; se já existir, segue o baile
-    const { data: invited, error: invErr } =
-      await supa.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
-        data: { app_role: papel, nome, nome_exibicao: nome },
-      });
+    const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { app_role: papel, nome, nome_exibicao: nome },
+    });
 
     if (invErr && !invErr.message?.includes('already registered')) {
       return NextResponse.json(
@@ -38,47 +42,44 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Pega o ID do user (se já existia, o invite não retorna; buscamos)
-    let userId = invited?.user?.id || null;
+    // 2) Tenta obter o user_id
+    let userId: string | null = invited?.user?.id ?? null;
 
     if (!userId) {
-      const luRes = await supa.auth.admin.listUsers({ page: 1, perPage: 1000 });
-
-      if (luRes.error) {
+      const { data: lu, error: le } = await supa.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+      if (le) {
         return NextResponse.json(
-          { error: `Lookup falhou: ${luRes.error.message}` },
+          { error: `Lookup falhou: ${le.message}` },
           { status: 400 },
         );
       }
 
-      // Forço any aqui para calar o TS, mantendo a mesma lógica
-      const list: any[] = ((luRes.data as any)?.users ?? []) as any[];
-      const found = list.find(
-        (u) =>
-          typeof u.email === 'string' &&
-          u.email.toLowerCase() === email,
+      // TS aqui vira neve, então tratamos tudo como any
+      const users = (lu as any)?.users as any[] | undefined;
+      const found = users?.find(
+        (u: any) =>
+          typeof u?.email === 'string' && u.email.toLowerCase() === email,
       );
-      userId = found?.id || null;
+      userId = found?.id ?? null;
     }
 
     if (!userId) {
       // convite enviado mas sem id — aceitável
       return NextResponse.json(
-        {
-          ok: true,
-          note: 'Convite enviado; user_id ainda indisponível.',
-        },
+        { ok: true, note: 'Convite enviado; user_id ainda indisponível.' },
         { status: 202 },
       );
     }
 
-    // 3) Upsert em profiles com empresa default; evita violação de FK e RLS
+    // 3) Upsert em profiles (empresa_id vem pelos defaults do DB)
     const payload = {
       user_id: userId,
       papel,
       nome,
       nome_exibicao: nome,
-      // empresa_id vem por DEFAULT (get_default_empresa_id), não força aqui
     };
 
     const { error: upErr } = await supa
