@@ -1,67 +1,70 @@
+// app/api/admin/fornecedores/create/route.ts
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
-const EMPRESA = process.env.CONF_EMPRESA_ID!;
-const ALLOWED_FP = new Set(['A VISTA','PARCELADO']);
+type Body = {
+  denominacao: string;
+  nif?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  ativo?: boolean | null;
 
-function nz(v: any) {
-  const s = (v ?? '').toString().trim();
-  return s.length ? s : null;
-}
-function normFP(s: string | null): string | null {
-  if (!s) return null;
-  const up = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
-  if (up.includes('PARCEL')) return 'PARCELADO';
-  if (up.includes('VISTA'))  return 'A VISTA';
+  tipo_fornecimento?: string | null;
+  nome_contacto?: string | null;
+  morada?: string | null;
+  concelho?: string | null;
+  cod_postal?: string | null;
+  forma_pagamento?: string | null; // receber livre, normalizamos
+  observacoes?: string | null;
+};
+
+function normalizeFP(x?: string | null) {
+  if (!x) return null;
+  const u = x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  if (u.includes('PARCEL')) return 'PARCELADO';
+  if (u.includes('VISTA'))  return 'A VISTA';
   return null;
 }
 
 export async function POST(req: Request) {
   try {
-    if (!EMPRESA) return NextResponse.json({ error: 'CONF_EMPRESA_ID ausente' }, { status: 400 });
-    const b = await req.json().catch(() => ({}));
-
-    const denominacao = nz(b.denominacao);
-    if (!denominacao) return NextResponse.json({ error: 'Denominação é obrigatória' }, { status: 400 });
-
-    const payload: Record<string, any> = {
-      empresa_id: EMPRESA,
-      denominacao,
-      tipo_fornecimento: nz(b.tipo_fornecimento),
-      nif: nz(b.nif),
-      email: nz(b.email),
-      telefone: nz(b.telefone),
-      nome_contacto: nz(b.nome_contacto),
-      morada: nz(b.morada),
-      concelho: nz(b.concelho),
-      cod_postal: nz(b.cod_postal),
-      forma_pagamento: normFP(nz(b.forma_pagamento)),
-      observacoes: nz(b.observacoes),
-      ativo: typeof b.ativo === 'boolean' ? b.ativo : true,
-    };
-
-    if (payload.nif && !/^\d{9}$/.test(payload.nif))       return NextResponse.json({ error: 'NIF inválido (9 dígitos)' }, { status: 400 });
-    if (payload.telefone && !/^\d{9}$/.test(payload.telefone)) return NextResponse.json({ error: 'Telefone inválido (9 dígitos)' }, { status: 400 });
-    if (payload.cod_postal && !/^\d{4}-\d{3}$/.test(payload.cod_postal)) return NextResponse.json({ error: 'Código postal inválido (XXXX-XXX)' }, { status: 400 });
-    if (payload.forma_pagamento && !ALLOWED_FP.has(payload.forma_pagamento)) payload.forma_pagamento = 'A VISTA';
-
     const supa = getServiceSupabase();
-
-    // cria linha principal
-    const { data, error } = await supa.from('fornecedores').insert(payload).select('id,codigo').single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-    // se não veio código do trigger, gera Fxxx incremental
-    if (!data?.codigo) {
-      const { data: seqd } = await supa.rpc('forn_proximo_codigo'); // se tens a RPC; senão, remove esse bloco
-      const codigo = seqd || null;
-      if (codigo) {
-        await supa.from('fornecedores').update({ codigo }).eq('id', data.id);
-      }
+    const empresa_id = process.env.CONF_EMPRESA_ID || null;
+    if (!empresa_id) {
+      return NextResponse.json({ error: 'CONF_EMPRESA_ID ausente' }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true, id: data?.id });
+    const body = (await req.json()) as Body;
+    if (!body?.denominacao?.trim()) {
+      return NextResponse.json({ error: 'Denominação obrigatória' }, { status: 400 });
+    }
+
+    const payload = {
+      empresa_id,
+      codigo: null, // DB/trigger cuida (F001, F002…)
+      denominacao: body.denominacao.trim(),
+      nif: body.nif?.trim() || null,
+      email: body.email?.trim() || null,
+      telefone: body.telefone?.trim() || null,
+      ativo: body.ativo ?? true,
+
+      tipo_fornecimento: body.tipo_fornecimento?.trim() || null,
+      nome_contacto: body.nome_contacto?.trim() || null,
+      morada: body.morada?.trim() || null,
+      concelho: body.concelho?.trim() || null,
+      cod_postal: body.cod_postal?.trim() || null,
+      forma_pagamento: normalizeFP(body.forma_pagamento),
+      observacoes: body.observacoes?.trim() || null,
+    };
+
+    const { data, error } = await supa
+      .from('fornecedores')
+      .insert(payload)
+      .select('id, codigo');
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, id: data?.[0]?.id, codigo: data?.[0]?.codigo ?? null });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erro inesperado' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Falha ao criar' }, { status: 500 });
   }
 }
