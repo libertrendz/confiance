@@ -1,54 +1,23 @@
+// app/adm/fornecedores/[id]/edit/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 
-type FormaPagamento = 'A VISTA' | 'PARCELADO';
-
-type Fornecedor = {
-  id: string;
-  codigo: string | null;
-  denominacao: string;
-  tipo_fornecimento: string | null;
-  nif: string | null;
-  email: string | null;
-  telefone: string | null;
-  nome_contacto: string | null;
-  morada: string | null;
-  concelho: string | null;
-  cod_postal: string | null;
-  forma_pagamento: FormaPagamento | null;
-  observacoes: string | null;
-  ativo: boolean;
-};
-
-const INPUT: React.CSSProperties = { width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 };
-const LABEL: React.CSSProperties = { display:'block', marginBottom:6, color:'var(--muted)', fontSize:12, fontWeight:600 };
-
-export default function FornecedorEditPage() {
-  const router = useRouter();
-  const sp = useSearchParams();
-  const id = sp.get('id');
-
+export default function FornecedorEditPage({ searchParams }: any) {
+  const id = searchParams?.id || null;
+  const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [form, setForm] = useState<Fornecedor | null>(null);
+  const [err, setErr] = useState<string|null>(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!id) { setErr('ID em falta.'); setLoading(false); return; }
       try {
-        const res = await fetch(`/api/admin/fornecedores/detail?id=${encodeURIComponent(id)}`, { cache:'no-store' });
+        const res = await fetch(`/api/admin/fornecedores/get?id=${encodeURIComponent(id)}`, { cache:'no-store' });
         const j = await res.json();
         if (!res.ok) throw new Error(j?.error || 'Falha ao carregar');
-        const f = j as Fornecedor;
-        if (!alive) return;
-        setForm({
-          ...f,
-          forma_pagamento: (f.forma_pagamento === 'PARCELADO' ? 'PARCELADO' : 'A VISTA'),
-        });
+        if (alive) setForm(j);
       } catch (e:any) {
         setErr(e?.message || 'Falha ao carregar');
       } finally {
@@ -58,37 +27,19 @@ export default function FornecedorEditPage() {
     return () => { alive = false; };
   }, [id]);
 
-  function v<T extends keyof Fornecedor>(k:T, val:Fornecedor[T]) {
-    setForm(f => f ? { ...f, [k]: val } : f);
-  }
-
-  async function onSubmit(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
     setSaving(true); setErr(null);
     try {
       const res = await fetch('/api/admin/fornecedores/update', {
-        method:'POST',
-        headers:{ 'content-type':'application/json' },
-        body: JSON.stringify({
-          id: form.id,
-          denominacao: form.denominacao,
-          tipo_fornecimento: form.tipo_fornecimento,
-          nif: form.nif,
-          email: form.email,
-          telefone: form.telefone,
-          nome_contacto: form.nome_contacto,
-          morada: form.morada,
-          concelho: form.concelho,
-          cod_postal: form.cod_postal,
-          forma_pagamento: form.forma_pagamento, // 'A VISTA' | 'PARCELADO'
-          observacoes: form.observacoes,
-          ativo: form.ativo,
-        }),
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...form, id }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Falha ao guardar');
-      router.replace('/adm/fornecedores'); // volta à lista
+      alert('Guardado.');
+      window.location.replace('/adm/fornecedores');
     } catch (e:any) {
       setErr(e?.message || 'Falha ao guardar');
     } finally {
@@ -96,89 +47,97 @@ export default function FornecedorEditPage() {
     }
   }
 
-  if (loading) return <main style={{ padding:18 }}><p className="muted">A carregar…</p></main>;
-  if (err) return <main style={{ padding:18 }}><p style={{ color:'crimson' }}>{err}</p></main>;
-  if (!form) return <main style={{ padding:18 }}><p style={{ color:'crimson' }}>Fornecedor não encontrado.</p></main>;
+  if (loading) return <main style={{ padding:18 }}>A carregar…</main>;
+  if (!form)   return <main style={{ padding:18, color:'crimson' }}>{err || 'Falha ao carregar'}</main>;
 
   return (
-    <main style={{ padding:18 }}>
-      <h1 className="h1" style={{ marginBottom:12 }}>Editar Fornecedor {form.codigo ? `· ${form.codigo}` : ''}</h1>
+    <main style={{ padding: 18 }}>
+      <h1 className="h1" style={{ marginBottom: 12 }}>Editar Fornecedor</h1>
+      <form onSubmit={save} className="card" style={{ display:'grid', gap:12 }}>
+        <div>
+          <label className="muted">Denominação *</label>
+          <input value={form.denominacao||''} onChange={e=>setForm((f:any)=>({...f, denominacao:e.target.value}))}
+                 required style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
+        </div>
 
-      <form onSubmit={onSubmit} className="card" style={{ display:'grid', gap:12 }}>
-        <div className="grid" style={{ gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
           <div>
-            <label style={LABEL}>Denominação *</label>
-            <input style={INPUT} value={form.denominacao} onChange={e=>v('denominacao', e.target.value)} required />
+            <label className="muted">NIF</label>
+            <input value={form.nif||''} onChange={e=>setForm((f:any)=>({...f, nif:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={LABEL}>Tipo de fornecimento</label>
-            <input style={INPUT} value={form.tipo_fornecimento ?? ''} onChange={e=>v('tipo_fornecimento', e.target.value)} />
+            <label className="muted">Telefone</label>
+            <input value={form.telefone||''} onChange={e=>setForm((f:any)=>({...f, telefone:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
+          </div>
+          <div>
+            <label className="muted">Email</label>
+            <input value={form.email||''} onChange={e=>setForm((f:any)=>({...f, email:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <div>
-            <label style={LABEL}>NIF (9 dígitos)</label>
-            <input style={INPUT} value={form.nif ?? ''} onChange={e=>v('nif', e.target.value)} inputMode="numeric" />
+            <label className="muted">Tipo de fornecimento</label>
+            <input value={form.tipo_fornecimento||''} onChange={e=>setForm((f:any)=>({...f, tipo_fornecimento:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={LABEL}>Telefone (9 dígitos)</label>
-            <input style={INPUT} value={form.telefone ?? ''} onChange={e=>v('telefone', e.target.value)} inputMode="tel" />
-          </div>
-          <div>
-            <label style={LABEL}>Email</label>
-            <input style={INPUT} value={form.email ?? ''} onChange={e=>v('email', e.target.value)} type="email" />
+            <label className="muted">Nome do contacto</label>
+            <input value={form.nome_contacto||''} onChange={e=>setForm((f:any)=>({...f, nome_contacto:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns:'2fr 1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:12 }}>
           <div>
-            <label style={LABEL}>Morada</label>
-            <input style={INPUT} value={form.morada ?? ''} onChange={e=>v('morada', e.target.value)} />
+            <label className="muted">Morada</label>
+            <input value={form.morada||''} onChange={e=>setForm((f:any)=>({...f, morada:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={LABEL}>Concelho</label>
-            <input style={INPUT} value={form.concelho ?? ''} onChange={e=>v('concelho', e.target.value)} />
+            <label className="muted">Concelho</label>
+            <input value={form.concelho||''} onChange={e=>setForm((f:any)=>({...f, concelho:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={LABEL}>Código Postal (XXXX-XXX)</label>
-            <input style={INPUT} value={form.cod_postal ?? ''} onChange={e=>v('cod_postal', e.target.value)} placeholder="0000-000" />
+            <label className="muted">Código Postal</label>
+            <input value={form.cod_postal||''} onChange={e=>setForm((f:any)=>({...f, cod_postal:e.target.value}))}
+                   placeholder="1234-567"
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <div>
-            <label style={LABEL}>Forma de pagamento</label>
-            <select
-              style={INPUT as any}
-              value={form.forma_pagamento ?? 'A VISTA'}
-              onChange={e=>v('forma_pagamento', e.target.value as FormaPagamento)}
-            >
+            <label className="muted">Forma de pagamento</label>
+            <select value={form.forma_pagamento||''}
+              onChange={e=>setForm((f:any)=>({...f, forma_pagamento:e.target.value}))}
+              style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10, background:'#fff' }}>
+              <option value="">—</option>
               <option value="A VISTA">A VISTA</option>
               <option value="PARCELADO">PARCELADO</option>
             </select>
           </div>
           <div>
-            <label style={LABEL}>Ativo</label>
-            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <input id="ativo" type="checkbox" checked={!!form.ativo} onChange={e=>v('ativo', e.target.checked)} />
-              <label htmlFor="ativo">Fornecedor ativo</label>
-            </div>
+            <label className="muted">Ativo</label><br/>
+            <input type="checkbox" checked={!!form.ativo}
+              onChange={e=>setForm((f:any)=>({...f, ativo: e.target.checked}))}/>
           </div>
         </div>
 
         <div>
-          <label style={LABEL}>Observações</label>
-          <textarea style={{ ...INPUT, minHeight: 90 }} value={form.observacoes ?? ''} onChange={e=>v('observacoes', e.target.value)} />
+          <label className="muted">Observações</label>
+          <textarea value={form.observacoes||''} onChange={e=>setForm((f:any)=>({...f, observacoes:e.target.value}))}
+                    style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10, minHeight:90 }}/>
         </div>
 
         {err && <p style={{ color:'crimson' }}>{err}</p>}
-
-        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-primary" disabled={saving} type="submit">{saving?'A guardar…':'Guardar'}</button>
           <a className="btn btn-ghost" href="/adm/fornecedores">Cancelar</a>
-          <button className="btn btn-primary" disabled={saving} type="submit">
-            {saving ? 'A guardar…' : 'Guardar'}
-          </button>
         </div>
       </form>
     </main>
