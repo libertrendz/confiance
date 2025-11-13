@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           display: 'flex',
           flexDirection: 'column',
           height: '100vh',
-          background: '#071c34', // um tom mais escuro do azul
+          background: '#071c34',
           color: '#fff',
           padding: 16,
           gap: 8,
@@ -62,7 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <img
             src="/logo-confiance.png"
             alt="CONFIANCE"
-            style={{ height: 60, width: 'auto', display: 'block' }} // logo maior
+            style={{ height: 60, width: 'auto', display: 'block' }}
           />
           <span
             style={{
@@ -77,7 +77,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </span>
         </div>
 
-        {/* MENU (por enquanto, mesma estrutura que já existia) */}
+        {/* MENU */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <a href="/adm/dashboard" style={linkStyle}>
             Dashboard
@@ -108,10 +108,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </a>
         </nav>
 
-        {/* empurra o rodapé para baixo sem criar "buraco" extra */}
         <div style={{ flex: 1 }} />
 
-        {/* RODAPÉ SIDEBAR */}
+        {/* RODAPÉ */}
         <div
           style={{
             borderTop: '1px solid rgba(255,255,255,.15)',
