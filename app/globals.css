@@ -37,12 +37,13 @@ body{
   background:var(--bg);
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
+  font-size: 15px; /* -1 ponto em tudo */
 }
 
 a{color:inherit;text-decoration:none}
 main{padding:var(--space-3)}
 
-/* ---------- Topbar responsiva (sem estourar o layout) ---------- */
+/* ---------- Topbar ---------- */
 .topbar{
   position:sticky; top:0; z-index:50;
   display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -51,42 +52,45 @@ main{padding:var(--space-3)}
 }
 
 .topbar .brand{
-  display:flex; align-items:center; gap:10px;
-  font-weight:800; font-size:18px; min-width:0;
+  display:flex; align-items:center; gap:12px;
+  font-weight:800; min-width:0;
 }
 .brand .brand-logo{
-  height:60px; width:auto; display:block; object-fit:contain; /* desktop maior como pedido */
+  height:72px; width:auto; display:block; object-fit:contain; /* ~60% maior que o antigo 45px */
+}
+.brand .brand-name{
+  font-size:22px; font-weight:900; letter-spacing:.5px; color:var(--brand-1);
 }
 
 .topbar .user{ display:flex; align-items:center; gap:10px; min-width:0; margin-left:auto; }
 .topbar .user-email{
   max-width:48vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  color:var(--muted); font-size:14px; font-weight:600;
+  color:var(--muted); font-size:13px; font-weight:600;
 }
 .topbar .pill{
-  font-size:12px; font-weight:700;
+  font-size:11px; font-weight:800;
   background:#EEF3FF; color:var(--brand-1);
   padding:6px 10px; border-radius:999px; border:1px solid #D7E3FF;
   white-space:nowrap;
 }
-.topbar .btn{ height:40px; padding:0 14px; }
+.topbar .btn{ height:36px; padding:0 12px; }
 
-/* Mobile – quebra em 2 linhas mantendo ordem: PERFIL | NOME/EMAIL | SAIR */
+/* Mobile */
 @media (max-width: 560px){
   .topbar{ flex-wrap:wrap; row-gap:8px; }
-  .brand .brand-logo{ height:48px; }
-  .topbar .brand{ order:1; flex:1 1 auto; }
-  .topbar .user{ order:2; width:100%; justify-content:space-between; }
-  .topbar .user-email{ max-width: calc(100% - 130px); } /* espaço pro pill + sair */
-  .topbar .btn{ height:36px; padding:0 12px; }
+  .brand .brand-logo{ height:58px; }
+  .brand .brand-name{ font-size:20px; }
+  .topbar .user{ width:100%; justify-content:space-between; }
+  .topbar .user-email{ max-width: calc(100% - 140px); }
 }
 
 /* ---------- Botões ---------- */
 .btn{
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
-  height:40px; padding:0 14px; border-radius:var(--radius-sm);
+  height:36px; padding:0 12px; border-radius:var(--radius-sm);
   border:1px solid transparent; background:var(--surface); color:var(--text);
   cursor:pointer; transition:filter .15s ease, background .15s ease, border-color .15s ease;
+  font-size:14px;
 }
 .btn:disabled{opacity:.6;cursor:not-allowed}
 .btn-primary{background:var(--brand-1);color:var(--brand-1-contrast)}
@@ -106,11 +110,11 @@ main{padding:var(--space-3)}
 @media (min-width:980px){
   .grid.cols-2{ grid-template-columns:1fr 1fr; max-width:960px; margin:0 auto }
 }
-.h1{ font-size:22px; font-weight:800 }
-.h2{ font-size:16px; font-weight:700 }
+.h1{ font-size:21px; font-weight:800 }
+.h2{ font-size:15px; font-weight:700 }
 .muted{ color:var(--muted) }
 
-/* ---------- Splash screen (com degradê e logo maior) ---------- */
+/* ---------- Splash ---------- */
 .splash{
   position:fixed; inset:0;
   background: var(--splash-grad);
