@@ -1,53 +1,60 @@
+// app/api/admin/fornecedores/update/route.ts
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
-const EMPRESA = process.env.CONF_EMPRESA_ID!;
-const ALLOWED_FP = new Set(['À VISTA','PARCELADO']);
+type Body = {
+  id: string;
+  denominacao?: string | null;
+  nif?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  ativo?: boolean | null;
 
-function nz(v: any) {
-  const s = (v ?? '').toString().trim();
-  return s.length ? s : null;
+  tipo_fornecimento?: string | null;
+  nome_contacto?: string | null;
+  morada?: string | null;
+  concelho?: string | null;
+  cod_postal?: string | null;
+  forma_pagamento?: string | null;
+  observacoes?: string | null;
+};
+
+function normalizeFP(x?: string | null) {
+  if (!x) return null;
+  const u = x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  if (u.includes('PARCEL')) return 'PARCELADO';
+  if (u.includes('VISTA'))  return 'A VISTA';
+  return null;
 }
 
 export async function POST(req: Request) {
   try {
-    if (!EMPRESA) return NextResponse.json({ error: 'CONF_EMPRESA_ID ausente' }, { status: 400 });
-    const body = await req.json().catch(() => ({}));
-    const id = nz(body.id);
-    if (!id) return NextResponse.json({ error: 'ID é obrigatório' }, { status: 400 });
-
-    let forma_pagamento = nz(body.forma_pagamento)?.toUpperCase() || null;
-    if (forma_pagamento && !ALLOWED_FP.has(forma_pagamento)) forma_pagamento = 'À VISTA';
-
-    const payload: Record<string, any> = {
-      denominacao: nz(body.denominacao),
-      tipo_fornecimento: nz(body.tipo_fornecimento),
-      nif: nz(body.nif),
-      email: nz(body.email),
-      telefone: nz(body.telefone),
-      nome_contacto: nz(body.nome_contacto),
-      morada: nz(body.morada),
-      concelho: nz(body.concelho),
-      cod_postal: nz(body.cod_postal),
-      forma_pagamento,
-      observacoes: nz(body.observacoes),
-      ativo: typeof body.ativo === 'boolean' ? body.ativo : undefined,
-    };
-
-    // remove undefined para não sobrescrever
-    Object.keys(payload).forEach(k => payload[k] === undefined && delete (payload as any)[k]);
-
-    if (!payload.denominacao) return NextResponse.json({ error: 'Denominação é obrigatória' }, { status: 400 });
-    if (payload.nif && !/^\d{9}$/.test(payload.nif)) return NextResponse.json({ error: 'NIF inválido (9 dígitos)' }, { status: 400 });
-    if (payload.telefone && !/^\d{9}$/.test(payload.telefone)) return NextResponse.json({ error: 'Telefone inválido (9 dígitos)' }, { status: 400 });
-    if (payload.cod_postal && !/^\d{4}-\d{3}$/.test(payload.cod_postal)) return NextResponse.json({ error: 'Código postal inválido (XXXX-XXX)' }, { status: 400 });
-
     const supa = getServiceSupabase();
-    const { error } = await supa.from('fornecedores').update(payload).eq('id', id).eq('empresa_id', EMPRESA);
+    const body = (await req.json()) as Body;
+    if (!body?.id) {
+      return NextResponse.json({ error: 'ID em falta' }, { status: 400 });
+    }
+
+    const patch: any = {};
+    if (body.denominacao !== undefined) patch.denominacao = body.denominacao?.trim() || null;
+    if (body.nif !== undefined) patch.nif = body.nif?.trim() || null;
+    if (body.email !== undefined) patch.email = body.email?.trim() || null;
+    if (body.telefone !== undefined) patch.telefone = body.telefone?.trim() || null;
+    if (body.ativo !== undefined) patch.ativo = !!body.ativo;
+
+    if (body.tipo_fornecimento !== undefined) patch.tipo_fornecimento = body.tipo_fornecimento?.trim() || null;
+    if (body.nome_contacto !== undefined) patch.nome_contacto = body.nome_contacto?.trim() || null;
+    if (body.morada !== undefined) patch.morada = body.morada?.trim() || null;
+    if (body.concelho !== undefined) patch.concelho = body.concelho?.trim() || null;
+    if (body.cod_postal !== undefined) patch.cod_postal = body.cod_postal?.trim() || null;
+    if (body.forma_pagamento !== undefined) patch.forma_pagamento = normalizeFP(body.forma_pagamento);
+    if (body.observacoes !== undefined) patch.observacoes = body.observacoes?.trim() || null;
+
+    const { error } = await supa.from('fornecedores').update(patch).eq('id', body.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erro inesperado' }, { status: 500 });
+    return NextResponse.json({ error: e?.message || 'Falha ao atualizar' }, { status: 500 });
   }
 }
