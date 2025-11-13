@@ -1,143 +1,135 @@
+// app/adm/fornecedores/new/page.tsx
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-
-type FormaPagamento = 'À VISTA' | 'PARCELADO';
 
 export default function FornecedorNewPage() {
-  const router = useRouter();
+  const [form, setForm] = useState({
+    denominacao: '',
+    nif: '',
+    email: '',
+    telefone: '',
+    ativo: true,
+
+    tipo_fornecimento: '',
+    nome_contacto: '',
+    morada: '',
+    concelho: '',
+    cod_postal: '',
+    forma_pagamento: '', // 'A VISTA' | 'PARCELADO'
+    observacoes: '',
+  });
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string|null>(null);
 
-  const [denominacao, setDenominacao] = useState('');
-  const [tipo_fornecimento, setTipoFornecimento] = useState('');
-  const [nif, setNif] = useState('');
-  const [email, setEmail] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [nome_contacto, setNomeContacto] = useState('');
-  const [morada, setMorada] = useState('');
-  const [concelho, setConcelho] = useState('');
-  const [cod_postal, setCodPostal] = useState('');
-  const [forma_pagamento, setFormaPagamento] = useState<FormaPagamento>('À VISTA');
-  const [observacoes, setObservacoes] = useState('');
-  const [ativo, setAtivo] = useState(true);
-
-  async function onSubmit(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setErr(null);
+    setSaving(true); setErr(null);
     try {
       const res = await fetch('/api/admin/fornecedores/create', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          denominacao,
-          tipo_fornecimento,
-          nif,
-          email,
-          telefone,
-          nome_contacto,
-          morada,
-          concelho,
-          cod_postal,
-          forma_pagamento, // já vem em MAIÚSCULAS
-          observacoes,
-          ativo,
-        }),
+        body: JSON.stringify(form),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Falha ao criar fornecedor');
-      router.replace('/adm/fornecedores');
-    } catch (e: any) {
-      setErr(e?.message || 'Falha ao criar fornecedor');
+      if (!res.ok) throw new Error(j?.error || 'Falha ao guardar');
+      alert('Guardado.');
+      window.location.replace('/adm/fornecedores');
+    } catch (e:any) {
+      setErr(e?.message || 'Falha ao guardar');
     } finally {
       setSaving(false);
     }
   }
 
-  const input = { width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: 10 } as const;
-  const label = { display: 'block', marginBottom: 6, color: 'var(--muted)', fontSize: 12, fontWeight: 600 } as const;
-
   return (
     <main style={{ padding: 18 }}>
       <h1 className="h1" style={{ marginBottom: 12 }}>Adicionar Fornecedor</h1>
+      <form onSubmit={save} className="card" style={{ display: 'grid', gap: 12 }}>
+        <div>
+          <label className="muted">Denominação *</label>
+          <input value={form.denominacao} onChange={e=>setForm(f=>({...f, denominacao:e.target.value}))}
+                 required style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
+        </div>
 
-      <form onSubmit={onSubmit} className="card" style={{ display: 'grid', gap: 12 }}>
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
           <div>
-            <label style={label}>Denominação *</label>
-            <input style={input} value={denominacao} onChange={e=>setDenominacao(e.target.value)} required />
+            <label className="muted">NIF</label>
+            <input value={form.nif} onChange={e=>setForm(f=>({...f, nif:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={label}>Tipo de fornecimento</label>
-            <input style={input} value={tipo_fornecimento} onChange={e=>setTipoFornecimento(e.target.value)} />
+            <label className="muted">Telefone</label>
+            <input value={form.telefone} onChange={e=>setForm(f=>({...f, telefone:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
+          </div>
+          <div>
+            <label className="muted">Email</label>
+            <input value={form.email} onChange={e=>setForm(f=>({...f, email:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <div>
-            <label style={label}>NIF (9 dígitos)</label>
-            <input style={input} value={nif} onChange={e=>setNif(e.target.value)} inputMode="numeric" />
+            <label className="muted">Tipo de fornecimento</label>
+            <input value={form.tipo_fornecimento} onChange={e=>setForm(f=>({...f, tipo_fornecimento:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={label}>Telefone (9 dígitos)</label>
-            <input style={input} value={telefone} onChange={e=>setTelefone(e.target.value)} inputMode="tel" />
-          </div>
-          <div>
-            <label style={label}>Email</label>
-            <input style={input} value={email} onChange={e=>setEmail(e.target.value)} type="email" />
+            <label className="muted">Nome do contacto</label>
+            <input value={form.nome_contacto} onChange={e=>setForm(f=>({...f, nome_contacto:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:12 }}>
           <div>
-            <label style={label}>Morada</label>
-            <input style={input} value={morada} onChange={e=>setMorada(e.target.value)} />
+            <label className="muted">Morada</label>
+            <input value={form.morada} onChange={e=>setForm(f=>({...f, morada:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={label}>Concelho</label>
-            <input style={input} value={concelho} onChange={e=>setConcelho(e.target.value)} />
+            <label className="muted">Concelho</label>
+            <input value={form.concelho} onChange={e=>setForm(f=>({...f, concelho:e.target.value}))}
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
           <div>
-            <label style={label}>Código Postal (XXXX-XXX)</label>
-            <input style={input} value={cod_postal} onChange={e=>setCodPostal(e.target.value)} placeholder="0000-000" />
+            <label className="muted">Código Postal</label>
+            <input value={form.cod_postal} onChange={e=>setForm(f=>({...f, cod_postal:e.target.value}))}
+                   placeholder="1234-567"
+                   style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10 }}/>
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
           <div>
-            <label style={label}>Forma de pagamento</label>
-            <select
-              style={input as any}
-              value={forma_pagamento}
-              onChange={e=>setFormaPagamento(e.target.value as FormaPagamento)}
-            >
-              <option value="À VISTA">À VISTA</option>
+            <label className="muted">Forma de pagamento</label>
+            <select value={form.forma_pagamento}
+              onChange={e=>setForm(f=>({...f, forma_pagamento:e.target.value}))}
+              style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10, background:'#fff' }}>
+              <option value="">—</option>
+              <option value="A VISTA">A VISTA</option>
               <option value="PARCELADO">PARCELADO</option>
             </select>
           </div>
           <div>
-            <label style={label}>Ativo</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input id="ativo" type="checkbox" checked={ativo} onChange={e=>setAtivo(e.target.checked)} />
-              <label htmlFor="ativo">Fornecedor ativo</label>
-            </div>
+            <label className="muted">Ativo</label><br/>
+            <input type="checkbox" checked={form.ativo}
+              onChange={e=>setForm(f=>({...f, ativo:e.target.checked}))}/>
           </div>
         </div>
 
         <div>
-          <label style={label}>Observações</label>
-          <textarea style={{ ...input, minHeight: 90 }} value={observacoes} onChange={e=>setObservacoes(e.target.value)} />
+          <label className="muted">Observações</label>
+          <textarea value={form.observacoes} onChange={e=>setForm(f=>({...f, observacoes:e.target.value}))}
+                    style={{ width:'100%', padding:10, border:'1px solid var(--border)', borderRadius:10, minHeight:90 }}/>
         </div>
 
-        {err && <p style={{ color: 'crimson' }}>{err}</p>}
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        {err && <p style={{ color:'crimson' }}>{err}</p>}
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-primary" disabled={saving} type="submit">{saving?'A guardar…':'Guardar'}</button>
           <a className="btn btn-ghost" href="/adm/fornecedores">Cancelar</a>
-          <button className="btn btn-primary" disabled={saving} type="submit">
-            {saving ? 'A guardar…' : 'Guardar'}
-          </button>
         </div>
       </form>
     </main>
