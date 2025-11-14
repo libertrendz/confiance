@@ -3,21 +3,30 @@
 
 import { useState } from 'react';
 
+type PerfilAcesso = '' | 'externo_ponto' | 'interno_total';
+
 type FormState = {
   nome: string;
   nif: string;
   email: string;
   telefone: string;
   tipo: string;
-  categoria: string;
-  contrato_tipo: string;
-  iban: string;
   custo_hora: string;
   data_admissao: string;
   ativo: boolean;
-  pode_aceder_sistema: boolean;
-  pode_registar_ponto: boolean;
+  perfil_acesso: PerfilAcesso;
 };
+
+function mapPerfilToFlags(perfil: PerfilAcesso) {
+  switch (perfil) {
+    case 'externo_ponto':
+      return { pode_aceder_sistema: false, pode_registar_ponto: true };
+    case 'interno_total':
+      return { pode_aceder_sistema: true, pode_registar_ponto: true };
+    default:
+      return { pode_aceder_sistema: false, pode_registar_ponto: false };
+  }
+}
 
 export default function ColaboradorNewPage() {
   const [form, setForm] = useState<FormState>({
@@ -26,14 +35,10 @@ export default function ColaboradorNewPage() {
     email: '',
     telefone: '',
     tipo: 'empregado',
-    categoria: '',
-    contrato_tipo: '',
-    iban: '',
     custo_hora: '',
     data_admissao: '',
     ativo: true,
-    pode_aceder_sistema: true,
-    pode_registar_ponto: true,
+    perfil_acesso: 'externo_ponto', // padrão: externo, só ponto
   });
 
   const [saving, setSaving] = useState(false);
@@ -44,20 +49,18 @@ export default function ColaboradorNewPage() {
     setSaving(true);
     setErr(null);
     try {
+      const flags = mapPerfilToFlags(form.perfil_acesso);
+
       const payload = {
         nome: form.nome,
         nif: form.nif || null,
         email: form.email || null,
         telefone: form.telefone || null,
         tipo: form.tipo || null,
-        categoria: form.categoria || null,
-        contrato_tipo: form.contrato_tipo || null,
-        iban: form.iban || null,
         custo_hora: form.custo_hora ? Number(form.custo_hora) : null,
         data_admissao: form.data_admissao || null,
         ativo: form.ativo,
-        pode_aceder_sistema: form.pode_aceder_sistema,
-        pode_registar_ponto: form.pode_registar_ponto,
+        ...flags,
       };
 
       const res = await fetch('/api/admin/colaboradores/create', {
@@ -90,15 +93,14 @@ export default function ColaboradorNewPage() {
       <form
         onSubmit={save}
         className="card"
-        style={{ display: 'grid', gap: 12, maxWidth: 820 }}
+        style={{ display: 'grid', gap: 12, maxWidth: 720 }}
       >
-        {/* Linha 1: nome */}
         <div>
           <label className="muted">Nome *</label>
           <input
             required
             value={form.nome}
-            onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
             style={{
               width: '100%',
               padding: 10,
@@ -108,13 +110,12 @@ export default function ColaboradorNewPage() {
           />
         </div>
 
-        {/* Linha 2: NIF / Telefone */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label className="muted">NIF (9 dígitos)</label>
             <input
               value={form.nif}
-              onChange={e => setForm(f => ({ ...f, nif: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, nif: e.target.value }))}
               maxLength={9}
               style={{
                 width: '100%',
@@ -128,7 +129,9 @@ export default function ColaboradorNewPage() {
             <label className="muted">Telefone (9 dígitos)</label>
             <input
               value={form.telefone}
-              onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, telefone: e.target.value }))
+              }
               maxLength={9}
               style={{
                 width: '100%',
@@ -140,14 +143,15 @@ export default function ColaboradorNewPage() {
           </div>
         </div>
 
-        {/* Linha 3: Email / Tipo */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.6fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label className="muted">Email</label>
             <input
               type="email"
               value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, email: e.target.value }))
+              }
               style={{
                 width: '100%',
                 padding: 10,
@@ -160,7 +164,7 @@ export default function ColaboradorNewPage() {
             <label className="muted">Tipo</label>
             <select
               value={form.tipo}
-              onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}
               style={{
                 width: '100%',
                 padding: 10,
@@ -175,52 +179,31 @@ export default function ColaboradorNewPage() {
           </div>
         </div>
 
-        {/* Linha 4: Categoria / Tipo contrato */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <label className="muted">Categoria</label>
-            <input
-              value={form.categoria}
-              onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-              }}
-            />
-          </div>
-          <div>
-            <label className="muted">Tipo de contrato</label>
-            <input
-              value={form.contrato_tipo}
-              onChange={e => setForm(f => ({ ...f, contrato_tipo: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Linha 5: IBAN */}
+        {/* PERFIL DE ACESSO */}
         <div>
-          <label className="muted">IBAN</label>
-          <input
-            value={form.iban}
-            onChange={e => setForm(f => ({ ...f, iban: e.target.value }))}
+          <label className="muted">Perfil de acesso</label>
+          <select
+            value={form.perfil_acesso}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                perfil_acesso: e.target.value as PerfilAcesso,
+              }))
+            }
             style={{
               width: '100%',
               padding: 10,
               border: '1px solid var(--border)',
               borderRadius: 10,
+              background: '#fff',
             }}
-          />
+          >
+            <option value="">Sem acesso ao sistema</option>
+            <option value="externo_ponto">Externo (só ponto / mobile)</option>
+            <option value="interno_total">Interno (sistema + ponto)</option>
+          </select>
         </div>
 
-        {/* Linha 6: Custo hora / Data admissão */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label className="muted">Custo hora (€)</label>
@@ -228,7 +211,9 @@ export default function ColaboradorNewPage() {
               type="number"
               step="0.01"
               value={form.custo_hora}
-              onChange={e => setForm(f => ({ ...f, custo_hora: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, custo_hora: e.target.value }))
+              }
               style={{
                 width: '100%',
                 padding: 10,
@@ -242,7 +227,9 @@ export default function ColaboradorNewPage() {
             <input
               type="date"
               value={form.data_admissao}
-              onChange={e => setForm(f => ({ ...f, data_admissao: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, data_admissao: e.target.value }))
+              }
               style={{
                 width: '100%',
                 padding: 10,
@@ -253,46 +240,17 @@ export default function ColaboradorNewPage() {
           </div>
         </div>
 
-        {/* Linha 7: Flags */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 12,
-          }}
-        >
+        <div>
           <label className="muted">
             <input
               type="checkbox"
               checked={form.ativo}
-              onChange={e => setForm(f => ({ ...f, ativo: e.target.checked }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, ativo: e.target.checked }))
+              }
               style={{ marginRight: 6 }}
             />
             Ativo
-          </label>
-
-          <label className="muted">
-            <input
-              type="checkbox"
-              checked={form.pode_aceder_sistema}
-              onChange={e =>
-                setForm(f => ({ ...f, pode_aceder_sistema: e.target.checked }))
-              }
-              style={{ marginRight: 6 }}
-            />
-            Pode aceder ao sistema
-          </label>
-
-          <label className="muted">
-            <input
-              type="checkbox"
-              checked={form.pode_registar_ponto}
-              onChange={e =>
-                setForm(f => ({ ...f, pode_registar_ponto: e.target.checked }))
-              }
-              style={{ marginRight: 6 }}
-            />
-            Pode registar ponto
           </label>
         </div>
 
