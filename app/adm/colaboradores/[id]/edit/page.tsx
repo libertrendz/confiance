@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from 'react';
 
+type PerfilAcesso = '' | 'externo_ponto' | 'interno_total';
+
 type RecordColab = {
   id: string;
   nome: string | null;
@@ -18,7 +20,30 @@ type RecordColab = {
   ativo: boolean | null;
   pode_aceder_sistema: boolean | null;
   pode_registar_ponto: boolean | null;
+  perfil_acesso?: PerfilAcesso | null;
 };
+
+function mapPerfilToFlags(perfil: PerfilAcesso) {
+  switch (perfil) {
+    case 'externo_ponto':
+      return { pode_aceder_sistema: false, pode_registar_ponto: true };
+    case 'interno_total':
+      return { pode_aceder_sistema: true, pode_registar_ponto: true };
+    default:
+      return { pode_aceder_sistema: false, pode_registar_ponto: false };
+  }
+}
+
+function inferPerfilFromFlags(
+  pode_aceder_sistema: boolean | null,
+  pode_registar_ponto: boolean | null,
+): PerfilAcesso {
+  const sys = !!pode_aceder_sistema;
+  const ponto = !!pode_registar_ponto;
+  if (sys && ponto) return 'interno_total';
+  if (!sys && ponto) return 'externo_ponto';
+  return '';
+}
 
 export default function ColaboradorEditPage({ params }: { params: { id: string } }) {
   const id = params?.id;
@@ -42,9 +67,14 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
         }
         const j = await res.json();
         if (!j.ok) throw new Error(j.error || 'Falha ao carregar colaborador');
+
         if (alive) {
           const r = j.record as RecordColab;
-          setRecord(r);
+          const perfil = inferPerfilFromFlags(
+            r.pode_aceder_sistema,
+            r.pode_registar_ponto,
+          );
+          setRecord({ ...r, perfil_acesso: perfil });
         }
       } catch (e: any) {
         setErr(e?.message || 'Falha ao carregar colaborador');
@@ -63,6 +93,8 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
     setSaving(true);
     setErr(null);
     try {
+      const flags = mapPerfilToFlags(record.perfil_acesso || '');
+
       const payload = {
         id: record.id,
         nome: record.nome,
@@ -76,8 +108,7 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
         iban: record.iban,
         data_admissao: record.data_admissao,
         ativo: record.ativo ?? true,
-        pode_aceder_sistema: record.pode_aceder_sistema ?? false,
-        pode_registar_ponto: record.pode_registar_ponto ?? false,
+        ...flags,
       };
 
       const res = await fetch('/api/admin/colaboradores/update', {
@@ -122,16 +153,15 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
       <form
         onSubmit={save}
         className="card"
-        style={{ display: 'grid', gap: 12, maxWidth: 820 }}
+        style={{ display: 'grid', gap: 12, maxWidth: 720 }}
       >
-        {/* Nome */}
         <div>
           <label className="muted">Nome *</label>
           <input
             required
             value={record.nome || ''}
-            onChange={e =>
-              setRecord(r => (r ? { ...r, nome: e.target.value } : r))
+            onChange={(e) =>
+              setRecord((r) => (r ? { ...r, nome: e.target.value } : r))
             }
             style={{
               width: '100%',
@@ -142,14 +172,13 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
           />
         </div>
 
-        {/* NIF / Telefone */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label className="muted">NIF (9 dígitos)</label>
             <input
               value={record.nif || ''}
-              onChange={e =>
-                setRecord(r => (r ? { ...r, nif: e.target.value } : r))
+              onChange={(e) =>
+                setRecord((r) => (r ? { ...r, nif: e.target.value } : r))
               }
               maxLength={9}
               style={{
@@ -164,8 +193,8 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
             <label className="muted">Telefone (9 dígitos)</label>
             <input
               value={record.telefone || ''}
-              onChange={e =>
-                setRecord(r => (r ? { ...r, telefone: e.target.value } : r))
+              onChange={(e) =>
+                setRecord((r) => (r ? { ...r, telefone: e.target.value } : r))
               }
               maxLength={9}
               style={{
@@ -178,15 +207,14 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
           </div>
         </div>
 
-        {/* Email / Tipo */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.6fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label className="muted">Email</label>
             <input
               type="email"
               value={record.email || ''}
-              onChange={e =>
-                setRecord(r => (r ? { ...r, email: e.target.value } : r))
+              onChange={(e) =>
+                setRecord((r) => (r ? { ...r, email: e.target.value } : r))
               }
               style={{
                 width: '100%',
@@ -200,8 +228,8 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
             <label className="muted">Tipo</label>
             <select
               value={record.tipo || ''}
-              onChange={e =>
-                setRecord(r => (r ? { ...r, tipo: e.target.value } : r))
+              onChange={(e) =>
+                setRecord((r) => (r ? { ...r, tipo: e.target.value } : r))
               }
               style={{
                 width: '100%',
@@ -218,60 +246,30 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
           </div>
         </div>
 
-        {/* Categoria / Tipo contrato */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
-            <label className="muted">Categoria</label>
-            <input
-              value={record.categoria || ''}
-              onChange={e =>
-                setRecord(r => (r ? { ...r, categoria: e.target.value } : r))
-              }
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-              }}
-            />
-          </div>
-          <div>
-            <label className="muted">Tipo de contrato</label>
-            <input
-              value={record.contrato_tipo || ''}
-              onChange={e =>
-                setRecord(r =>
-                  r ? { ...r, contrato_tipo: e.target.value } : r,
-                )
-              }
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* IBAN */}
+        {/* PERFIL DE ACESSO */}
         <div>
-          <label className="muted">IBAN</label>
-          <input
-            value={record.iban || ''}
-            onChange={e =>
-              setRecord(r => (r ? { ...r, iban: e.target.value } : r))
+          <label className="muted">Perfil de acesso</label>
+          <select
+            value={record.perfil_acesso || ''}
+            onChange={(e) =>
+              setRecord((r) =>
+                r ? { ...r, perfil_acesso: e.target.value as PerfilAcesso } : r,
+              )
             }
             style={{
               width: '100%',
               padding: 10,
               border: '1px solid var(--border)',
               borderRadius: 10,
+              background: '#fff',
             }}
-          />
+          >
+            <option value="">Sem acesso ao sistema</option>
+            <option value="externo_ponto">Externo (só ponto / mobile)</option>
+            <option value="interno_total">Interno (sistema + ponto)</option>
+          </select>
         </div>
 
-        {/* Custo hora / Data admissão */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label className="muted">Custo hora (€)</label>
@@ -279,8 +277,8 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
               type="number"
               step="0.01"
               value={record.custo_hora ?? ''}
-              onChange={e =>
-                setRecord(r =>
+              onChange={(e) =>
+                setRecord((r) =>
                   r
                     ? {
                         ...r,
@@ -303,8 +301,8 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
             <input
               type="date"
               value={record.data_admissao?.slice(0, 10) || ''}
-              onChange={e =>
-                setRecord(r =>
+              onChange={(e) =>
+                setRecord((r) =>
                   r ? { ...r, data_admissao: e.target.value } : r,
                 )
               }
@@ -318,52 +316,72 @@ export default function ColaboradorEditPage({ params }: { params: { id: string }
           </div>
         </div>
 
-        {/* Flags */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 12,
-          }}
-        >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label className="muted">Categoria</label>
+            <input
+              value={record.categoria || ''}
+              onChange={(e) =>
+                setRecord((r) =>
+                  r ? { ...r, categoria: e.target.value } : r,
+                )
+              }
+              style={{
+                width: '100%',
+                padding: 10,
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}
+            />
+          </div>
+          <div>
+            <label className="muted">Tipo de contrato</label>
+            <input
+              value={record.contrato_tipo || ''}
+              onChange={(e) =>
+                setRecord((r) =>
+                  r ? { ...r, contrato_tipo: e.target.value } : r,
+                )
+              }
+              style={{
+                width: '100%',
+                padding: 10,
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+              }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="muted">IBAN</label>
+          <input
+            value={record.iban || ''}
+            onChange={(e) =>
+              setRecord((r) => (r ? { ...r, iban: e.target.value } : r))
+            }
+            style={{
+              width: '100%',
+              padding: 10,
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+            }}
+          />
+        </div>
+
+        <div>
           <label className="muted">
             <input
               type="checkbox"
               checked={!!record.ativo}
-              onChange={e =>
-                setRecord(r => (r ? { ...r, ativo: e.target.checked } : r))
+              onChange={(e) =>
+                setRecord((r) =>
+                  r ? { ...r, ativo: e.target.checked } : r,
+                )
               }
               style={{ marginRight: 6 }}
             />
             Ativo
-          </label>
-
-          <label className="muted">
-            <input
-              type="checkbox"
-              checked={!!record.pode_aceder_sistema}
-              onChange={e =>
-                setRecord(r =>
-                  r ? { ...r, pode_aceder_sistema: e.target.checked } : r,
-                )
-              }
-              style={{ marginRight: 6 }}
-            />
-            Pode aceder ao sistema
-          </label>
-
-          <label className="muted">
-            <input
-              type="checkbox"
-              checked={!!record.pode_registar_ponto}
-              onChange={e =>
-                setRecord(r =>
-                  r ? { ...r, pode_registar_ponto: e.target.checked } : r,
-                )
-              }
-              style={{ marginRight: 6 }}
-            />
-            Pode registar ponto
           </label>
         </div>
 
