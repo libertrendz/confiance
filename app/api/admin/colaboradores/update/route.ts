@@ -5,71 +5,43 @@ import { getServiceSupabase } from '@/lib/supabaseServer';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-type Body = {
-  id?: string;
-  nome?: string;
-  nif?: string | null;
-  email?: string | null;
-  telefone?: string | null;
-  tipo?: string | null;
-  custo_hora?: number | null;
-  categoria?: string | null;
-  contrato_tipo?: string | null;
-  iban?: string | null;
-  data_admissao?: string | null;
-  ativo?: boolean;
-};
-
-function cleanString(v: any): string | null {
-  const s = String(v ?? '').trim();
-  return s === '' ? null : s;
-}
-
-function onlyDigits(v: string | null): string | null {
-  if (!v) return null;
-  return v.replace(/\D/g, '') || null;
-}
-
 export async function POST(req: Request) {
   try {
-    const empresaId = process.env.CONF_EMPRESA_ID;
-    if (!empresaId) {
-      return NextResponse.json({ ok: false, error: 'CONF_EMPRESA_ID em falta' }, { status: 500 });
-    }
+    const body = await req.json().catch(() => ({}));
 
-    const raw: Body = await req.json().catch(() => ({} as Body));
-    const id = cleanString(raw.id);
-
+    const id = String(body?.id || '').trim();
     if (!id) {
-      return NextResponse.json({ ok: false, error: 'ID em falta' }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: 'ID obrigatório' },
+        { status: 400 },
+      );
     }
 
-    const nome = cleanString(raw.nome);
-    const nif = onlyDigits(cleanString(raw.nif));
-    const email = cleanString(raw.email);
-    const telefone = onlyDigits(cleanString(raw.telefone));
-    const tipo = cleanString(raw.tipo);
-    const data_admissao = cleanString(raw.data_admissao);
+    const nome = body?.nome ? String(body.nome).trim() : null;
+    const nif = body?.nif ? String(body.nif).trim() : null;
+    const email = body?.email ? String(body.email).trim() : null;
+    const telefone = body?.telefone ? String(body.telefone).trim() : null;
+    const tipo = body?.tipo ? String(body.tipo).trim() : null;
+    const categoria = body?.categoria ? String(body.categoria).trim() : null;
+    const contrato_tipo = body?.contrato_tipo
+      ? String(body.contrato_tipo).trim()
+      : null;
+    const iban = body?.iban ? String(body.iban).trim() : null;
+
     const custo_hora =
-      raw.custo_hora === null || raw.custo_hora === undefined
+      body?.custo_hora === null || body?.custo_hora === ''
         ? null
-        : Number(raw.custo_hora);
-    const categoria = cleanString(raw.categoria);
-    const contrato_tipo = cleanString(raw.contrato_tipo);
-    const iban = cleanString(raw.iban);
-    const ativo = raw.ativo ?? true;
+        : Number(body.custo_hora);
 
-    if (nif && !/^[0-9]{9}$/.test(nif)) {
-      return NextResponse.json({ ok: false, error: 'NIF deve ter 9 dígitos' }, { status: 400 });
-    }
+    const data_admissao =
+      body?.data_admissao && String(body.data_admissao).trim() !== ''
+        ? String(body.data_admissao)
+        : null;
 
-    if (telefone && !/^[0-9]{9}$/.test(telefone)) {
-      return NextResponse.json({ ok: false, error: 'Telefone deve ter 9 dígitos' }, { status: 400 });
-    }
+    const ativo = body?.ativo === false ? false : true;
 
-    if (email && !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(email)) {
-      return NextResponse.json({ ok: false, error: 'Email inválido' }, { status: 400 });
-    }
+    const pode_aceder_sistema = body?.pode_aceder_sistema === true;
+    const pode_registar_ponto = body?.pode_registar_ponto === true;
 
     const supa = getServiceSupabase();
 
@@ -81,19 +53,20 @@ export async function POST(req: Request) {
         email,
         telefone,
         tipo,
-        custo_hora,
         categoria,
         contrato_tipo,
         iban,
-        data_admissao: data_admissao ?? null,
+        custo_hora,
+        data_admissao,
         ativo,
+        pode_aceder_sistema,
+        pode_registar_ponto,
       })
-      .eq('id', id)
-      .eq('empresa_id', empresaId);
+      .eq('id', id);
 
     if (error) {
       return NextResponse.json(
-        { ok: false, error: `Erro ao atualizar colaborador: ${error.message}` },
+        { ok: false, error: error.message },
         { status: 400 },
       );
     }
@@ -101,7 +74,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, error: e?.message || 'Erro inesperado ao atualizar colaborador' },
+      { ok: false, error: e?.message || 'Erro inesperado' },
       { status: 500 },
     );
   }
