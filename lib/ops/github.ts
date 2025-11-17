@@ -1,49 +1,15 @@
 // lib/ops/github.ts
-import { App } from "octokit";
+import { Octokit } from "octokit";
 
-const appId = process.env.OPS_GITHUB_APP_ID;
-const privateKey = process.env.OPS_GITHUB_PRIVATE_KEY;
+const token = process.env.OPS_GITHUB_TOKEN;
 
-if (!appId || !privateKey) {
+if (!token) {
   console.warn(
-    "[OPS] GitHub envs incompletas — precisa de OPS_GITHUB_APP_ID e OPS_GITHUB_PRIVATE_KEY"
+    "[OPS] OPS_GITHUB_TOKEN não definido — funções de GitHub Ops vão falhar."
   );
 }
 
-const app =
-  appId && privateKey
-    ? new App({
-        appId: Number(appId),
-        privateKey,
-      })
-    : null;
-
-async function getInstallationOctokit() {
-  if (!app) {
-    throw new Error("GitHub App não configurado (faltam envs OPS_GITHUB_*).");
-  }
-
-  const installationIdRaw = process.env.OPS_GITHUB_INSTALLATION_ID;
-  if (!installationIdRaw) {
-    throw new Error(
-      "OPS_GITHUB_INSTALLATION_ID não definido (ver envs do Vercel)."
-    );
-  }
-
-  const installationId = Number(installationIdRaw);
-  if (!installationId || Number.isNaN(installationId)) {
-    throw new Error(
-      `OPS_GITHUB_INSTALLATION_ID inválido: "${installationIdRaw}" (esperado número).`
-    );
-  }
-
-  // AQUI está a diferença: passa um objeto com installationId
-  const octokit = await app.getInstallationOctokit({
-    installationId,
-  });
-
-  return octokit;
-}
+const octokit = token ? new Octokit({ auth: token }) : null;
 
 export async function getRepoFile(params: {
   owner?: string;
@@ -51,11 +17,13 @@ export async function getRepoFile(params: {
   path: string;
   ref?: string;
 }) {
+  if (!octokit) {
+    throw new Error("Octokit não configurado (falta OPS_GITHUB_TOKEN).");
+  }
+
   const owner = params.owner ?? "libertrendz";
   const repo = params.repo ?? "confiance";
   const ref = params.ref ?? "main";
-
-  const octokit = await getInstallationOctokit();
 
   const res = await octokit.request(
     "GET /repos/{owner}/{repo}/contents/{path}",
