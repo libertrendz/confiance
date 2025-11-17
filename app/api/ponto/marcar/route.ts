@@ -9,11 +9,11 @@ interface PontoMarcarPayload {
   empresa_id: string;      // public.empresas.id
   funcionario_id: string;  // public.colaboradores.id
   user_id: string;         // auth.users.id (Supabase)
-  tipo: PontoTipo;         // teu enum existente em pontos.tipo
+  tipo: PontoTipo;         // enum existente em pontos.tipo
   latitude?: number;
   longitude?: number;
   accuracy?: number;
-  foto_url?: string;
+  foto_url: string;        // OBRIGATÓRIO para passar na constraint pontos_check_foto_geo
   origem?: string;
   tz_client?: string;
   device_time?: string;
@@ -32,13 +32,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validação mínima
+  // Validação mínima forte (foto + geo)
   if (!body.empresa_id || !body.funcionario_id || !body.user_id || !body.tipo) {
     return NextResponse.json(
       {
         ok: false,
         error:
           "Campos obrigatórios: empresa_id, funcionario_id, user_id, tipo",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!body.foto_url) {
+    return NextResponse.json(
+      { ok: false, error: "foto_url é obrigatória para registar o ponto" },
+      { status: 400 }
+    );
+  }
+
+  if (
+    typeof body.latitude !== "number" ||
+    typeof body.longitude !== "number"
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "latitude e longitude são obrigatórias e devem ser números para registar o ponto",
       },
       { status: 400 }
     );
@@ -62,16 +83,24 @@ export async function POST(req: NextRequest) {
     funcionario_id: body.funcionario_id,
     user_id: body.user_id,
     tipo: body.tipo,
-    latitude: body.latitude ?? null,
-    longitude: body.longitude ?? null,
+
+    // Campos de geo “antigos”
+    latitude: body.latitude,
+    longitude: body.longitude,
     accuracy: body.accuracy ?? null,
-    foto_url: body.foto_url ?? null,
+
+    // Campos de geo “novos” (que provavelmente estão na constraint pontos_check_foto_geo)
+    geo_lat: body.latitude,
+    geo_lon: body.longitude,
+    geo_accuracy: body.accuracy ?? null,
+
+    foto_url: body.foto_url,
     origem: body.origem ?? "online",
     tz_client: body.tz_client ?? null,
     device_time: body.device_time ?? null,
     obs: body.obs ?? null,
     // ocorrido_em, status, ts_servidor, created_at, updated_at
-    // usam os defaults já definidos na tabela public.pontos
+    // usam os defaults da tabela public.pontos
   };
 
   try {
