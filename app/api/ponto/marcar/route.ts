@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-type PontoTipo = string; // ex.: "entrada", "saida" — deve bater com o enum existente no DB
+type PontoTipo = string; // ex.: "entrada", "saida" — tem de bater com o enum tipo no DB
 
 interface PontoMarcarPayload {
-  empresa_id: string;
-  funcionario_id: string;
-  user_id: string;
-  tipo: PontoTipo;
+  empresa_id: string;      // public.empresas.id
+  funcionario_id: string;  // public.colaboradores.id
+  user_id: string;         // auth.users.id (Supabase)
+  tipo: PontoTipo;         // teu enum existente em pontos.tipo
   latitude?: number;
   longitude?: number;
   accuracy?: number;
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       {
         ok: false,
         error:
-          "Campos obrigatórios: empresa_id, funcionario_id, user_id, tipo"
+          "Campos obrigatórios: empresa_id, funcionario_id, user_id, tipo",
       },
       { status: 400 }
     );
@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Monta o payload para a tabela public.pontos
   const insertPayload = {
     empresa_id: body.empresa_id,
     funcionario_id: body.funcionario_id,
@@ -70,9 +69,9 @@ export async function POST(req: NextRequest) {
     origem: body.origem ?? "online",
     tz_client: body.tz_client ?? null,
     device_time: body.device_time ?? null,
-    obs: body.obs ?? null
+    obs: body.obs ?? null,
     // ocorrido_em, status, ts_servidor, created_at, updated_at
-    // ficam com os defaults da tabela
+    // usam os defaults já definidos na tabela public.pontos
   };
 
   try {
@@ -82,9 +81,9 @@ export async function POST(req: NextRequest) {
         apikey: serviceRole,
         Authorization: `Bearer ${serviceRole}`,
         "Content-Type": "application/json",
-        Prefer: "return=representation"
+        Prefer: "return=representation",
       },
-      body: JSON.stringify(insertPayload)
+      body: JSON.stringify(insertPayload),
     });
 
     if (!res.ok) {
@@ -94,20 +93,19 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: "Erro ao gravar marcação de ponto",
-          detail: text
+          detail: text,
         },
         { status: 500 }
       );
     }
 
     const data = (await res.json()) as any[];
-
     const row = data?.[0] ?? null;
 
     return NextResponse.json(
       {
         ok: true,
-        ponto: row
+        ponto: row,
       },
       { status: 201 }
     );
