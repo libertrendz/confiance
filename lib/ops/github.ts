@@ -3,26 +3,41 @@ import { App } from "octokit";
 
 const appId = process.env.OPS_GITHUB_APP_ID;
 const privateKey = process.env.OPS_GITHUB_PRIVATE_KEY;
-const installationId = process.env.OPS_GITHUB_INSTALLATION_ID;
+const installationIdEnv = process.env.OPS_GITHUB_INSTALLATION_ID;
 
-if (!appId || !privateKey || !installationId) {
-  console.warn("[OPS] GitHub envs incompletas — OPS_GITHUB_APP_ID / OPS_GITHUB_INSTALLATION_ID / OPS_GITHUB_PRIVATE_KEY");
+if (!appId || !privateKey || !installationIdEnv) {
+  console.warn(
+    "[OPS] GitHub envs incompletas — precisa de OPS_GITHUB_APP_ID, OPS_GITHUB_PRIVATE_KEY, OPS_GITHUB_INSTALLATION_ID"
+  );
 }
 
-const app = appId && privateKey
-  ? new App({
-      appId: Number(appId),
-      privateKey,
-    })
-  : null;
+const app =
+  appId && privateKey
+    ? new App({
+        appId: Number(appId),
+        privateKey,
+      })
+    : null;
 
 async function getInstallationOctokit() {
   if (!app) {
     throw new Error("GitHub App não configurado (faltam envs OPS_GITHUB_*).");
   }
-  const octokit = await app.getInstallationOctokit(
-    Number(installationId)
-  );
+
+  const installationIdRaw = process.env.OPS_GITHUB_INSTALLATION_ID;
+  const installationId = installationIdRaw ? Number(installationIdRaw) : 0;
+
+  if (!installationId) {
+    throw new Error(
+      "OPS_GITHUB_INSTALLATION_ID não definido ou inválido (esperado número)."
+    );
+  }
+
+  // Forma explícita: passa um objeto com installationId
+  const octokit = await app.getInstallationOctokit({
+    installationId,
+  });
+
   return octokit;
 }
 
