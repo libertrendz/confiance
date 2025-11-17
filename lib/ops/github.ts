@@ -3,11 +3,10 @@ import { App } from "octokit";
 
 const appId = process.env.OPS_GITHUB_APP_ID;
 const privateKey = process.env.OPS_GITHUB_PRIVATE_KEY;
-const installationIdEnv = process.env.OPS_GITHUB_INSTALLATION_ID;
 
-if (!appId || !privateKey || !installationIdEnv) {
+if (!appId || !privateKey) {
   console.warn(
-    "[OPS] GitHub envs incompletas — precisa de OPS_GITHUB_APP_ID, OPS_GITHUB_PRIVATE_KEY, OPS_GITHUB_INSTALLATION_ID"
+    "[OPS] GitHub envs incompletas — precisa de OPS_GITHUB_APP_ID e OPS_GITHUB_PRIVATE_KEY"
   );
 }
 
@@ -25,15 +24,20 @@ async function getInstallationOctokit() {
   }
 
   const installationIdRaw = process.env.OPS_GITHUB_INSTALLATION_ID;
-  const installationId = installationIdRaw ? Number(installationIdRaw) : 0;
-
-  if (!installationId) {
+  if (!installationIdRaw) {
     throw new Error(
-      "OPS_GITHUB_INSTALLATION_ID não definido ou inválido (esperado número)."
+      "OPS_GITHUB_INSTALLATION_ID não definido (ver envs do Vercel)."
     );
   }
 
-  // Forma explícita: passa um objeto com installationId
+  const installationId = Number(installationIdRaw);
+  if (!installationId || Number.isNaN(installationId)) {
+    throw new Error(
+      `OPS_GITHUB_INSTALLATION_ID inválido: "${installationIdRaw}" (esperado número).`
+    );
+  }
+
+  // AQUI está a diferença: passa um objeto com installationId
   const octokit = await app.getInstallationOctokit({
     installationId,
   });
