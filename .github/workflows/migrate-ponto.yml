@@ -1,0 +1,57 @@
+# .github/workflows/migrate-ponto.yml
+name: Migrate Ponto (backup -> apply)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'target environment (staging|prod)'
+        required: true
+        default: 'staging'
+  push:
+    branches:
+      - 'deploy/ponto'
+
+jobs:
+  backup-and-migrate:
+    runs-on: ubuntu-latest
+    env:
+      PG_CONN_URL: ${{ secrets.PG_CONN_URL }}
+      MIGRATION_FILE: db/migrations/001_create_ponto_registro.sql
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install postgresql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Verify PG_CONN_URL present
+        run: |
+          if [ -z "${PG_CONN_URL}" ]; then
+            echo "PG_CONN_URL secret is missing" >&2
+            exit 1
+          fi
+
+      - name: Backup DB (pg_dump)
+        run: |
+          TIMESTAMP=$(date +%F_%H%M%S)
+          BACKUP_FILE=confiance-backup-${TIMESTAMP}.dump
+          pg_dump -Fc "$PG_CONN_URL" -f "$BACKUP_FILE"
+          ls -lh "$BACKUP_FILE"
+        # save artifact
+        - uses: actions/upload-artifact@v4
+          with:
+            name: db-backup
+            path: confiance-backup-*.dump
+
+      - name: Apply migration (psql)
+        run: |
+          echo "Applying migration: $MIGRATION_FILE"
+          psql "$PG_CONN_URL" -f "$MIGRATION_FILE"
+        env:
+          PGPASSWORD: ${{ secrets.PG_PASSWORD || '' }}
+
+      - name: Smoke check (count rows)
+        run: |
+          echo "ponto_registro count:"
+          psql "$PG_CONN_URL" -c "SELECT count(*) FROM public.ponto_registro;"
