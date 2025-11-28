@@ -59,13 +59,37 @@ export async function POST(req: Request) {
       // proceed to check by id as fallback
     } else if (updByUser.data && Array.isArray(updByUser.data) && updByUser.data.length === 1) {
       const profile = updByUser.data[0];
-      supabase.from('profile_audit').insert({ empresa_id: empresaId, usuario_id: userId, action: 'update_profile', payload: updates }).catch(()=>null);
+
+      // audit (fire-and-forget using async IIFE with try/await)
+      (async () => {
+        try {
+          await supabase.from('profile_audit').insert({
+            empresa_id: empresaId,
+            usuario_id: userId,
+            action: 'update_profile',
+            payload: updates
+          });
+        } catch (e) {
+          console.warn('profile_audit insert failed', e);
+        }
+      })();
+
+      // revalidate (best-effort)
       (async () => {
         try {
           const secret = process.env.REVALIDATE_SECRET;
-          if (secret) await fetch(`${APP_ORIGIN}/api/revalidate`, { method: 'POST', headers: { 'Content-Type':'application/json','x-revalidate-secret': secret }, body: JSON.stringify({ path: `/profile/${userId}` }) });
-        } catch(e){/* ignore */ }
+          if (secret) {
+            await fetch(`${APP_ORIGIN}/api/revalidate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': secret },
+              body: JSON.stringify({ path: `/profile/${userId}` })
+            });
+          }
+        } catch (e) {
+          console.warn('revalidate failed', e);
+        }
       })();
+
       return NextResponse.json({ ok: true, updated: true, by: 'user_id', profile }, { status: 200 });
     }
 
@@ -84,13 +108,35 @@ export async function POST(req: Request) {
 
     if (updById.data && Array.isArray(updById.data) && updById.data.length === 1) {
       const profile = updById.data[0];
-      supabase.from('profile_audit').insert({ empresa_id: empresaId, usuario_id: userId, action: 'update_profile', payload: updates }).catch(()=>null);
+
+      (async () => {
+        try {
+          await supabase.from('profile_audit').insert({
+            empresa_id: empresaId,
+            usuario_id: userId,
+            action: 'update_profile',
+            payload: updates
+          });
+        } catch (e) {
+          console.warn('profile_audit insert failed', e);
+        }
+      })();
+
       (async () => {
         try {
           const secret = process.env.REVALIDATE_SECRET;
-          if (secret) await fetch(`${APP_ORIGIN}/api/revalidate`, { method: 'POST', headers: { 'Content-Type':'application/json','x-revalidate-secret': secret }, body: JSON.stringify({ path: `/profile/${userId}` }) });
-        } catch(e){/* ignore */ }
+          if (secret) {
+            await fetch(`${APP_ORIGIN}/api/revalidate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-revalidate-secret': secret },
+              body: JSON.stringify({ path: `/profile/${userId}` })
+            });
+          }
+        } catch (e) {
+          console.warn('revalidate failed', e);
+        }
       })();
+
       return NextResponse.json({ ok: true, updated: true, by: 'id', profile }, { status: 200 });
     }
 
