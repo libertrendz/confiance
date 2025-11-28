@@ -66,11 +66,11 @@ export async function POST(req: NextRequest) {
   }
 
   const supabaseUrl = process.env.OPS_SUPABASE_URL;
-  const serviceRole = process.env.OPS_SUPABASE_SERVICE_ROLE;
+  const serviceRole = process.env.OPS_SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRole) {
     console.error(
-      "[PONTO] OPS_SUPABASE_URL ou OPS_SUPABASE_SERVICE_ROLE não configurados."
+      "[PONTO] OPS_SUPABASE_URL ou OPS_SUPABASE_SERVICE_ROLE_KEY não configurados."
     );
     return NextResponse.json(
       { ok: false, error: "Configuração Supabase ausente no servidor" },
