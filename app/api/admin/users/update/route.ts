@@ -1,5 +1,7 @@
 // app/api/admin/users/update/route.ts
-// Versão segura: lazy-init do Supabase client para evitar crash no build
+// Versão segura e compatível com duas varnames:
+// SUPABASE_SERVICE_ROLE_KEY  OR  SUPABASE_SERVICE_ROLE
+// Faz lazy-init do Supabase client para evitar crash no build.
 
 import { NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -8,11 +10,13 @@ const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://erp-confiance.ver
 
 function makeSupabaseClient(): { client?: SupabaseClient; missing?: string[] } {
   const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // accept either env name for backward compatibility
+  const SUPABASE_SERVICE_ROLE_KEY =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE;
 
   const missing: string[] = [];
   if (!SUPABASE_URL) missing.push('SUPABASE_URL');
-  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY | SUPABASE_SERVICE_ROLE');
 
   if (missing.length) return { missing };
 
