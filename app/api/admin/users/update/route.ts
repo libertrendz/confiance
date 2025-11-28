@@ -1,35 +1,35 @@
 // app/api/admin/users/update/route.ts
-// Versão corrigida: cria client SUPABASE de forma lazy dentro do handler
-// Evita executar código que requer env vars no momento do build.
+// Versão segura: lazy-init do Supabase client para evitar crash no build
 
 import { NextResponse } from 'next/server';
-import type { Database } from '@/lib/database_types'; // opcional: se tiveres types
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const API_ADMIN_SECRET = process.env.API_ADMIN_SECRET;
-const REVALIDATE_SECRET = process.env.REVALIDATE_SECRET;
 const APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://erp-confiance.vercel.app';
 
-function getSupabaseAdmin(): SupabaseClient {
+function makeSupabaseClient(): { client?: SupabaseClient; missing?: string[] } {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Supabase admin env vars missing (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
-  }
+  const missing: string[] = [];
+  if (!SUPABASE_URL) missing.push('SUPABASE_URL');
+  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
 
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  if (missing.length) return { missing };
+
+  const client = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false }
   });
+  return { client };
 }
 
 export async function POST(req: Request) {
   try {
-    // Autenticação simples: header x-admin-secret
+    // Auth header check
     const provided = req.headers.get('x-admin-secret');
+    const API_ADMIN_SECRET = process.env.API_ADMIN_SECRET;
     if (!API_ADMIN_SECRET) {
-      console.error('API_ADMIN_SECRET not set in environment');
-      return NextResponse.json({ ok: false, error: 'Server misconfigured' }, { status: 500 });
+      console.error('API_ADMIN_SECRET missing in env');
+      return NextResponse.json({ ok: false, error: 'Server misconfigured (API_ADMIN_SECRET)' }, { status: 500 });
     }
     if (!provided || provided !== API_ADMIN_SECRET) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
@@ -46,21 +46,21 @@ export async function POST(req: Request) {
     if (!empresaId) return NextResponse.json({ ok: false, error: 'Missing empresaId' }, { status: 400 });
     if (!updates || typeof updates !== 'object') return NextResponse.json({ ok: false, error: 'Missing updates' }, { status: 400 });
 
-    // criar client apenas quando necessario (evita erro em build)
-    let supabaseAdmin;
-    try {
-      supabaseAdmin = getSupabaseAdmin();
-    } catch (e: any) {
-      console.error('Supabase env missing at runtime:', e.message);
-      return NextResponse.json({ ok: false, error: 'Server not configured for DB operations' }, { status: 500 });
+    // lazy create supabase client (avoids build-time evaluation)
+    const { client, missing } = makeSupabaseClient();
+    if (missing && missing.length) {
+      console.error('Missing env:', missing);
+      return NextResponse.json({ ok: false, error: `Missing env: ${missing.join(', ')}` }, { status: 500 });
+    }
+    if (!client) {
+      return NextResponse.json({ ok: false, error: 'Could not initialize DB client' }, { status: 500 });
     }
 
-    // Proteções: impedir alterações indevidas
+    // Proteções e update
     delete updates.id;
     updates.empresa_id = empresaId;
 
-    // Executa update (server-side, bypass RLS)
-    const { data: updatedProfile, error: updateErr } = await supabaseAdmin
+    const { data: updatedProfile, error: updateErr } = await client
       .from('profile')
       .update(updates)
       .eq('id', userId)
@@ -73,9 +73,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'DB update error: ' + (updateErr.message ?? updateErr) }, { status: 500 });
     }
 
-    // Grava audit (não bloqueia se falhar)
+    // Try insert audit (non-blocking)
     try {
-      await supabaseAdmin.from('profile_audit').insert({
+      await client.from('profile_audit').insert({
         empresa_id: empresaId,
         usuario_id: userId,
         action: 'update_profile',
@@ -85,12 +85,11 @@ export async function POST(req: Request) {
       console.warn('profile_audit insert failed', auditErr);
     }
 
-    // Chama endpoint de revalidate (usa secret guardada no Vercel)
+    // Revalidate via internal endpoint (uses REVALIDATE_SECRET)
+    const REVALIDATE_SECRET = process.env.REVALIDATE_SECRET;
     let revalidated = false;
-    try {
-      if (!REVALIDATE_SECRET) {
-        console.warn('REVALIDATE_SECRET not set; skipping revalidate call');
-      } else {
+    if (REVALIDATE_SECRET) {
+      try {
         const resp = await fetch(`${APP_ORIGIN}/api/revalidate`, {
           method: 'POST',
           headers: {
@@ -104,9 +103,11 @@ export async function POST(req: Request) {
           const txt = await resp.text().catch(() => 'no-body');
           console.warn('revalidate returned not OK', resp.status, txt);
         }
+      } catch (err) {
+        console.error('revalidate call failed', err);
       }
-    } catch (err) {
-      console.error('revalidate call failed', err);
+    } else {
+      console.warn('REVALIDATE_SECRET not set; skipping revalidate call');
     }
 
     return NextResponse.json({ ok: true, updated: true, revalidated, profile: updatedProfile }, { status: 200 });
