@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
-const SECRET = 'confiance-reval-2025'; // <-- SEGREDO EMBUTIDO (INSEGuro). Substitui por env var depois.
+const SECRET = process.env.REVALIDATE_SECRET; 
 
 export async function POST(req: Request) {
   if (!SECRET) {
