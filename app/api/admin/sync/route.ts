@@ -5,9 +5,9 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * Rota ADMIN para sincronizar dados de usuário do ERP -> Supabase Auth.
  *
- * Uso esperado:
- * - Chamado APÓS o desktop/ERP atualizar os dados do usuário na base interna
- * - Garante que o login externo (Auth) reflita nome/email atuais
+ * - Atualiza TODOS os campos de nome: full_name, displayName, nome, nome_exibicao, name
+ * - Atualiza email, se enviado
+ * - Marca versão de sync em user_metadata.sync_version
  *
  * Segurança:
  * - Protegido via x-admin-secret
@@ -60,11 +60,12 @@ export async function POST(req: Request) {
       ...extraMetadata,
       empresa_id: empresaId ?? extraMetadata.empresa_id,
       updated_at: new Date().toISOString(),
+      sync_version: 'v2025-12-02-2', // MARCADOR PARA SABERMOS QUE ESTE CODIGO RODOU
     };
 
     if (nome && nome.trim().length > 0) {
       const clean = nome.trim();
-      // cobrimos todos os campos típicos de nome
+      // Preenche TODOS os campos de nome
       user_metadata.full_name = clean;
       user_metadata.displayName = clean;
       user_metadata.nome = clean;
