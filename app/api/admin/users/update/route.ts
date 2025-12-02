@@ -3,6 +3,7 @@
 // Grava audit (não bloqueante) e revalida ISR.
 // Compatível com SUPABASE_SERVICE_ROLE or SUPABASE_SERVICE_ROLE_KEY (lazy-init).
 // Regra CONFIANCE: nome é canónico e nome_exibicao espelha nome.
+// ESTA VERSÃO TEM DEBUG CONTROLADO PARA DIAGNOSTICAR UNAUTHORIZED.
 
 import { NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -17,7 +18,8 @@ function makeSupabaseClient(): { client?: SupabaseClient; missing?: string[] } {
 
   const missing: string[] = [];
   if (!SUPABASE_URL) missing.push('SUPABASE_URL');
-  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY | SUPABASE_SERVICE_ROLE');
+  if (!SUPABASE_SERVICE_ROLE_KEY)
+    missing.push('SUPABASE_SERVICE_ROLE_KEY | SUPABASE_SERVICE_ROLE');
 
   if (missing.length) return { missing };
 
@@ -80,15 +82,39 @@ export async function POST(req: Request) {
     // ----- Auth admin ----- //
     const provided = req.headers.get('x-admin-secret');
     const API_ADMIN_SECRET = process.env.API_ADMIN_SECRET;
+
+    // DEBUG CONTROLADO (não expõe o segredo, só flags)
+    const hasProvided = !!provided;
+    const hasEnv = !!API_ADMIN_SECRET;
+    const matches = hasProvided && hasEnv && provided === API_ADMIN_SECRET;
+
     if (!API_ADMIN_SECRET) {
-      console.error('API_ADMIN_SECRET missing');
+      console.error('API_ADMIN_SECRET missing in env');
       return NextResponse.json(
-        { ok: false, error: 'Server misconfigured (API_ADMIN_SECRET)' },
+        {
+          ok: false,
+          error: 'Server misconfigured (API_ADMIN_SECRET)',
+          debug: { hasProvided, hasEnv, matches },
+        },
         { status: 500 }
       );
     }
-    if (!provided || provided !== API_ADMIN_SECRET) {
-      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+
+    if (!provided || !matches) {
+      console.warn('admin/users/update unauthorized', {
+        hasProvided,
+        hasEnv,
+        matches,
+      });
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Unauthorized',
+          debug: { hasProvided, hasEnv, matches },
+        },
+        { status: 401 }
+      );
     }
 
     const body = await req.json().catch(() => null);
@@ -121,13 +147,11 @@ export async function POST(req: Request) {
       );
 
     // ----- Regra de negócio: nome / nome_exibicao ----- //
-    // Se houver "nome", ele é canónico. Garantimos que nome_exibicao espelha.
     if (typeof updates.nome === 'string' && updates.nome.trim().length > 0) {
       const cleanName = updates.nome.trim();
       updates.nome = cleanName;
       updates.nome_exibicao = cleanName;
     } else if (
-      // fallback: se vier só nome_exibicao, espelha em nome
       (!updates.nome || !String(updates.nome).trim()) &&
       typeof updates.nome_exibicao === 'string' &&
       updates.nome_exibicao.trim().length > 0
@@ -229,29 +253,34 @@ export async function POST(req: Request) {
         );
       }
 
-      // If attemptId returned an error, send it
       if (attemptId.error) {
         return NextResponse.json(
-          { ok: false, error: 'DB update error', detail: { table: TARGET_TABLE, error: attemptId.error } },
+          {
+            ok: false,
+            error: 'DB update error',
+            detail: { table: TARGET_TABLE, error: attemptId.error },
+          },
           { status: 500 }
         );
       }
-      // else attemptId.rows === 0 -> no rows updated
+
       return NextResponse.json(
         { ok: false, error: 'No rows updated', detail: { table: TARGET_TABLE } },
         { status: 404 }
       );
     }
 
-    // If attemptUserId returned an error different than "no rows"
     if (attemptUserId.error) {
       return NextResponse.json(
-        { ok: false, error: 'DB update error', detail: { table: TARGET_TABLE, error: attemptUserId.error } },
+        {
+          ok: false,
+          error: 'DB update error',
+          detail: { table: TARGET_TABLE, error: attemptUserId.error },
+        },
         { status: 500 }
       );
     }
 
-    // fallback
     return NextResponse.json(
       { ok: false, error: 'Unknown update failure' },
       { status: 500 }
