@@ -1,3 +1,5 @@
+// app/adm/utilizadores/[id]/edit/page.tsx
+
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -34,7 +36,9 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
     (async () => {
       try {
         if (!id) throw new Error('ID em falta.');
-        const res = await fetch(`/api/admin/users/read?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+        const res = await fetch(`/api/admin/users/read?id=${encodeURIComponent(id)}`, {
+          cache: 'no-store',
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Falha ao carregar');
         if (alive) setRow(data as Row);
@@ -44,7 +48,9 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [id, supa]);
 
   async function guardar() {
@@ -54,13 +60,21 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
     try {
       const res = await fetch('/api/admin/users/update', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          // chave de admin para falar com a rota protegida
+          'x-admin-secret': process.env.NEXT_PUBLIC_API_ADMIN_SECRET ?? '',
+        },
         body: JSON.stringify({
-          user_id: row.user_id,
-          nome: row.nome ?? null,
-          papel: (row.papel || 'externo') as Papel,
+          userId: row.user_id,
+          empresaId: row.empresa_id,
+          updates: {
+            nome: row.nome ?? '', // nome canónico (vai espelhar em nome_exibicao no backend)
+            papel: (row.papel || 'externo') as Papel,
+          },
         }),
       });
+
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Falha ao guardar');
       router.replace('/adm/utilizadores');
@@ -72,14 +86,20 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
   }
 
   if (loading) {
-    return <main style={{ padding: 18 }}><p style={{ color: '#666' }}>A carregar…</p></main>;
+    return (
+      <main style={{ padding: 18 }}>
+        <p style={{ color: '#666' }}>A carregar…</p>
+      </main>
+    );
   }
 
   if (err) {
     return (
       <main style={{ padding: 18 }}>
         <p style={{ color: 'crimson' }}>{err}</p>
-        <a className="btn btn-ghost" href="/adm/utilizadores" style={{ marginTop: 8 }}>Voltar</a>
+        <a className="btn btn-ghost" href="/adm/utilizadores" style={{ marginTop: 8 }}>
+          Voltar
+        </a>
       </main>
     );
   }
@@ -88,7 +108,9 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
     return (
       <main style={{ padding: 18 }}>
         <p style={{ color: '#666' }}>Registo não encontrado.</p>
-        <a className="btn btn-ghost" href="/adm/utilizadores" style={{ marginTop: 8 }}>Voltar</a>
+        <a className="btn btn-ghost" href="/adm/utilizadores" style={{ marginTop: 8 }}>
+          Voltar
+        </a>
       </main>
     );
   }
@@ -105,7 +127,7 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
           <label className="muted">Nome</label>
           <input
             value={row.nome || ''}
-            onChange={e => setRow(r => r ? { ...r, nome: e.target.value } : r)}
+            onChange={e => setRow(r => (r ? { ...r, nome: e.target.value } : r))}
             style={input}
           />
         </div>
@@ -113,7 +135,7 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
           <label className="muted">Papel</label>
           <select
             value={row.papel || 'externo'}
-            onChange={e => setRow(r => r ? { ...r, papel: e.target.value as Papel } : r)}
+            onChange={e => setRow(r => (r ? { ...r, papel: e.target.value as Papel } : r))}
             style={input}
           >
             <option value="externo">Externo</option>
@@ -128,7 +150,9 @@ export default function EditUtilizadorPage({ params }: { params: { id: string } 
           <button className="btn btn-primary" onClick={guardar} disabled={saving}>
             {saving ? 'A guardar…' : 'Guardar'}
           </button>
-          <a className="btn btn-ghost" href="/adm/utilizadores">Cancelar</a>
+          <a className="btn btn-ghost" href="/adm/utilizadores">
+            Cancelar
+          </a>
         </div>
       </section>
     </main>
@@ -140,5 +164,5 @@ const input: React.CSSProperties = {
   padding: 10,
   border: '1px solid var(--border)',
   borderRadius: 10,
-  background: '#fff'
+  background: '#fff',
 };
