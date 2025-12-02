@@ -26,7 +26,6 @@ export async function POST(req: Request) {
     if (!usuarioId || !tipo) {
       return NextResponse.json({ ok:false, error:'Missing usuarioId or tipo' }, { status:400 });
     }
-
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
       console.error('Missing SUPABASE envs');
       return NextResponse.json({ ok:false, error:'Server misconfigured' }, { status:500 });
@@ -35,10 +34,10 @@ export async function POST(req: Request) {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, { auth: { persistSession: false } });
 
     const { data, error } = await supabase.rpc('rpc_ponto_bater', {
+      p_empresa_id: empresaId,
       p_usuario_id: usuarioId,
       p_tipo: tipo,
-      p_meta: meta,
-      p_empresa_id: empresaId
+      p_meta: meta
     });
 
     if (error) {
