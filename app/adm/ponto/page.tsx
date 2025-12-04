@@ -24,13 +24,13 @@ export default function PontoAdmPage() {
     setErr(null);
     try {
       const { data, error } = await supa
-        .from<PontoRow>('ponto_registro')
+        .from('ponto_registro')
         .select('*')
         .order('batida_at', { ascending: false })
         .limit(200);
 
       if (error) throw error;
-      setRows(data || []);
+      setRows((data as PontoRow[]) || []);
     } catch (e: any) {
       console.error('Erro ao carregar ponto_registro', e);
       setErr(e?.message || 'Falha ao carregar registos de ponto.');
