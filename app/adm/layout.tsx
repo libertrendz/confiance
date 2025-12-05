@@ -1,3 +1,4 @@
+// app/adm/layout.tsx
 'use client';
 
 import React, { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
@@ -30,11 +31,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         setEmail(user.email ?? null);
 
-        // Papel pelo metadata primeiro
         const meta = (user.user_metadata || {}) as Record<string, any>;
-        let effectiveRole: Papel = (meta.app_role as Papel) || (meta.papel as Papel) || 'externo';
+        let effectiveRole: Papel =
+          (meta.app_role as Papel) || (meta.papel as Papel) || 'externo';
 
-        // Complementa com profiles (papel oficial no DB)
         try {
           const { data: prof } = await supa
             .from('profiles')
@@ -75,7 +75,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     window.location.replace('/login');
   }
 
-  // Se for externo, não deveria estar em /adm → manda para menu
   if (!loadingUser && papel === 'externo') {
     if (typeof window !== 'undefined') {
       window.location.replace('/menu');
@@ -94,7 +93,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         minHeight: '100vh',
       }}
     >
-      {/* SIDEBAR */}
       <aside
         style={{
           position: 'sticky',
@@ -109,7 +107,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           gap: 8,
         }}
       >
-        {/* LOGO + NOME */}
         <div
           style={{
             display: 'flex',
@@ -136,37 +133,37 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </span>
         </div>
 
-        {/* MENU */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {/* Dashboard – faz sentido para admin e gestor */}
           {(isAdmin || isGestor) && (
             <a href="/adm/dashboard" style={linkStyle}>
               Dashboard
             </a>
           )}
 
-          {/* Utilizadores – admin + gestor */}
           {(isAdmin || isGestor) && (
             <a href="/adm/utilizadores" style={linkStyle}>
               Utilizadores
             </a>
           )}
 
-          {/* Ponto (ADM) – admin + gestor */}
           {(isAdmin || isGestor) && (
             <a href="/adm/ponto" style={linkStyle}>
               Ponto (ADM)
             </a>
           )}
 
-          {/* Fornecedores – admin + gestor */}
+          {(isAdmin || isGestor) && (
+            <a href="/adm/roteiros" style={linkStyle}>
+              Roteiros de trabalho
+            </a>
+          )}
+
           {(isAdmin || isGestor) && (
             <a href="/adm/fornecedores" style={linkStyle}>
               Fornecedores
             </a>
           )}
 
-          {/* Os itens abaixo ficam, por enquanto, só para ADMIN */}
           {isAdmin && (
             <>
               <a href="/adm/clientes" style={linkStyle}>
@@ -190,7 +187,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <div style={{ flex: 1 }} />
 
-        {/* RODAPÉ */}
         <div
           style={{
             borderTop: '1px solid rgba(255,255,255,.15)',
@@ -239,7 +235,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* CONTEÚDO */}
       <div style={{ padding: 16 }}>{children}</div>
     </div>
   );
