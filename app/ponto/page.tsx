@@ -267,7 +267,7 @@ export default function PontoPage() {
     };
   }
 
-  // 7) Captura de foto (somente câmera, sem galeria – na medida do possível via browser)
+  // 7) Captura de foto (input escondido + botão "Tirar foto agora")
   function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null;
     setPhotoFile(file || null);
@@ -283,7 +283,7 @@ export default function PontoPage() {
     }
   }
 
-  // 8) Bater ponto via RPC direto (modo Lite + geo + raio + marcação de foto)
+  // 8) Bater ponto via RPC direto (geo + raio + meta foto)
   async function baterPonto() {
     if (!usuarioId || !empresaId) return;
     setBatendo(true);
@@ -291,13 +291,11 @@ export default function PontoPage() {
     setMsg(null);
 
     try {
-      // 1) Obter geo
       const g = await obterGeo();
       if (!g) {
         return;
       }
 
-      // 2) Validar raio (se houver locais configurados)
       const raioCheck = validarRaio(g);
       if (!raioCheck.ok) {
         setErr(
@@ -307,7 +305,6 @@ export default function PontoPage() {
         return;
       }
 
-      // 3) Foto obrigatória em ENTRADA e SAÍDA
       const exigeFoto = tipo === 'entrada' || tipo === 'saida';
       if (exigeFoto && !photoFile) {
         setErr(
@@ -426,25 +423,44 @@ export default function PontoPage() {
             </select>
           </div>
 
-          {/* Foto obrigatória em entrada/saída */}
           {(tipo === 'entrada' || tipo === 'saida') && (
             <div>
               <label className="muted">
                 Foto no local ({tipo === 'entrada' ? 'check-in' : 'saída'})
               </label>
+
+              {/* input real escondido */}
               <input
+                id="foto-ponto-input"
                 type="file"
                 accept="image/*"
                 capture="environment"
                 onChange={onPhotoChange}
-                style={{
-                  display: 'block',
-                  marginTop: 4,
-                }}
+                style={{ display: 'none' }}
               />
+
+              {/* botão que dispara a câmara */}
+              <label
+                htmlFor="foto-ponto-input"
+                className="btn btn-ghost"
+                style={{
+                  display: 'inline-block',
+                  marginTop: 6,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  cursor: 'pointer',
+                  background: '#fff',
+                  fontWeight: 600,
+                }}
+              >
+                {photoFile ? 'Trocar foto' : 'Tirar foto agora'}
+              </label>
+
               <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                 Tire uma foto no local com a câmara. Não é permitido utilizar imagens da galeria.
               </p>
+
               {photoPreview && (
                 <div style={{ marginTop: 8 }}>
                   <img
