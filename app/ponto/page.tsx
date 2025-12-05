@@ -28,13 +28,60 @@ type GeoState = {
   accuracy: number | null;
 };
 
+type TipoPonto =
+  | 'entrada'
+  | 'saida_almoco'
+  | 'retorno_almoco'
+  | 'saida'
+  | 'in'
+  | 'out';
+
+function labelTipo(t: string | null | undefined): string {
+  switch (t) {
+    case 'entrada':
+      return 'Entrada';
+    case 'saida_almoco':
+      return 'Saída para almoço';
+    case 'retorno_almoco':
+      return 'Retorno do almoço';
+    case 'saida':
+      return 'Saída';
+    case 'in':
+      return 'In (legacy)';
+    case 'out':
+      return 'Out (legacy)';
+    default:
+      return t || '—';
+  }
+}
+
+function nextAllowedTipos(last: string | null): TipoPonto[] {
+  switch (last) {
+    case null:
+    case undefined:
+    case 'saida':
+      return ['entrada'];
+    case 'entrada':
+      return ['saida_almoco'];
+    case 'saida_almoco':
+      return ['retorno_almoco'];
+    case 'retorno_almoco':
+      return ['saida'];
+    // legacy / desconhecido → força nova entrada
+    case 'in':
+    case 'out':
+    default:
+      return ['entrada'];
+  }
+}
+
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
 
-  const [tipo, setTipo] = useState<string>('entrada');
+  const [tipo, setTipo] = useState<TipoPonto>('entrada');
   const [loadingUser, setLoadingUser] = useState(true);
   const [batendo, setBatendo] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -54,6 +101,8 @@ export default function PontoPage() {
   const [gettingGeo, setGettingGeo] = useState(false);
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [justificativa, setJustificativa] = useState<string>('');
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 1) user + empresa via auth + profiles
@@ -133,7 +182,7 @@ export default function PontoPage() {
     };
   }, [empresaId, supa]);
 
-  // 3) últimos pontos do próprio user
+  // 3) últimos pontos do próprio user (para saber o último tipo)
   async function carregarUltimos() {
     if (!usuarioId || !empresaId) return;
     setLoadingLista(true);
@@ -147,7 +196,14 @@ export default function PontoPage() {
         .limit(10);
 
       if (error) throw error;
-      setUltimos((data || []) as PontoRow[]);
+      const rows = (data || []) as PontoRow[];
+      setUltimos(rows);
+
+      const last = rows[0]?.tipo ?? null;
+      const allowed = nextAllowedTipos(last);
+      if (allowed.length) {
+        setTipo(allowed[0]);
+      }
     } catch (e: any) {
       console.error('Erro ao carregar últimos pontos', e);
     } finally {
@@ -267,6 +323,20 @@ export default function PontoPage() {
     };
   }
 
+  function validarSequencia(tipoAtual: TipoPonto): { ok: boolean; msg?: string } {
+    const last = ultimos[0]?.tipo ?? null;
+    const allowed = nextAllowedTipos(last);
+    if (!allowed.includes(tipoAtual)) {
+      const prox = allowed.map(labelTipo).join(' / ');
+      const lastLabel = labelTipo(last);
+      return {
+        ok: false,
+        msg: `Sequência de ponto inválida. Último registo: ${lastLabel}. Próximo permitido: ${prox}.`,
+      };
+    }
+    return { ok: true };
+  }
+
   // 7) fluxo central de bater ponto (sem depender de foto)
   async function baterPonto() {
     if (!usuarioId || !empresaId) return;
@@ -275,6 +345,13 @@ export default function PontoPage() {
     setMsg(null);
 
     try {
+      // valida sequência antes de qualquer coisa
+      const seq = validarSequencia(tipo);
+      if (!seq.ok) {
+        setErr(seq.msg || 'Sequência de ponto inválida.');
+        return;
+      }
+
       const g = await obterGeo();
       if (!g) {
         return;
@@ -309,6 +386,17 @@ export default function PontoPage() {
       if (tipo === 'saida') {
         meta.foto_checkout = true;
       }
+      if (tipo === 'saida_almoco') {
+        meta.foto_saida_almoco = true;
+      }
+      if (tipo === 'retorno_almoco') {
+        meta.foto_retorno_almoco = true;
+      }
+
+      const just = justificativa.trim();
+      if (just) {
+        meta.justificativa = just;
+      }
 
       const { data, error } = await supa.rpc('rpc_ponto_bater', {
         p_empresa_id: empresaId,
@@ -321,6 +409,7 @@ export default function PontoPage() {
 
       setMsg('Ponto registado com sucesso.');
       setPhotoPreview(null);
+      setJustificativa('');
       await carregarUltimos();
     } catch (e: any) {
       console.error('Erro ao bater ponto', e);
@@ -335,26 +424,25 @@ export default function PontoPage() {
     setErr(null);
     setMsg(null);
 
-    const exigeFoto = tipo === 'entrada' || tipo === 'saida';
+    const exigeFoto =
+      tipo === 'entrada' ||
+      tipo === 'saida' ||
+      tipo === 'saida_almoco' ||
+      tipo === 'retorno_almoco';
 
-    // entrada / saída → abre câmera (input hidden)
     if (exigeFoto) {
       if (fileInputRef.current) {
-        // abre a câmara / seletor de imagem
         fileInputRef.current.click();
       }
       return;
     }
 
-    // tipos legacy (in/out) → bate ponto direto, sem foto
     await baterPonto();
   }
 
   // 9) onChange do input de foto
-  async function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPhotoChange(e: any) {
     const file = e.target.files?.[0] || null;
-
-    // limpa o valor para permitir tirar outra foto depois
     e.target.value = '';
 
     if (!file) {
@@ -362,7 +450,6 @@ export default function PontoPage() {
       return;
     }
 
-    // preview opcional
     const reader = new FileReader();
     reader.onload = () => {
       const url = typeof reader.result === 'string' ? reader.result : null;
@@ -370,7 +457,6 @@ export default function PontoPage() {
     };
     reader.readAsDataURL(file);
 
-    // já temos a foto → agora bate o ponto
     await baterPonto();
   }
 
@@ -393,13 +479,46 @@ export default function PontoPage() {
     );
   }
 
+  const ultimoTipo = ultimos[0]?.tipo ?? null;
+  const allowedTipos = nextAllowedTipos(ultimoTipo);
+
   return (
     <main style={{ padding: 18 }}>
+      {/* "Logo" CONFIANCE simples por enquanto */}
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 900,
+            fontSize: 18,
+            letterSpacing: 1,
+            color: '#0e3258',
+          }}
+        >
+          CONFIANCE
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            textTransform: 'uppercase',
+            color: '#6b7280',
+          }}
+        >
+          Ponto
+        </span>
+      </header>
+
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="h1" style={{ marginBottom: 4 }}>Marcar Ponto</div>
         {nome && (
           <p className="muted" style={{ marginBottom: 8 }}>
-            Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua entrada e saída.
+            Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua jornada.
           </p>
         )}
         {loadingLocais ? (
@@ -423,10 +542,10 @@ export default function PontoPage() {
 
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
-            <label className="muted">Tipo de registo</label>
+            <label className="muted">Próximo tipo de registo</label>
             <select
               value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
+              onChange={(e) => setTipo(e.target.value as TipoPonto)}
               style={{
                 width: '100%',
                 padding: 10,
@@ -435,11 +554,23 @@ export default function PontoPage() {
                 background: '#fff',
               }}
             >
-              <option value="entrada">Entrada</option>
-              <option value="saida">Saída</option>
-              <option value="in">In (legacy)</option>
-              <option value="out">Out (legacy)</option>
+              {allowedTipos.map((t) => (
+                <option key={t} value={t}>
+                  {labelTipo(t)}
+                </option>
+              ))}
             </select>
+            {ultimoTipo && (
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência é sempre:{' '}
+                Entrada → Saída almoço → Retorno almoço → Saída.
+              </p>
+            )}
+            {!ultimoTipo && (
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Primeiro registo do dia: <strong>Entrada</strong>.
+              </p>
+            )}
           </div>
 
           {/* input de foto escondido */}
@@ -453,7 +584,10 @@ export default function PontoPage() {
             style={{ display: 'none' }}
           />
 
-          {(tipo === 'entrada' || tipo === 'saida') && (
+          {(tipo === 'entrada' ||
+            tipo === 'saida' ||
+            tipo === 'saida_almoco' ||
+            tipo === 'retorno_almoco') && (
             <>
               <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                 Ao clicar em <strong>Bater ponto agora</strong>, a câmara será aberta. Tire a foto
@@ -476,6 +610,24 @@ export default function PontoPage() {
               )}
             </>
           )}
+
+          {/* Justificativa – opcional por enquanto, mas disponível em todos os 4 eventos */}
+          <div>
+            <label className="muted">Justificativa (opcional)</label>
+            <textarea
+              value={justificativa}
+              onChange={(e) => setJustificativa(e.target.value)}
+              rows={3}
+              placeholder="Descreva o motivo caso esteja fora do horário normal, fora do local ou não consiga concluir a tarefa."
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                resize: 'vertical',
+              }}
+            />
+          </div>
 
           {gettingGeo && (
             <p className="muted">A obter localização do dispositivo…</p>
@@ -509,71 +661,13 @@ export default function PontoPage() {
         </p>
       </section>
 
-      {/* HISTÓRICO RESUMIDO (podemos remover depois se quiser só na página Histórico) */}
+      {/* Link mental para histórico – sem tabela aqui, tudo em /ponto/historico */}
       <section className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 8,
-          }}
-        >
-          <h2 className="h2">Últimos registos de ponto</h2>
-          <button
-            className="btn btn-ghost"
-            onClick={carregarUltimos}
-            disabled={loadingLista}
-          >
-            {loadingLista ? 'A carregar…' : 'Recarregar'}
-          </button>
-        </div>
-
-        {!ultimos.length && !loadingLista && (
-          <p className="muted">Ainda não há registos de ponto.</p>
-        )}
-
-        {!!ultimos.length && (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: 8 }}>Data / Hora</th>
-                  <th style={{ padding: 8 }}>Tipo</th>
-                  <th style={{ padding: 8 }}>Meta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ultimos.map((r) => (
-                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>
-                      {r.batida_at ? new Date(r.batida_at).toLocaleString() : '—'}
-                    </td>
-                    <td style={{ padding: 8 }}>{r.tipo || '—'}</td>
-                    <td style={{ padding: 8, fontSize: 12 }}>
-                      <pre
-                        style={{
-                          margin: 0,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {r.meta ? JSON.stringify(r.meta) : '{}'}
-                      </pre>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {loadingLista && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            A carregar registos…
-          </p>
-        )}
+        <h2 className="h2">Histórico completo</h2>
+        <p className="muted" style={{ marginTop: 4 }}>
+          Para consultar todos os registos de ponto, utilize a opção <strong>Histórico</strong> no
+          menu principal.
+        </p>
       </section>
     </main>
   );
