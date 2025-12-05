@@ -13,11 +13,7 @@ type PontoRow = {
   created_at: string;
 };
 
-type ProfileRow = {
-  user_id: string;
-  nome: string | null;
-  nome_exibicao: string | null;
-};
+type NomeMap = Record<string, string>;
 
 function labelTipo(t: string | null | undefined): string {
   switch (t) {
@@ -41,20 +37,17 @@ function labelTipo(t: string | null | undefined): string {
 export default function PontoAdmPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [rows, setRows] = useState<PontoRow[]>([]);
+  const [colabByUserId, setColabByUserId] = useState<NomeMap>({});
+  const [empresaById, setEmpresaById] = useState<NomeMap>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  // mapa user_id -> nome exibido
-  const [userNames, setUserNames] = useState<Record<string, string>>({});
 
   async function load() {
     setLoading(true);
     setErr(null);
-    setRows([]);
-    setUserNames({});
 
     try {
-      // 1) carregar últimos registos de ponto (global – admin)
+      // 1) Carrega os registos de ponto (respeita RLS: empresa_id do admin)
       const { data, error } = await supa
         .from('ponto_registro')
         .select('*')
@@ -63,42 +56,88 @@ export default function PontoAdmPage() {
 
       if (error) throw error;
 
-      const pontos = (data || []) as PontoRow[];
-      setRows(pontos);
+      const baseRows = (data || []) as PontoRow[];
+      setRows(baseRows);
 
-      // 2) extrair user_ids únicos para mapear nomes em profiles
+      if (!baseRows.length) {
+        setColabByUserId({});
+        setEmpresaById({});
+        return;
+      }
+
+      // 2) Extrai IDs únicos de utilizador e empresa
       const userIds = Array.from(
         new Set(
-          pontos
+          baseRows
             .map((r) => r.usuario_id)
-            .filter((id): id is string => !!id)
+            .filter((v): v is string => !!v)
+        )
+      );
+      const empresaIds = Array.from(
+        new Set(
+          baseRows
+            .map((r) => r.empresa_id)
+            .filter((v): v is string => !!v)
         )
       );
 
-      if (userIds.length) {
-        const { data: perf, error: perfErr } = await supa
-          .from('profiles')
-          .select('user_id, nome, nome_exibicao')
-          .in('user_id', userIds);
+      // 3) Carrega nomes dos colaboradores (profiles) e empresas
+      const [profRes, empRes] = await Promise.all([
+        userIds.length
+          ? supa
+              .from('profiles')
+              .select('user_id, nome_exibicao, nome')
+              .in('user_id', userIds)
+          : Promise.resolve({ data: [] as any[], error: null } as const),
+        empresaIds.length
+          ? supa
+              .from('empresas')
+              .select('id, nome')
+              .in('id', empresaIds)
+          : Promise.resolve({ data: [] as any[], error: null } as const),
+      ]);
 
-        if (perfErr) {
-          // não bloqueia página – só loga
-          console.warn('Falha ao carregar nomes de profiles para ponto_adm', perfErr);
-        } else if (perf && perf.length) {
-          const map: Record<string, string> = {};
-          (perf as ProfileRow[]).forEach((p) => {
-            const display = p.nome_exibicao || p.nome || '';
-            if (display) {
-              map[p.user_id] = display;
-            }
-          });
-          setUserNames(map);
-        }
+      // 4) Monta mapas de nome → id
+      if (profRes.error) {
+        console.warn('Falha ao carregar perfis para ponto ADM:', profRes.error);
+      } else if (profRes.data) {
+        const map: NomeMap = {};
+        (profRes.data as any[]).forEach((p) => {
+          const uid = p.user_id as string;
+          const nome =
+            (p.nome_exibicao as string | null) ||
+            (p.nome as string | null) ||
+            uid;
+          if (uid) {
+            map[uid] = nome;
+          }
+        });
+        setColabByUserId(map);
+      } else {
+        setColabByUserId({});
+      }
+
+      if (empRes.error) {
+        console.warn('Falha ao carregar empresas para ponto ADM:', empRes.error);
+      } else if (empRes.data) {
+        const map: NomeMap = {};
+        (empRes.data as any[]).forEach((e) => {
+          const id = e.id as string;
+          const nome = (e.nome as string | null) || id;
+          if (id) {
+            map[id] = nome;
+          }
+        });
+        setEmpresaById(map);
+      } else {
+        setEmpresaById({});
       }
     } catch (e: any) {
-      console.error('Erro ao carregar ponto_registro (adm)', e);
+      console.error('Erro ao carregar ponto_registro (ADM)', e);
       setErr(e?.message || 'Falha ao carregar registos de ponto.');
       setRows([]);
+      setColabByUserId({});
+      setEmpresaById({});
     } finally {
       setLoading(false);
     }
@@ -108,52 +147,36 @@ export default function PontoAdmPage() {
     load();
   }, []);
 
-  function getUserName(usuarioId: string): string {
-    return userNames[usuarioId] || usuarioId || '—';
-  }
-
   return (
     <main style={{ padding: 18 }}>
-      {/* LOGO + título do módulo */}
+      {/* Cabeçalho com logo + título + botão recarregar */}
       <header
         style={{
           display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-          marginBottom: 12,
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img
             src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
             alt="CONFIANCE"
             style={{ height: 28 }}
           />
-          <span
-            style={{
-              fontSize: 11,
-              textTransform: 'uppercase',
-              color: '#6b7280',
-            }}
-          >
-            Administração · Ponto
-          </span>
+          <div>
+            <h1 className="h1" style={{ marginBottom: 2 }}>
+              Registos de ponto
+            </h1>
+            <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+              Visão administrativa dos registos de ponto (máx. 200 mais recentes).
+            </p>
+          </div>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <h1 className="h1" style={{ margin: 0 }}>
-            Registos de ponto
-          </h1>
-          <button className="btn btn-ghost" onClick={load} disabled={loading}>
-            {loading ? 'A carregar…' : 'Recarregar'}
-          </button>
-        </div>
+        <button className="btn btn-ghost" onClick={load} disabled={loading}>
+          {loading ? 'A carregar…' : 'Recarregar'}
+        </button>
       </header>
 
       <section className="card">
@@ -174,59 +197,69 @@ export default function PontoAdmPage() {
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                   <th style={{ padding: 8 }}>Data / Hora</th>
                   <th style={{ padding: 8 }}>Tipo</th>
-                  <th style={{ padding: 8 }}>Utilizador</th>
-                  <th style={{ padding: 8 }}>Empresa (ID)</th>
+                  <th style={{ padding: 8 }}>Colaborador</th>
+                  <th style={{ padding: 8 }}>Empresa</th>
                   <th style={{ padding: 8 }}>Meta</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>
-                      {r.batida_at
-                        ? new Date(r.batida_at).toLocaleString()
-                        : '—'}
-                    </td>
-                    <td style={{ padding: 8 }}>{labelTipo(r.tipo)}</td>
-                    <td style={{ padding: 8 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{ fontWeight: 600 }}>
-                          {getUserName(r.usuario_id)}
-                        </span>
-                        <span
+                {rows.map((r) => {
+                  const nomeColab =
+                    colabByUserId[r.usuario_id] || r.usuario_id || '—';
+                  const nomeEmpresa =
+                    empresaById[r.empresa_id] || r.empresa_id || '—';
+
+                  return (
+                    <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: 8 }}>
+                        {r.batida_at
+                          ? new Date(r.batida_at).toLocaleString()
+                          : '—'}
+                      </td>
+                      <td style={{ padding: 8 }}>{labelTipo(r.tipo)}</td>
+                      <td style={{ padding: 8 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span>{nomeColab}</span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: '#6b7280',
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            {r.usuario_id}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span>{nomeEmpresa}</span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: '#6b7280',
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            {r.empresa_id}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: 8, fontSize: 12 }}>
+                        <pre
                           style={{
+                            margin: 0,
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
                             fontFamily: 'monospace',
-                            fontSize: 11,
-                            color: '#6b7280',
                           }}
                         >
-                          {r.usuario_id}
-                        </span>
-                      </div>
-                    </td>
-                    <td
-                      style={{
-                        padding: 8,
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                      }}
-                    >
-                      {r.empresa_id}
-                    </td>
-                    <td style={{ padding: 8, fontSize: 12 }}>
-                      <pre
-                        style={{
-                          margin: 0,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {r.meta ? JSON.stringify(r.meta) : '{}'}
-                      </pre>
-                    </td>
-                  </tr>
-                ))}
+                          {r.meta ? JSON.stringify(r.meta) : '{}'}
+                        </pre>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
