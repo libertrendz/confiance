@@ -25,18 +25,15 @@ export default function MenuPage() {
 
         setEmail(user?.email ?? null);
 
-        // Papel pelo metadata primeiro
         const meta = (user?.user_metadata || {}) as Record<string, any>;
         let effectiveRole: AppRole = (meta.app_role as AppRole) || 'externo';
 
-        // Nome de exibição (metadata)
         const metaNome =
           (meta.nome_exibicao as string) ||
           (meta.nome as string) ||
           (meta.name as string) ||
           null;
 
-        // Complementa com profiles (tabela: profiles.user_id / profiles.papel / profiles.nome_exibicao / profiles.nome)
         if (uid) {
           const { data: prof } = await supa
             .from('profiles')
@@ -55,7 +52,6 @@ export default function MenuPage() {
           setNome(metaNome || null);
         }
 
-        // Admin/Gestor vai direto para o layout ADM
         if (effectiveRole === 'admin' || effectiveRole === 'gestor') {
           window.location.replace('/adm/dashboard');
           return;
@@ -86,7 +82,6 @@ export default function MenuPage() {
     );
   }
 
-  // Layout do cabeçalho: [ PERFIL ] [ NOME/EMAIL (ellipsis) ] [ SAIR ]
   return (
     <main
       style={{
@@ -96,6 +91,23 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
+      {/* LOGO CONFIANCE */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
+        <img
+          src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
+          alt="CONFIANCE"
+          style={{ height: 28 }}
+        />
+      </div>
+
+      {/* Cabeçalho: role + nome + sair */}
       <header
         className="topbar"
         style={{
