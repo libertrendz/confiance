@@ -1,5 +1,3 @@
-//app/ponto/page.tsx
-
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -125,7 +123,6 @@ export default function PontoPage() {
         setLocais((data || []) as LocalPermitido[]);
       } catch (e) {
         console.error('Erro ao carregar locais_permitidos', e);
-        // não bloqueia o uso; só significa que não terá validação de raio no cliente
       } finally {
         if (alive) setLoadingLocais(false);
       }
@@ -205,7 +202,7 @@ export default function PontoPage() {
 
   // 5) Calcular distância em metros (haversine) entre dois pontos
   function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371000; // raio da Terra em metros
+    const R = 6371000;
     const toRad = (v: number) => (v * Math.PI) / 180;
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
@@ -224,8 +221,6 @@ export default function PontoPage() {
     if (!g.lat || !g.lon) return { ok: true, motivo: 'Sem geo' };
 
     if (!locais.length) {
-      // Sem locais configurados: por ora, deixamos passar,
-      // mas registramos em meta como "sem validação de raio".
       return {
         ok: true,
         motivo: 'Sem locais configurados; ponto registado sem validação de raio.',
@@ -246,7 +241,6 @@ export default function PontoPage() {
     });
 
     if (!melhor.local) {
-      // Locais configurados, mas nenhum com coordenadas válidas
       return {
         ok: true,
         motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.',
@@ -273,7 +267,7 @@ export default function PontoPage() {
     };
   }
 
-  // 7) Captura de foto (somente câmera, sem galeria)
+  // 7) Captura de foto (somente câmera, sem galeria – na medida do possível via browser)
   function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null;
     setPhotoFile(file || null);
@@ -300,7 +294,6 @@ export default function PontoPage() {
       // 1) Obter geo
       const g = await obterGeo();
       if (!g) {
-        // erro já foi setado em setErr
         return;
       }
 
@@ -314,14 +307,13 @@ export default function PontoPage() {
         return;
       }
 
-      // 3) Se for saída, exigir foto capturada (fluxo futuro de comprovativo)
-      if (tipo === 'saida') {
-        if (!photoFile) {
-          setErr(
-            'Para registar a saída, é necessário tirar a foto do trabalho realizado no local.'
-          );
-          return;
-        }
+      // 3) Foto obrigatória em ENTRADA e SAÍDA
+      const exigeFoto = tipo === 'entrada' || tipo === 'saida';
+      if (exigeFoto && !photoFile) {
+        setErr(
+          'Para registar entrada/saída é necessário tirar uma foto no local com a câmara do dispositivo.'
+        );
+        return;
       }
 
       const meta: Record<string, any> = {
@@ -338,11 +330,11 @@ export default function PontoPage() {
         meta.dist_m = raioCheck.distancia;
       }
 
+      if (tipo === 'entrada') {
+        meta.foto_checkin = true;
+      }
       if (tipo === 'saida') {
-        // Não armazenamos a foto no meta (para não encher o banco),
-        // apenas sinalizamos que foi capturada. Em fase Pro, isso será
-        // ligado ao fluxo de upload para storage + tabela "pontos".
-        meta.foto_capturada = true;
+        meta.foto_checkout = true;
       }
 
       const { data, error } = await supa.rpc('rpc_ponto_bater', {
@@ -434,10 +426,12 @@ export default function PontoPage() {
             </select>
           </div>
 
-          {/* Foto obrigatória na saída */}
-          {tipo === 'saida' && (
+          {/* Foto obrigatória em entrada/saída */}
+          {(tipo === 'entrada' || tipo === 'saida') && (
             <div>
-              <label className="muted">Foto do trabalho realizado</label>
+              <label className="muted">
+                Foto no local ({tipo === 'entrada' ? 'check-in' : 'saída'})
+              </label>
               <input
                 type="file"
                 accept="image/*"
@@ -449,7 +443,7 @@ export default function PontoPage() {
                 }}
               />
               <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                Tire uma foto no local. Não é permitido utilizar imagens da galeria.
+                Tire uma foto no local com a câmara. Não é permitido utilizar imagens da galeria.
               </p>
               {photoPreview && (
                 <div style={{ marginTop: 8 }}>
@@ -489,7 +483,7 @@ export default function PontoPage() {
         </div>
       </section>
 
-      {/* TAREFAS DO DIA – placeholder para futuro fluxo de tarefas A/B/C */}
+      {/* TAREFAS DO DIA – placeholder */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2">Tarefas do dia</h2>
         <p className="muted" style={{ marginTop: 4 }}>
@@ -499,7 +493,7 @@ export default function PontoPage() {
         </p>
       </section>
 
-      {/* HISTÓRICO DE PONTO */}
+      {/* HISTÓRICO DE PONTO (resumo rápido) */}
       <section className="card">
         <div
           style={{
