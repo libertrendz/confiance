@@ -22,6 +22,13 @@ type LocalPermitido = {
   raio_m?: number | null;
 };
 
+type TarefaRow = {
+  id: string;
+  empresa_id: string;
+  nome: string;
+  ativo: boolean;
+};
+
 type GeoState = {
   lat: number | null;
   lon: number | null;
@@ -91,6 +98,10 @@ export default function PontoPage() {
 
   const [locais, setLocais] = useState<LocalPermitido[]>([]);
   const [loadingLocais, setLoadingLocais] = useState(false);
+
+  const [tarefas, setTarefas] = useState<TarefaRow[]>([]);
+  const [loadingTarefas, setLoadingTarefas] = useState(false);
+  const [tarefaId, setTarefaId] = useState<string>('');
 
   const [geo, setGeo] = useState<GeoState>({
     lat: null,
@@ -181,7 +192,42 @@ export default function PontoPage() {
     };
   }, [empresaId, supa]);
 
-  // 3) últimos pontos do próprio user (para saber o último tipo)
+  // 3) tarefas padrão da empresa
+  useEffect(() => {
+    if (!empresaId) return;
+    let alive = true;
+
+    (async () => {
+      try {
+        setLoadingTarefas(true);
+        const { data, error } = await supa
+          .from('tarefas_padrao')
+          .select('id, empresa_id, nome, ativo')
+          .eq('empresa_id', empresaId)
+          .eq('ativo', true)
+          .order('nome', { ascending: true });
+
+        if (error) throw error;
+        if (!alive) return;
+
+        const lista = (data || []) as TarefaRow[];
+        setTarefas(lista);
+        if (lista.length && !tarefaId) {
+          setTarefaId(lista[0].id);
+        }
+      } catch (e) {
+        console.error('Erro ao carregar tarefas_padrao', e);
+      } finally {
+        if (alive) setLoadingTarefas(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [empresaId, supa]);
+
+  // 4) últimos pontos do próprio user (para saber o último tipo)
   async function carregarUltimos() {
     if (!usuarioId || !empresaId) return;
     setLoadingLista(true);
@@ -216,7 +262,7 @@ export default function PontoPage() {
     }
   }, [usuarioId, empresaId]);
 
-  // 4) geolocalização
+  // 5) geolocalização
   async function obterGeo(): Promise<GeoState | null> {
     if (!('geolocation' in navigator)) {
       setErr('Geolocalização não disponível neste dispositivo.');
@@ -255,7 +301,7 @@ export default function PontoPage() {
     });
   }
 
-  // 5) distância (haversine)
+  // 6) distância (haversine)
   function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
     const toRad = (v: number) => (v * Math.PI) / 180;
@@ -271,7 +317,7 @@ export default function PontoPage() {
     return R * c;
   }
 
-  // 6) validação de raio
+  // 7) validação de raio
   function validarRaio(g: GeoState) {
     if (!g.lat || !g.lon) return { ok: true, motivo: 'Sem geo' };
 
@@ -336,7 +382,7 @@ export default function PontoPage() {
     return { ok: true };
   }
 
-  // 7) fluxo central de bater ponto
+  // 8) fluxo central de bater ponto
   async function baterPonto() {
     if (!usuarioId || !empresaId) return;
     setBatendo(true);
@@ -396,6 +442,23 @@ export default function PontoPage() {
         meta.justificativa = just;
       }
 
+      // *** Regra: na SAÍDA é obrigatório selecionar tarefa executada ***
+      if (tipo === 'saida') {
+        if (!tarefas.length) {
+          setErr(
+            'Nenhuma tarefa configurada para esta empresa. Peça ao administrador/gestor para configurar tarefas padrão antes de concluir o dia.'
+          );
+          return;
+        }
+        if (!tarefaId) {
+          setErr('Selecione a tarefa executada para concluir o dia.');
+          return;
+        }
+        const tarefa = tarefas.find((t) => t.id === tarefaId);
+        meta.tarefa_id = tarefaId;
+        meta.tarefa_nome = tarefa?.nome || null;
+      }
+
       const { data, error } = await supa.rpc('rpc_ponto_bater', {
         p_empresa_id: empresaId,
         p_usuario_id: usuarioId,
@@ -417,7 +480,7 @@ export default function PontoPage() {
     }
   }
 
-  // 8) handler do botão único
+  // 9) handler do botão único
   async function handleBaterClick() {
     setErr(null);
     setMsg(null);
@@ -438,7 +501,7 @@ export default function PontoPage() {
     await baterPonto();
   }
 
-  // 9) onChange do input de foto
+  // 10) onChange do input de foto
   async function onPhotoChange(e: any) {
     const file = e.target.files?.[0] || null;
     e.target.value = '';
@@ -566,6 +629,47 @@ export default function PontoPage() {
             )}
           </div>
 
+          {/* Tarefa (obrigatória na SAÍDA) */}
+          {tipo === 'saida' && (
+            <div>
+              <label className="muted">Tarefa executada (obrigatória na saída)</label>
+              {loadingTarefas && (
+                <p className="muted" style={{ fontSize: 12 }}>
+                  A carregar tarefas padrão…
+                </p>
+              )}
+              {!loadingTarefas && !tarefas.length && (
+                <p className="muted" style={{ fontSize: 12 }}>
+                  Nenhuma tarefa configurada. Contacte o administrador/gestor.
+                </p>
+              )}
+              {!!tarefas.length && (
+                <select
+                  value={tarefaId}
+                  onChange={(e) => setTarefaId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: 10,
+                    borderRadius: 10,
+                    border: '1px solid var(--border)',
+                    background: '#fff',
+                    marginTop: 4,
+                  }}
+                >
+                  {tarefas.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nome}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Ao concluir o dia, selecione a tarefa principal executada. Se não concluiu, use a
+                justificativa abaixo.
+              </p>
+            </div>
+          )}
+
           {/* input de foto escondido */}
           <input
             ref={fileInputRef}
@@ -654,7 +758,7 @@ export default function PontoPage() {
         </p>
       </section>
 
-      {/* Só mensagem apontando para /ponto/historico */}
+      {/* Histórico direcionado para /ponto/historico */}
       <section className="card">
         <h2 className="h2">Histórico completo</h2>
         <p className="muted" style={{ marginTop: 4 }}>
