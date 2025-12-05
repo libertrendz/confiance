@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
 type PontoRow = {
@@ -53,10 +53,10 @@ export default function PontoPage() {
   });
   const [gettingGeo, setGettingGeo] = useState(false);
 
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 1) Carregar user + empresa a partir do Supabase auth + profiles
+  // 1) user + empresa via auth + profiles
   useEffect(() => {
     let alive = true;
 
@@ -104,7 +104,7 @@ export default function PontoPage() {
     };
   }, [supa]);
 
-  // 2) Carregar locais permitidos para a empresa (se existirem)
+  // 2) locais permitidos
   useEffect(() => {
     if (!empresaId) return;
     let alive = true;
@@ -133,7 +133,7 @@ export default function PontoPage() {
     };
   }, [empresaId, supa]);
 
-  // 3) Carregar últimos pontos do colaborador
+  // 3) últimos pontos do próprio user
   async function carregarUltimos() {
     if (!usuarioId || !empresaId) return;
     setLoadingLista(true);
@@ -161,7 +161,7 @@ export default function PontoPage() {
     }
   }, [usuarioId, empresaId]);
 
-  // 4) Capturar geolocalização
+  // 4) geolocalização
   async function obterGeo(): Promise<GeoState | null> {
     if (!('geolocation' in navigator)) {
       setErr('Geolocalização não disponível neste dispositivo.');
@@ -200,7 +200,7 @@ export default function PontoPage() {
     });
   }
 
-  // 5) Calcular distância em metros (haversine) entre dois pontos
+  // 5) distância (haversine)
   function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
     const toRad = (v: number) => (v * Math.PI) / 180;
@@ -216,7 +216,7 @@ export default function PontoPage() {
     return R * c;
   }
 
-  // 6) Validar raio no cliente (se houver locais_permitidos)
+  // 6) validação de raio
   function validarRaio(g: GeoState) {
     if (!g.lat || !g.lon) return { ok: true, motivo: 'Sem geo' };
 
@@ -267,23 +267,7 @@ export default function PontoPage() {
     };
   }
 
-  // 7) Captura de foto (input escondido + botão "Tirar foto agora")
-  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] || null;
-    setPhotoFile(file || null);
-    setPhotoPreview(null);
-
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const url = typeof reader.result === 'string' ? reader.result : null;
-        setPhotoPreview(url);
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-
-  // 8) Bater ponto via RPC direto (geo + raio + meta foto)
+  // 7) fluxo central de bater ponto (sem depender de foto)
   async function baterPonto() {
     if (!usuarioId || !empresaId) return;
     setBatendo(true);
@@ -301,14 +285,6 @@ export default function PontoPage() {
         setErr(
           `Não foi possível registar ponto: ${raioCheck.motivo} ` +
             'Fale com o responsável ou verifique se está no local correto.'
-        );
-        return;
-      }
-
-      const exigeFoto = tipo === 'entrada' || tipo === 'saida';
-      if (exigeFoto && !photoFile) {
-        setErr(
-          'Para registar entrada/saída é necessário tirar uma foto no local com a câmara do dispositivo.'
         );
         return;
       }
@@ -344,7 +320,6 @@ export default function PontoPage() {
       if (error) throw error;
 
       setMsg('Ponto registado com sucesso.');
-      setPhotoFile(null);
       setPhotoPreview(null);
       await carregarUltimos();
     } catch (e: any) {
@@ -353,6 +328,50 @@ export default function PontoPage() {
     } finally {
       setBatendo(false);
     }
+  }
+
+  // 8) handler do botão único
+  async function handleBaterClick() {
+    setErr(null);
+    setMsg(null);
+
+    const exigeFoto = tipo === 'entrada' || tipo === 'saida';
+
+    // entrada / saída → abre câmera (input hidden)
+    if (exigeFoto) {
+      if (fileInputRef.current) {
+        // abre a câmara / seletor de imagem
+        fileInputRef.current.click();
+      }
+      return;
+    }
+
+    // tipos legacy (in/out) → bate ponto direto, sem foto
+    await baterPonto();
+  }
+
+  // 9) onChange do input de foto
+  async function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] || null;
+
+    // limpa o valor para permitir tirar outra foto depois
+    e.target.value = '';
+
+    if (!file) {
+      setPhotoPreview(null);
+      return;
+    }
+
+    // preview opcional
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = typeof reader.result === 'string' ? reader.result : null;
+      setPhotoPreview(url);
+    };
+    reader.readAsDataURL(file);
+
+    // já temos a foto → agora bate o ponto
+    await baterPonto();
   }
 
   // UI
@@ -398,7 +417,7 @@ export default function PontoPage() {
         )}
       </div>
 
-      {/* FORMULÁRIO PRINCIPAL */}
+      {/* FORM PRINCIPAL */}
       <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
         <h2 className="h2" style={{ marginBottom: 12 }}>Bater ponto</h2>
 
@@ -423,46 +442,26 @@ export default function PontoPage() {
             </select>
           </div>
 
+          {/* input de foto escondido */}
+          <input
+            ref={fileInputRef}
+            id="foto-ponto-input"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={onPhotoChange}
+            style={{ display: 'none' }}
+          />
+
           {(tipo === 'entrada' || tipo === 'saida') && (
-            <div>
-              <label className="muted">
-                Foto no local ({tipo === 'entrada' ? 'check-in' : 'saída'})
-              </label>
-
-              {/* input real escondido */}
-              <input
-                id="foto-ponto-input"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={onPhotoChange}
-                style={{ display: 'none' }}
-              />
-
-              {/* botão que dispara a câmara */}
-              <label
-                htmlFor="foto-ponto-input"
-                className="btn btn-ghost"
-                style={{
-                  display: 'inline-block',
-                  marginTop: 6,
-                  padding: '8px 12px',
-                  borderRadius: 10,
-                  border: '1px solid var(--border)',
-                  cursor: 'pointer',
-                  background: '#fff',
-                  fontWeight: 600,
-                }}
-              >
-                {photoFile ? 'Trocar foto' : 'Tirar foto agora'}
-              </label>
-
+            <>
               <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                Tire uma foto no local com a câmara. Não é permitido utilizar imagens da galeria.
+                Ao clicar em <strong>Bater ponto agora</strong>, a câmara será aberta. Tire a foto
+                no local (sem usar galeria). Após confirmar a foto, o ponto será registado
+                automaticamente.
               </p>
-
               {photoPreview && (
-                <div style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 4 }}>
                   <img
                     src={photoPreview}
                     alt="Pré-visualização"
@@ -475,7 +474,7 @@ export default function PontoPage() {
                   />
                 </div>
               )}
-            </div>
+            </>
           )}
 
           {gettingGeo && (
@@ -489,9 +488,10 @@ export default function PontoPage() {
             <p style={{ color: 'green' }}>{msg}</p>
           )}
 
+          {/* BOTÃO ÚNICO, AZUL */}
           <button
             className="btn btn-primary"
-            onClick={baterPonto}
+            onClick={handleBaterClick}
             disabled={batendo || !usuarioId || !empresaId}
           >
             {batendo ? 'A registar…' : 'Bater ponto agora'}
@@ -509,7 +509,7 @@ export default function PontoPage() {
         </p>
       </section>
 
-      {/* HISTÓRICO DE PONTO (resumo rápido) */}
+      {/* HISTÓRICO RESUMIDO (podemos remover depois se quiser só na página Histórico) */}
       <section className="card">
         <div
           style={{
