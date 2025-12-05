@@ -67,7 +67,6 @@ function nextAllowedTipos(last: string | null): TipoPonto[] {
       return ['retorno_almoco'];
     case 'retorno_almoco':
       return ['saida'];
-    // legacy / desconhecido → força nova entrada
     case 'in':
     case 'out':
     default:
@@ -337,7 +336,7 @@ export default function PontoPage() {
     return { ok: true };
   }
 
-  // 7) fluxo central de bater ponto (sem depender de foto)
+  // 7) fluxo central de bater ponto
   async function baterPonto() {
     if (!usuarioId || !empresaId) return;
     setBatendo(true);
@@ -345,7 +344,6 @@ export default function PontoPage() {
     setMsg(null);
 
     try {
-      // valida sequência antes de qualquer coisa
       const seq = validarSequencia(tipo);
       if (!seq.ok) {
         setErr(seq.msg || 'Sequência de ponto inválida.');
@@ -484,7 +482,7 @@ export default function PontoPage() {
 
   return (
     <main style={{ padding: 18 }}>
-      {/* "Logo" CONFIANCE simples por enquanto */}
+      {/* LOGO CONFIANCE */}
       <header
         style={{
           display: 'flex',
@@ -493,16 +491,11 @@ export default function PontoPage() {
           marginBottom: 8,
         }}
       >
-        <span
-          style={{
-            fontWeight: 900,
-            fontSize: 18,
-            letterSpacing: 1,
-            color: '#0e3258',
-          }}
-        >
-          CONFIANCE
-        </span>
+        <img
+          src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
+          alt="CONFIANCE"
+          style={{ height: 28 }}
+        />
         <span
           style={{
             fontSize: 11,
@@ -611,7 +604,7 @@ export default function PontoPage() {
             </>
           )}
 
-          {/* Justificativa – opcional por enquanto, mas disponível em todos os 4 eventos */}
+          {/* Justificativa – opcional */}
           <div>
             <label className="muted">Justificativa (opcional)</label>
             <textarea
@@ -661,7 +654,7 @@ export default function PontoPage() {
         </p>
       </section>
 
-      {/* Link mental para histórico – sem tabela aqui, tudo em /ponto/historico */}
+      {/* Só mensagem apontando para /ponto/historico */}
       <section className="card">
         <h2 className="h2">Histórico completo</h2>
         <p className="muted" style={{ marginTop: 4 }}>
