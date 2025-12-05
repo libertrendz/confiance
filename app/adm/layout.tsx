@@ -1,20 +1,68 @@
-// app/adm/layout.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+type Papel = 'admin' | 'gestor' | 'externo';
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [email, setEmail] = useState<string | null>(null);
+  const [papel, setPapel] = useState<Papel | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
-      const { data } = await supa.auth.getUser();
-      if (!alive) return;
-      setEmail(data.user?.email ?? null);
+      try {
+        setLoadingUser(true);
+        const { data, error } = await supa.auth.getUser();
+        if (error) throw error;
+        if (!alive) return;
+
+        const user = data.user;
+        if (!user) {
+          setEmail(null);
+          setPapel(null);
+          return;
+        }
+
+        setEmail(user.email ?? null);
+
+        // Papel pelo metadata primeiro
+        const meta = (user.user_metadata || {}) as Record<string, any>;
+        let effectiveRole: Papel = (meta.app_role as Papel) || (meta.papel as Papel) || 'externo';
+
+        // Complementa com profiles (papel oficial no DB)
+        try {
+          const { data: prof } = await supa
+            .from('profiles')
+            .select('papel')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          const dbRole = prof?.papel as Papel | undefined;
+          if (dbRole && ['admin', 'gestor', 'externo'].includes(dbRole)) {
+            effectiveRole = dbRole;
+          }
+        } catch (e) {
+          console.warn('Falha ao ler papel em profiles:', e);
+        }
+
+        if (!alive) return;
+        setPapel(effectiveRole);
+      } catch (e) {
+        console.error('Erro ao carregar utilizador no layout ADM', e);
+        if (alive) {
+          setEmail(null);
+          setPapel(null);
+        }
+      } finally {
+        if (alive) setLoadingUser(false);
+      }
     })();
+
     return () => {
       alive = false;
     };
@@ -26,6 +74,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     } catch {}
     window.location.replace('/login');
   }
+
+  // Se for externo, não deveria estar em /adm → manda para menu
+  if (!loadingUser && papel === 'externo') {
+    if (typeof window !== 'undefined') {
+      window.location.replace('/menu');
+    }
+    return null;
+  }
+
+  const isAdmin = papel === 'admin';
+  const isGestor = papel === 'gestor';
 
   return (
     <div
@@ -79,33 +138,54 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* MENU */}
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <a href="/adm/dashboard" style={linkStyle}>
-            Dashboard
-          </a>
-          <a href="/adm/utilizadores" style={linkStyle}>
-            Utilizadores
-          </a>
-          <a href="/adm/ponto" style={linkStyle}>
-            Ponto (ADM)
-          </a>
-          <a href="/adm/fornecedores" style={linkStyle}>
-            Fornecedores
-          </a>
-          <a href="/adm/clientes" style={linkStyle}>
-            Clientes
-          </a>
-          <a href="/adm/orcamentos" style={linkStyle}>
-            Orçamentos &amp; Contratos
-          </a>
-          <a href="/adm/financeiro" style={linkStyle}>
-            Financeiro
-          </a>
-          <a href="/adm/ativos" style={linkStyle}>
-            Gestão de Ativos
-          </a>
-          <a href="/adm/configuracoes" style={linkStyle}>
-            Configurações
-          </a>
+          {/* Dashboard – faz sentido para admin e gestor */}
+          {(isAdmin || isGestor) && (
+            <a href="/adm/dashboard" style={linkStyle}>
+              Dashboard
+            </a>
+          )}
+
+          {/* Utilizadores – admin + gestor */}
+          {(isAdmin || isGestor) && (
+            <a href="/adm/utilizadores" style={linkStyle}>
+              Utilizadores
+            </a>
+          )}
+
+          {/* Ponto (ADM) – admin + gestor */}
+          {(isAdmin || isGestor) && (
+            <a href="/adm/ponto" style={linkStyle}>
+              Ponto (ADM)
+            </a>
+          )}
+
+          {/* Fornecedores – admin + gestor */}
+          {(isAdmin || isGestor) && (
+            <a href="/adm/fornecedores" style={linkStyle}>
+              Fornecedores
+            </a>
+          )}
+
+          {/* Os itens abaixo ficam, por enquanto, só para ADMIN */}
+          {isAdmin && (
+            <>
+              <a href="/adm/clientes" style={linkStyle}>
+                Clientes
+              </a>
+              <a href="/adm/orcamentos" style={linkStyle}>
+                Orçamentos &amp; Contratos
+              </a>
+              <a href="/adm/financeiro" style={linkStyle}>
+                Financeiro
+              </a>
+              <a href="/adm/ativos" style={linkStyle}>
+                Gestão de Ativos
+              </a>
+              <a href="/adm/configuracoes" style={linkStyle}>
+                Configurações
+              </a>
+            </>
+          )}
         </nav>
 
         <div style={{ flex: 1 }} />
@@ -165,7 +245,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 }
 
-const linkStyle: React.CSSProperties = {
+const linkStyle: CSSProperties = {
   padding: '9px 10px',
   borderRadius: 10,
   color: '#fff',
