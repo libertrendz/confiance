@@ -153,7 +153,7 @@ export default function RoteirosPage() {
           marginBottom: 16,
         }}
       >
-        <h1 className="h1">Roteiros de trabalho</h1>
+        <h1 className="h1">Roteiros de Trabalho</h1>
         <button className="btn btn-ghost" onClick={loadRoteiros} disabled={loading}>
           {loading ? 'A carregar…' : 'Recarregar'}
         </button>
