@@ -18,9 +18,8 @@ type RoteiroRow = {
   local_label: string | null;
   observacoes: string | null;
   tarefa_id: string;
-  tarefas_padrao?: {
-    nome: string | null;
-  } | null;
+  // Supabase está a devolver como array de 0..1 elementos
+  tarefas_padrao?: { nome: string | null }[] | null;
 };
 
 export default function RoteirosPage() {
@@ -67,7 +66,9 @@ export default function RoteirosPage() {
     try {
       const { data, error } = await supa
         .from('ponto_roteiros')
-        .select('id, usuario_id, data_dia, status, local_label, observacoes, tarefa_id, tarefas_padrao ( nome )')
+        .select(
+          'id, usuario_id, data_dia, status, local_label, observacoes, tarefa_id, tarefas_padrao ( nome )'
+        )
         .order('data_dia', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(100);
@@ -290,7 +291,7 @@ export default function RoteirosPage() {
                       {r.usuario_id}
                     </td>
                     <td style={{ padding: 8 }}>
-                      {r.tarefas_padrao?.nome || '—'}
+                      {r.tarefas_padrao?.[0]?.nome || '—'}
                     </td>
                     <td style={{ padding: 8 }}>{r.local_label || '—'}</td>
                     <td style={{ padding: 8 }}>{r.status || '—'}</td>
