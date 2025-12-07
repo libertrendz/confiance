@@ -137,4 +137,65 @@ export default function PontoAdmPage() {
                           </div>
                           <div>
                             Geo registado:{' '}
-                            {s.geo === null ? '—' : s.geo ? '
+                            {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
+                          </div>
+                          <div>
+                            Validação de raio:{' '}
+                            {s.raio === 'ok'
+                              ? 'OK'
+                              : s.raio === 'fora'
+                              ? 'Fora do raio'
+                              : s.raio === 'nao_validado'
+                              ? 'Não validado'
+                              : '—'}
+                          </div>
+                          {s.origem && (
+                            <div>Origem: {s.origem}</div>
+                          )}
+                        </div>
+
+                        <details style={{ marginTop: 4 }}>
+                          <summary
+                            style={{
+                              cursor: 'pointer',
+                              fontSize: 11,
+                              color: '#445',
+                            }}
+                          >
+                            Ver JSON completo
+                          </summary>
+                          <pre
+                            style={{
+                              margin: 0,
+                              marginTop: 4,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              background: '#f7f8fb',
+                              padding: 6,
+                              borderRadius: 6,
+                              border: '1px solid #e0e4f0',
+                            }}
+                          >
+                            {r.meta ? JSON.stringify(r.meta, null, 2) : '{}'}
+                          </pre>
+                        </details>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {loading && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            A carregar registos…
+          </p>
+        )}
+      </section>
+    </main>
+  );
+}
