@@ -10,21 +10,29 @@ type TarefaPadrao = {
   ativo: boolean;
 };
 
+type ColabRow = {
+  user_id: string;
+  nome_exibicao: string | null;
+  nome: string | null;
+  email?: string | null;
+};
+
 type RoteiroRow = {
   id: string;
   usuario_id: string;
   data_dia: string;
+  data_fim: string | null;
   status: string;
   local_label: string | null;
   observacoes: string | null;
   tarefa_id: string;
-  // Supabase está a devolver como array de 0..1 elementos
   tarefas_padrao?: { nome: string | null }[] | null;
 };
 
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [tarefas, setTarefas] = useState<TarefaPadrao[]>([]);
+  const [colabs, setColabs] = useState<ColabRow[]>([]);
   const [lista, setLista] = useState<RoteiroRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -32,13 +40,15 @@ export default function RoteirosPage() {
 
   const [form, setForm] = useState<{
     usuario_id: string;
-    data_dia: string;
+    data_inicio: string;
+    data_fim: string;
     tarefa_id: string;
     local_label: string;
     observacoes: string;
   }>({
     usuario_id: '',
-    data_dia: new Date().toISOString().slice(0, 10),
+    data_inicio: new Date().toISOString().slice(0, 10),
+    data_fim: new Date().toISOString().slice(0, 10),
     tarefa_id: '',
     local_label: '',
     observacoes: '',
@@ -49,13 +59,27 @@ export default function RoteirosPage() {
       const { data, error } = await supa
         .from('tarefas_padrao')
         .select('id, nome, ativo')
-        .eq('ativo', true)
+        // se não aparecer nada, é porque não existem tarefas_padrao para a empresa logada
         .order('nome', { ascending: true });
 
       if (error) throw error;
       setTarefas((data as TarefaPadrao[]) || []);
     } catch (e: any) {
       console.error('Erro ao carregar tarefas_padrao', e);
+    }
+  }
+
+  async function loadColabs() {
+    try {
+      const { data, error } = await supa
+        .from('v_colaboradores_perfis')
+        .select('user_id, nome_exibicao, nome, email')
+        .order('nome_exibicao', { ascending: true });
+
+      if (error) throw error;
+      setColabs((data as ColabRow[]) || []);
+    } catch (e: any) {
+      console.error('Erro ao carregar v_colaboradores_perfis', e);
     }
   }
 
@@ -67,7 +91,7 @@ export default function RoteirosPage() {
       const { data, error } = await supa
         .from('ponto_roteiros')
         .select(
-          'id, usuario_id, data_dia, status, local_label, observacoes, tarefa_id, tarefas_padrao ( nome )'
+          'id, usuario_id, data_dia, data_fim, status, local_label, observacoes, tarefa_id, tarefas_padrao ( nome )'
         )
         .order('data_dia', { ascending: false })
         .order('created_at', { ascending: false })
@@ -86,6 +110,7 @@ export default function RoteirosPage() {
 
   useEffect(() => {
     loadTarefas();
+    loadColabs();
     loadRoteiros();
   }, []);
 
@@ -94,24 +119,33 @@ export default function RoteirosPage() {
     setErr(null);
     setMsg(null);
 
-    if (!form.usuario_id.trim()) {
-      setErr('Informe o ID do utilizador (user_id).');
+    if (!form.usuario_id) {
+      setErr('Selecione o colaborador.');
       return;
     }
     if (!form.tarefa_id) {
       setErr('Selecione uma tarefa.');
       return;
     }
-    if (!form.data_dia) {
-      setErr('Informe a data.');
+    if (!form.data_inicio) {
+      setErr('Informe a data de início.');
+      return;
+    }
+    if (!form.data_fim) {
+      setErr('Informe a data de fim.');
+      return;
+    }
+    if (form.data_fim < form.data_inicio) {
+      setErr('Data de fim não pode ser anterior à data de início.');
       return;
     }
 
     try {
       const payload = {
-        usuario_id: form.usuario_id.trim(),
+        usuario_id: form.usuario_id,
         tarefa_id: form.tarefa_id,
-        data_dia: form.data_dia,
+        data_dia: form.data_inicio,         // inicio
+        data_fim: form.data_fim || form.data_inicio,
         local_label: form.local_label.trim() || null,
         observacoes: form.observacoes.trim() || null,
       };
@@ -143,6 +177,12 @@ export default function RoteirosPage() {
     }
   }
 
+  function labelColab(c: ColabRow) {
+    const nome = c.nome_exibicao || c.nome || '(sem nome)';
+    if (c.email) return `${nome} (${c.email})`;
+    return nome;
+  }
+
   return (
     <main style={{ padding: 18 }}>
       <header
@@ -153,7 +193,7 @@ export default function RoteirosPage() {
           marginBottom: 16,
         }}
       >
-        <h1 className="h1">Roteiros de Trabalho</h1>
+        <h1 className="h1">Roteiros de trabalho</h1>
         <button className="btn btn-ghost" onClick={loadRoteiros} disabled={loading}>
           {loading ? 'A carregar…' : 'Recarregar'}
         </button>
@@ -165,36 +205,57 @@ export default function RoteirosPage() {
           Definir tarefa para colaborador
         </h2>
         <p className="muted" style={{ marginBottom: 12 }}>
-          Preencha o ID do utilizador (user_id), a data e a tarefa. O colaborador verá estas tarefas na
-          área de ponto, na saída.
+          Selecione o colaborador, o período e a tarefa. O colaborador verá estas tarefas na área de
+          ponto, na saída.
         </p>
 
         <form
           onSubmit={criarRoteiro}
-          style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.5fr', gap: 12 }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '2fr 1fr 1fr',
+            gap: 12,
+            alignItems: 'flex-start',
+          }}
         >
           <div style={{ gridColumn: '1 / span 1' }}>
-            <label className="muted">Utilizador (user_id)</label>
-            <input
-              type="text"
+            <label className="muted">Colaborador</label>
+            <select
               required
               value={form.usuario_id}
               onChange={(e) => setForm((f) => ({ ...f, usuario_id: e.target.value }))}
-              placeholder="Cole aqui o user_id do colaborador"
               style={input}
-            />
+            >
+              <option value="">Selecione…</option>
+              {colabs.map((c) => (
+                <option key={c.user_id} value={c.user_id}>
+                  {labelColab(c)}
+                </option>
+              ))}
+            </select>
             <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#8892A0' }}>
-              Copie o ID da página <strong>Utilizadores</strong>.
+              Lista baseada na view <strong>v_colaboradores_perfis</strong>.
             </p>
           </div>
 
           <div>
-            <label className="muted">Data</label>
+            <label className="muted">Data início</label>
             <input
               type="date"
               required
-              value={form.data_dia}
-              onChange={(e) => setForm((f) => ({ ...f, data_dia: e.target.value }))}
+              value={form.data_inicio}
+              onChange={(e) => setForm((f) => ({ ...f, data_inicio: e.target.value }))}
+              style={input}
+            />
+          </div>
+
+          <div>
+            <label className="muted">Data fim</label>
+            <input
+              type="date"
+              required
+              value={form.data_fim}
+              onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
               style={input}
             />
           </div>
@@ -270,8 +331,8 @@ export default function RoteirosPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: 8 }}>Data</th>
-                  <th style={{ padding: 8 }}>Utilizador (ID)</th>
+                  <th style={{ padding: 8 }}>Período</th>
+                  <th style={{ padding: 8 }}>Colaborador (ID)</th>
                   <th style={{ padding: 8 }}>Tarefa</th>
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Estado</th>
@@ -280,35 +341,41 @@ export default function RoteirosPage() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => (
-                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>
-                      {r.data_dia
-                        ? new Date(r.data_dia + 'T00:00:00').toLocaleDateString()
-                        : '—'}
-                    </td>
-                    <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>
-                      {r.usuario_id}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      {r.tarefas_padrao?.[0]?.nome || '—'}
-                    </td>
-                    <td style={{ padding: 8 }}>{r.local_label || '—'}</td>
-                    <td style={{ padding: 8 }}>{r.status || '—'}</td>
-                    <td style={{ padding: 8, fontSize: 12 }}>
-                      {r.observacoes || '—'}
-                    </td>
-                    <td style={{ padding: 8, textAlign: 'right' }}>
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 12 }}
-                        onClick={() => apagarRoteiro(r.id)}
-                      >
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {lista.map((r) => {
+                  const inicio = r.data_dia
+                    ? new Date(r.data_dia + 'T00:00:00').toLocaleDateString()
+                    : '—';
+                  const fim = r.data_fim
+                    ? new Date(r.data_fim + 'T00:00:00').toLocaleDateString()
+                    : inicio;
+                  const periodo = inicio === fim ? inicio : `${inicio} a ${fim}`;
+
+                  return (
+                    <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: 8 }}>{periodo}</td>
+                      <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>
+                        {r.usuario_id}
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        {r.tarefas_padrao?.[0]?.nome || '—'}
+                      </td>
+                      <td style={{ padding: 8 }}>{r.local_label || '—'}</td>
+                      <td style={{ padding: 8 }}>{r.status || '—'}</td>
+                      <td style={{ padding: 8, fontSize: 12 }}>
+                        {r.observacoes || '—'}
+                      </td>
+                      <td style={{ padding: 8, textAlign: 'right' }}>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ fontSize: 12 }}
+                          onClick={() => apagarRoteiro(r.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
