@@ -1,42 +1,39 @@
-// app/adm/roteiros/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
-type Colab = {
-  usuario_id: string;
-  nome?: string | null;
-  nome_exibicao?: string | null;
-  email?: string | null;
+type ColaboradorOption = {
+  user_id: string;
+  nome_exibicao: string | null;
+  nome: string | null;
 };
 
-type TarefaPadrao = {
+type TarefaOption = {
   id: string;
   nome: string;
-  ativo?: boolean | null;
 };
 
-type LocalPermitido = {
+type LocalOption = {
   id: string;
   nome: string;
-  radius_m?: number | null;
-  ativo?: boolean | null;
-  empresa_id?: string | null;
+  lat: number;
+  lng: number;
+  radius_m: number;
 };
 
 type RoteiroRow = {
   id: string;
-  empresa_id: string | null;
   usuario_id: string;
-  tarefa_id: string | null;
-  local_id: string | null;
-  local_label: string | null;
-  data_dia: string | null;
+  data_dia: string;
   data_fim: string | null;
   status: string | null;
+  local_label: string | null;
+  local_id: string | null;
   observacoes: string | null;
-  created_at: string | null;
+  tarefa_id: string;
+  // supabase retorna relação como array
+  tarefas_padrao?: { nome: string }[] | null;
 };
 
 type FormState = {
@@ -51,202 +48,163 @@ type FormState = {
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
-  const [empresaId, setEmpresaId] = useState<string | null>(null);
-
-  const [colabs, setColabs] = useState<Colab[]>([]);
-  const [tarefas, setTarefas] = useState<TarefaPadrao[]>([]);
-  const [locais, setLocais] = useState<LocalPermitido[]>([]);
+  const [colabs, setColabs] = useState<ColaboradorOption[]>([]);
+  const [tarefas, setTarefas] = useState<TarefaOption[]>([]);
+  const [locais, setLocais] = useState<LocalOption[]>([]);
   const [lista, setLista] = useState<RoteiroRow[]>([]);
-
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const todayIso = new Date().toISOString().slice(0, 10);
 
   const [form, setForm] = useState<FormState>({
     usuario_id: '',
     tarefa_id: '',
     local_id: '',
-    data_dia: todayIso,
-    data_fim: todayIso,
+    data_dia: '',
+    data_fim: '',
     observacoes: '',
   });
 
-  // Carrega empresa do utilizador (via profiles)
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const { data: ud } = await supa.auth.getUser();
-        const uid = ud.user?.id;
-        if (!uid) return;
+  const [loading, setLoading] = useState(false);
+  const [loadingLista, setLoadingLista] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
 
-        const { data: prof, error } = await supa
-          .from('profiles')
-          .select('empresa_id')
-          .eq('user_id', uid)
-          .maybeSingle();
-
-        if (error) {
-          console.warn('Erro ao obter empresa_id do profile', error);
-          return;
-        }
-        if (!alive) return;
-        if (prof?.empresa_id) {
-          setEmpresaId(prof.empresa_id as string);
-        }
-      } catch (e) {
-        console.warn('Falha ao carregar empresa_id', e);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [supa]);
-
-  async function loadAll() {
-    setLoading(true);
+  // Carrega contexto (colaboradores, tarefas, locais)
+  async function loadContext() {
     setErr(null);
     setMsg(null);
+    setLoading(true);
     try {
-      const [
-        { data: colabData, error: colabErr },
-        { data: tarefaData, error: tarefaErr },
-        { data: localData, error: localErr },
-        { data: roteirosData, error: roteirosErr },
-      ] = await Promise.all([
-        supa.from('v_colaboradores_perfis').select('*'),
-        supa.from('tarefas_padrao').select('*'),
-        supa.from('locais_permitidos').select('*'),
+      const [colabRes, tarefaRes, localRes] = await Promise.all([
+        // VIEW: usa user_id, não usuario_id
         supa
-          .from('ponto_roteiros')
-          .select('*')
-          .order('data_dia', { ascending: false })
-          .limit(200),
+          .from('v_colaboradores_perfis')
+          .select('user_id, nome_exibicao, nome'),
+        supa
+          .from('tarefas_padrao')
+          .select('id, nome')
+          .eq('ativo', true),
+        supa
+          .from('locais_permitidos')
+          .select('id, nome, lat, lng, radius_m')
+          .eq('ativo', true),
       ]);
 
-      if (colabErr) throw colabErr;
-      if (tarefaErr) throw tarefaErr;
-      if (localErr) throw localErr;
-      if (roteirosErr) throw roteirosErr;
+      if (colabRes.error) throw colabRes.error;
+      if (tarefaRes.error) throw tarefaRes.error;
+      if (localRes.error) throw localRes.error;
 
-      setColabs((colabData as Colab[]) || []);
-      setTarefas(((tarefaData || []) as any as TarefaPadrao[]).filter(t => t.nome));
-      setLocais(((localData || []) as any as LocalPermitido[]).filter(l => l.nome));
-      setLista(((roteirosData || []) as any as RoteiroRow[]));
+      setColabs((colabRes.data || []) as ColaboradorOption[]);
+      setTarefas((tarefaRes.data || []) as TarefaOption[]);
+      setLocais((localRes.data || []) as LocalOption[]);
     } catch (e: any) {
-      console.error('Erro ao carregar ponto_roteiros / auxiliares', e);
-      setErr(e?.message || 'Falha ao carregar roteiros.');
-      setLista([]);
+      console.error('Erro ao carregar contexto de roteiros', e);
+      setErr(e?.message || 'Falha ao carregar opções de colaboradores/tarefas/locais.');
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    loadAll();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Carrega lista de roteiros existentes
+  async function loadLista() {
+    setLoadingLista(true);
+    setErr(null);
+    try {
+      const { data, error } = await supa
+        .from('ponto_roteiros')
+        .select('id, usuario_id, data_dia, data_fim, status, local_label, local_id, observacoes, tarefa_id, tarefas_padrao(nome)')
+        .order('data_dia', { ascending: true })
+        .limit(200);
 
-  function updateForm<K extends keyof FormState>(key: K, value: FormState[K]) {
+      if (error) throw error;
+      setLista((data as unknown as RoteiroRow[]) || []);
+    } catch (e: any) {
+      console.error('Erro ao carregar ponto_roteiros', e);
+      setErr(e?.message || 'Falha ao carregar roteiros.');
+      setLista([]);
+    } finally {
+      setLoadingLista(false);
+    }
+  }
+
+  useEffect(() => {
+    loadContext();
+    loadLista();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onChange<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function displayColab(usuario_id: string): string {
-    const c = colabs.find((x) => x.usuario_id === usuario_id);
-    if (!c) return usuario_id;
-    return (
-      c.nome_exibicao ||
-      c.nome ||
-      c.email ||
-      usuario_id
-    );
-  }
-
-  function displayTarefa(tarefa_id: string | null): string {
-    if (!tarefa_id) return '—';
-    const t = tarefas.find((x) => x.id === tarefa_id);
-    return t?.nome || tarefa_id;
-  }
-
-  function displayLocal(local_id: string | null, fallbackLabel: string | null): string {
-    if (!local_id && fallbackLabel) return fallbackLabel;
-    if (!local_id) return '—';
-    const l = locais.find((x) => x.id === local_id);
-    return l?.nome || fallbackLabel || local_id;
-  }
-
-  async function onCriar(e: React.FormEvent) {
+  async function criarRoteiro(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     setErr(null);
     setMsg(null);
 
-    if (!empresaId) {
-      setErr('Não foi possível determinar a empresa do utilizador.');
-      return;
-    }
-    if (!form.usuario_id) {
-      setErr('Selecione um colaborador.');
-      return;
-    }
-    if (!form.tarefa_id) {
-      setErr('Selecione uma tarefa.');
-      return;
-    }
-    if (!form.local_id) {
-      setErr('Selecione um local de trabalho.');
-      return;
-    }
-    if (!form.data_dia) {
-      setErr('Selecione a data inicial.');
-      return;
-    }
-
-    setSaving(true);
     try {
-      const local = locais.find((l) => l.id === form.local_id) || null;
+      if (!form.usuario_id) throw new Error('Selecione um colaborador.');
+      if (!form.tarefa_id) throw new Error('Selecione uma tarefa.');
+      if (!form.data_dia) throw new Error('Selecione a data inicial.');
 
-      const payload = {
-        empresa_id: empresaId,
+      const local = locais.find((l) => l.id === form.local_id) || null;
+      const localLabel = local ? local.nome : null;
+
+      const payload: any = {
         usuario_id: form.usuario_id,
         tarefa_id: form.tarefa_id,
-        local_id: form.local_id,
-        local_label: local?.nome ?? null,
         data_dia: form.data_dia,
-        data_fim: form.data_fim || form.data_dia,
         status: 'planeado',
         observacoes: form.observacoes || null,
+        local_id: form.local_id || null,
+        local_label: localLabel,
       };
 
-      const { data, error } = await supa
-        .from('ponto_roteiros')
-        .insert([payload])
-        .select('*')
-        .maybeSingle();
+      if (form.data_fim) {
+        payload.data_fim = form.data_fim;
+      }
 
+      const { error } = await supa.from('ponto_roteiros').insert(payload);
       if (error) throw error;
 
       setMsg('Roteiro criado com sucesso.');
-      setForm((f) => ({
-        ...f,
+      // limpa form
+      setForm({
+        usuario_id: '',
         tarefa_id: '',
         local_id: '',
+        data_dia: '',
+        data_fim: '',
         observacoes: '',
-      }));
+      });
 
-      if (data) {
-        setLista((prev) => [data as RoteiroRow, ...(prev || [])]);
-      } else {
-        await loadAll();
-      }
+      await loadLista();
     } catch (e: any) {
       console.error('Erro ao criar roteiro', e);
       setErr(e?.message || 'Falha ao criar roteiro.');
     } finally {
       setSaving(false);
     }
+  }
+
+  function labelColab(c: ColaboradorOption) {
+    return c.nome_exibicao || c.nome || c.user_id;
+  }
+
+  function nomeTarefa(r: RoteiroRow) {
+    const rel = r.tarefas_padrao && r.tarefas_padrao[0];
+    if (rel?.nome) return rel.nome;
+    const t = tarefas.find((t) => t.id === r.tarefa_id);
+    return t?.nome || '—';
+  }
+
+  function nomeLocal(r: RoteiroRow) {
+    if (r.local_label) return r.local_label;
+    if (r.local_id) {
+      const l = locais.find((l) => l.id === r.local_id);
+      if (l) return l.nome;
+    }
+    return '—';
   }
 
   return (
@@ -260,60 +218,63 @@ export default function RoteirosPage() {
         }}
       >
         <h1 className="h1">Roteiros de trabalho</h1>
-        <button className="btn btn-ghost" onClick={loadAll} disabled={loading}>
-          {loading ? 'A carregar…' : 'Recarregar'}
+        <button className="btn btn-ghost" onClick={loadLista} disabled={loadingLista}>
+          {loadingLista ? 'A carregar…' : 'Recarregar'}
         </button>
       </header>
 
-      {/* CRIAR ROTEIRO */}
+      {/* NOVO ROTEIRO */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2" style={{ marginBottom: 8 }}>
           Novo roteiro
         </h2>
-        <p className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
-          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados para validar o ponto
-          (raio de localização) e ligar a marcação às tarefas do dia.
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de
+          presença (geo/raio) e para associações de tarefas do dia.
         </p>
 
         <form
-          onSubmit={onCriar}
+          onSubmit={criarRoteiro}
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: 12,
-            alignItems: 'flex-end',
           }}
         >
-          {/* COLABORADOR */}
           <div>
-            <label className="muted" style={{ fontSize: 12 }}>
-              Colaborador
-            </label>
+            <label className="muted">Colaborador</label>
             <select
               value={form.usuario_id}
-              onChange={(e) => updateForm('usuario_id', e.target.value)}
-              required
-              style={inputStyle}
+              onChange={(e) => onChange('usuario_id', e.target.value)}
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: '#fff',
+              }}
             >
               <option value="">Selecione…</option>
               {colabs.map((c) => (
-                <option key={c.usuario_id} value={c.usuario_id}>
-                  {displayColab(c.usuario_id)}
+                <option key={c.user_id} value={c.user_id}>
+                  {labelColab(c)}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* TAREFA */}
           <div>
-            <label className="muted" style={{ fontSize: 12 }}>
-              Tarefa
-            </label>
+            <label className="muted">Tarefa</label>
             <select
               value={form.tarefa_id}
-              onChange={(e) => updateForm('tarefa_id', e.target.value)}
-              required
-              style={inputStyle}
+              onChange={(e) => onChange('tarefa_id', e.target.value)}
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: '#fff',
+              }}
             >
               <option value="">Selecione…</option>
               {tarefas.map((t) => (
@@ -324,100 +285,105 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* LOCAL */}
           <div>
-            <label className="muted" style={{ fontSize: 12 }}>
-              Local de trabalho
-            </label>
+            <label className="muted">Local de trabalho</label>
             <select
               value={form.local_id}
-              onChange={(e) => updateForm('local_id', e.target.value)}
-              required
-              style={inputStyle}
+              onChange={(e) => onChange('local_id', e.target.value)}
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: '#fff',
+              }}
             >
               <option value="">Selecione…</option>
               {locais.map((l) => (
                 <option key={l.id} value={l.id}>
-                  {l.nome} {l.radius_m ? `(${l.radius_m} m)` : ''}
+                  {l.nome}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* DATA INÍCIO */}
           <div>
-            <label className="muted" style={{ fontSize: 12 }}>
-              Data início
-            </label>
+            <label className="muted">Data início</label>
             <input
               type="date"
               value={form.data_dia}
-              onChange={(e) => updateForm('data_dia', e.target.value)}
-              required
-              style={inputStyle}
+              onChange={(e) => onChange('data_dia', e.target.value)}
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: '#fff',
+              }}
             />
           </div>
 
-          {/* DATA FIM */}
           <div>
-            <label className="muted" style={{ fontSize: 12 }}>
-              Data fim
-            </label>
+            <label className="muted">Data fim (opcional)</label>
             <input
               type="date"
               value={form.data_fim}
-              onChange={(e) => updateForm('data_fim', e.target.value)}
-              style={inputStyle}
+              onChange={(e) => onChange('data_fim', e.target.value)}
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: '#fff',
+              }}
             />
           </div>
 
-          {/* OBSERVAÇÕES */}
           <div style={{ gridColumn: '1 / -1' }}>
-            <label className="muted" style={{ fontSize: 12 }}>
-              Observações (opcional)
-            </label>
+            <label className="muted">Observações (opcional)</label>
             <textarea
               value={form.observacoes}
-              onChange={(e) => updateForm('observacoes', e.target.value)}
+              onChange={(e) => onChange('observacoes', e.target.value)}
               rows={2}
-              style={{ ...inputStyle, resize: 'vertical' }}
+              style={{
+                width: '100%',
+                padding: 10,
+                borderRadius: 10,
+                border: '1px solid var(--border)',
+                background: '#fff',
+                resize: 'vertical',
+              }}
             />
           </div>
 
-          {/* BOTÕES / ERROS */}
-          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button
-              className="btn btn-primary"
-              type="submit"
-              disabled={saving || !empresaId}
-            >
-              {saving ? 'A guardar…' : 'Guardar roteiro'}
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, marginTop: 4 }}>
+            <button className="btn btn-primary" type="submit" disabled={saving || loading}>
+              {saving ? 'A criar…' : 'Criar roteiro'}
             </button>
-            {err && (
-              <span style={{ color: 'crimson', fontSize: 13 }}>
-                {err}
-              </span>
-            )}
-            {msg && (
-              <span style={{ color: 'green', fontSize: 13 }}>
-                {msg}
-              </span>
-            )}
           </div>
         </form>
+
+        {err && (
+          <p style={{ color: 'crimson', marginTop: 8 }}>
+            {err}
+          </p>
+        )}
+        {msg && (
+          <p style={{ color: 'green', marginTop: 8 }}>
+            {msg}
+          </p>
+        )}
       </section>
 
-      {/* LISTA DE ROTEIROS */}
+      {/* LISTA DE ROTEIROS EXISTENTES */}
       <section className="card">
         <h2 className="h2" style={{ marginBottom: 8 }}>
           Roteiros existentes
         </h2>
 
-        {!lista?.length && !loading && !err && (
-          <p className="muted">Sem roteiros registados.</p>
-        )}
+        {!lista.length && !loadingLista && <p className="muted">Sem roteiros registados.</p>}
 
-        {!!lista?.length && (
+        {!!lista.length && (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
@@ -425,54 +391,37 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Colaborador</th>
                   <th style={{ padding: 8 }}>Tarefa</th>
                   <th style={{ padding: 8 }}>Local</th>
-                  <th style={{ padding: 8 }}>Período</th>
+                  <th style={{ padding: 8 }}>Data início</th>
+                  <th style={{ padding: 8 }}>Data fim</th>
                   <th style={{ padding: 8 }}>Estado</th>
-                  <th style={{ padding: 8 }}>Observações</th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => (
-                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>
-                      {displayColab(r.usuario_id)}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      {displayTarefa(r.tarefa_id)}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      {displayLocal(r.local_id, r.local_label)}
-                    </td>
-                    <td style={{ padding: 8, whiteSpace: 'nowrap' }}>
-                      {r.data_dia || '—'}
-                      {r.data_fim && r.data_fim !== r.data_dia
-                        ? ` → ${r.data_fim}`
-                        : ''}
-                    </td>
-                    <td style={{ padding: 8, textTransform: 'capitalize' }}>
-                      {r.status || '—'}
-                    </td>
-                    <td style={{ padding: 8, maxWidth: 260 }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          maxWidth: '100%',
-                        }}
-                        title={r.observacoes ?? undefined}
-                      >
-                        {r.observacoes || '—'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {lista.map((r) => {
+                  const colab = colabs.find((c) => c.user_id === r.usuario_id);
+                  return (
+                    <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: 8 }}>
+                        {colab ? labelColab(colab) : r.usuario_id}
+                      </td>
+                      <td style={{ padding: 8 }}>{nomeTarefa(r)}</td>
+                      <td style={{ padding: 8 }}>{nomeLocal(r)}</td>
+                      <td style={{ padding: 8 }}>
+                        {r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}
+                      </td>
+                      <td style={{ padding: 8 }}>
+                        {r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}
+                      </td>
+                      <td style={{ padding: 8 }}>{r.status || 'planeado'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
 
-        {loading && (
+        {loadingLista && (
           <p className="muted" style={{ marginTop: 8 }}>
             A carregar roteiros…
           </p>
@@ -481,12 +430,3 @@ export default function RoteirosPage() {
     </main>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: 10,
-  borderRadius: 10,
-  border: '1px solid var(--border)',
-  background: '#fff',
-  fontSize: 13,
-};
