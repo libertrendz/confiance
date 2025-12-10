@@ -1,3 +1,4 @@
+// app/adm/roteiros/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -5,7 +6,6 @@ import getBrowserSupabase from '@/lib/supa';
 
 type ColaboradorOption = {
   user_id: string;
-  nome_exibicao: string | null;
   nome: string | null;
 };
 
@@ -75,10 +75,10 @@ export default function RoteirosPage() {
     setLoading(true);
     try {
       const [colabRes, tarefaRes, localRes] = await Promise.all([
-        // VIEW: usa user_id, não usuario_id
+        // VIEW: usa user_id + nome
         supa
           .from('v_colaboradores_perfis')
-          .select('user_id, nome_exibicao, nome'),
+          .select('user_id, nome'),
         supa
           .from('tarefas_padrao')
           .select('id, nome')
@@ -188,7 +188,7 @@ export default function RoteirosPage() {
   }
 
   function labelColab(c: ColaboradorOption) {
-    return c.nome_exibicao || c.nome || c.user_id;
+    return c.nome || c.user_id;
   }
 
   function nomeTarefa(r: RoteiroRow) {
