@@ -1,12 +1,11 @@
-// app/adm/roteiros/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
-type ColaboradorOption = {
+type ColabOption = {
   user_id: string;
-  nome: string | null;
+  nome: string;
 };
 
 type TarefaOption = {
@@ -17,110 +16,127 @@ type TarefaOption = {
 type LocalOption = {
   id: string;
   nome: string;
-  lat: number;
-  lng: number;
-  radius_m: number;
 };
 
 type RoteiroRow = {
   id: string;
   usuario_id: string;
+  tarefa_id: string;
   data_dia: string;
   data_fim: string | null;
-  status: string | null;
-  local_label: string | null;
+  status: string;
   local_id: string | null;
   observacoes: string | null;
-  tarefa_id: string;
-  tarefas_padrao?: { nome: string }[] | null;
-};
-
-type FormState = {
-  usuario_id: string;
-  tarefa_id: string;
-  local_id: string;
-  data_dia: string;
-  data_fim: string;
-  observacoes: string;
+  created_at: string;
 };
 
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
-  const [colabs, setColabs] = useState<ColaboradorOption[]>([]);
+  const [colabs, setColabs] = useState<ColabOption[]>([]);
   const [tarefas, setTarefas] = useState<TarefaOption[]>([]);
   const [locais, setLocais] = useState<LocalOption[]>([]);
   const [lista, setLista] = useState<RoteiroRow[]>([]);
 
-  const [form, setForm] = useState<FormState>({
-    usuario_id: '',
-    tarefa_id: '',
-    local_id: '',
-    data_dia: '',
-    data_fim: '',
-    observacoes: '',
-  });
-
-  const [loading, setLoading] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(false);
   const [loadingLista, setLoadingLista] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Carrega colaboradores / tarefas / locais
-  async function loadContext() {
+  // Form
+  const [usuarioId, setUsuarioId] = useState<string>('');
+  const [tarefaId, setTarefaId] = useState<string>('');
+  const [localId, setLocalId] = useState<string>('');
+  const [dataInicio, setDataInicio] = useState<string>('');
+  const [dataFim, setDataFim] = useState<string>('');
+  const [observacoes, setObservacoes] = useState<string>('');
+
+  async function loadOptions() {
+    setLoadingOptions(true);
     setErr(null);
-    setMsg(null);
-    setLoading(true);
+
     try {
-      const [colabRes, tarefaRes, localRes] = await Promise.all([
-        // Tira direto da tabela "colaboradores"
-        supa
-          .from('colaboradores')
-          .select('user_id, nome')
-          .not('user_id', 'is', null),
-        supa
-          .from('tarefas_padrao')
-          .select('id, nome')
-          .eq('ativo', true),
-        supa
-          .from('locais_permitidos')
-          .select('id, nome, lat, lng, radius_m')
-          .eq('ativo', true),
-      ]);
+      // COLABORADORES: vêm de public.colaboradores
+      const { data: colabData, error: colabError } = await supa
+        .from('colaboradores')
+        .select('user_id, nome')
+        .not('user_id', 'is', null)
+        .order('nome', { ascending: true });
 
-      if (colabRes.error) throw colabRes.error;
-      if (tarefaRes.error) throw tarefaRes.error;
-      if (localRes.error) throw localRes.error;
+      if (colabError) {
+        console.error('Erro ao carregar colaboradores', colabError);
+        throw colabError;
+      }
 
-      setColabs((colabRes.data || []) as ColaboradorOption[]);
-      setTarefas((tarefaRes.data || []) as TarefaOption[]);
-      setLocais((localRes.data || []) as LocalOption[]);
+      setColabs(
+        (colabData || []).map((c: any) => ({
+          user_id: c.user_id,
+          nome: c.nome ?? '(sem nome)',
+        }))
+      );
+
+      // TAREFAS PADRÃO
+      const { data: tarefaData, error: tarefaError } = await supa
+        .from('tarefas_padrao')
+        .select('id, nome, ativo')
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+      if (tarefaError) {
+        console.error('Erro ao carregar tarefas_padrao', tarefaError);
+        throw tarefaError;
+      }
+
+      setTarefas(
+        (tarefaData || []).map((t: any) => ({
+          id: t.id,
+          nome: t.nome ?? '(sem nome)',
+        }))
+      );
+
+      // LOCAIS PERMITIDOS
+      const { data: locaisData, error: locaisError } = await supa
+        .from('locais_permitidos')
+        .select('id, nome, ativo')
+        .eq('ativo', true)
+        .order('created_at', { ascending: true });
+
+      if (locaisError) {
+        console.error('Erro ao carregar locais_permitidos', locaisError);
+        throw locaisError;
+      }
+
+      setLocais(
+        (locaisData || []).map((l: any) => ({
+          id: l.id,
+          nome: l.nome ?? '(sem nome)',
+        }))
+      );
     } catch (e: any) {
-      console.error('Erro ao carregar contexto de roteiros', e);
-      setErr(e?.message || 'Falha ao carregar opções de colaboradores/tarefas/locais.');
+      setErr(e?.message || 'Falha ao carregar opções (colaboradores/tarefas/locais).');
     } finally {
-      setLoading(false);
+      setLoadingOptions(false);
     }
   }
 
-  // Carrega lista de roteiros
   async function loadLista() {
     setLoadingLista(true);
     setErr(null);
     try {
       const { data, error } = await supa
         .from('ponto_roteiros')
-        .select(
-          'id, usuario_id, data_dia, data_fim, status, local_label, local_id, observacoes, tarefa_id, tarefas_padrao(nome)'
-        )
-        .order('data_dia', { ascending: true })
-        .limit(200);
+        .select('id, usuario_id, tarefa_id, data_dia, data_fim, status, local_id, observacoes, created_at')
+        .order('data_dia', { ascending: false })
+        .limit(100);
 
-      if (error) throw error;
-      setLista((data || []) as unknown as RoteiroRow[]);
+      if (error) {
+        console.error('Erro ao carregar ponto_roteiros', error);
+        throw error;
+      }
+
+      setLista((data as RoteiroRow[]) || []);
     } catch (e: any) {
-      console.error('Erro ao carregar ponto_roteiros', e);
       setErr(e?.message || 'Falha ao carregar roteiros.');
       setLista([]);
     } finally {
@@ -129,83 +145,70 @@ export default function RoteirosPage() {
   }
 
   useEffect(() => {
-    loadContext();
+    loadOptions();
     loadLista();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function onChange<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
 
   async function criarRoteiro(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setErr(null);
     setMsg(null);
 
+    if (!usuarioId || !tarefaId || !dataInicio) {
+      setErr('Colaborador, tarefa e data de início são obrigatórios.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      if (!form.usuario_id) throw new Error('Selecione um colaborador.');
-      if (!form.tarefa_id) throw new Error('Selecione uma tarefa.');
-      if (!form.data_dia) throw new Error('Selecione a data inicial.');
-
-      const local = locais.find((l) => l.id === form.local_id) || null;
-      const localLabel = local ? local.nome : null;
-
       const payload: any = {
-        usuario_id: form.usuario_id,
-        tarefa_id: form.tarefa_id,
-        data_dia: form.data_dia,
+        usuario_id: usuarioId,
+        tarefa_id: tarefaId,
+        data_dia: dataInicio, // campo base
         status: 'planeado',
-        observacoes: form.observacoes || null,
-        local_id: form.local_id || null,
-        local_label: localLabel,
       };
 
-      if (form.data_fim) {
-        payload.data_fim = form.data_fim;
+      if (dataFim) payload.data_fim = dataFim;
+      if (localId) payload.local_id = localId;
+      if (observacoes) payload.observacoes = observacoes;
+
+      const { error } = await supa.from('ponto_roteiros').insert([payload]);
+
+      if (error) {
+        console.error('Erro ao criar roteiro', error);
+        throw error;
       }
 
-      const { error } = await supa.from('ponto_roteiros').insert(payload);
-      if (error) throw error;
-
       setMsg('Roteiro criado com sucesso.');
-      setForm({
-        usuario_id: '',
-        tarefa_id: '',
-        local_id: '',
-        data_dia: '',
-        data_fim: '',
-        observacoes: '',
-      });
+      // limpa form
+      setTarefaId('');
+      setLocalId('');
+      setDataInicio('');
+      setDataFim('');
+      setObservacoes('');
 
       await loadLista();
     } catch (e: any) {
-      console.error('Erro ao criar roteiro', e);
       setErr(e?.message || 'Falha ao criar roteiro.');
     } finally {
       setSaving(false);
     }
   }
 
-  function labelColab(c: ColaboradorOption) {
-    return c.nome || c.user_id;
+  function nomeColab(id: string) {
+    const c = colabs.find((c) => c.user_id === id);
+    return c?.nome || id;
   }
 
-  function nomeTarefa(r: RoteiroRow) {
-    const rel = r.tarefas_padrao && r.tarefas_padrao[0];
-    if (rel?.nome) return rel.nome;
-    const t = tarefas.find((t) => t.id === r.tarefa_id);
-    return t?.nome || '—';
+  function nomeTarefa(id: string) {
+    const t = tarefas.find((t) => t.id === id);
+    return t?.nome || id;
   }
 
-  function nomeLocal(r: RoteiroRow) {
-    if (r.local_label) return r.local_label;
-    if (r.local_id) {
-      const l = locais.find((l) => l.id === r.local_id);
-      if (l) return l.nome;
-    }
-    return '—';
+  function nomeLocal(id: string | null) {
+    if (!id) return '—';
+    const l = locais.find((l) => l.id === id);
+    return l?.nome || id;
   }
 
   return (
@@ -219,20 +222,25 @@ export default function RoteirosPage() {
         }}
       >
         <h1 className="h1">Roteiros de trabalho</h1>
-        <button className="btn btn-ghost" onClick={loadLista} disabled={loadingLista}>
-          {loadingLista ? 'A carregar…' : 'Recarregar'}
+        <button className="btn btn-ghost" onClick={() => { loadOptions(); loadLista(); }} disabled={loadingOptions || loadingLista}>
+          {loadingOptions || loadingLista ? 'A carregar…' : 'Recarregar'}
         </button>
       </header>
 
-      {/* NOVO ROTEIRO */}
-      <section className="card" style={{ marginBottom: 16 }}>
-        <h2 className="h2" style={{ marginBottom: 8 }}>
-          Novo roteiro
-        </h2>
+      {/* FORM NOVO ROTEIRO */}
+      <section className="card" style={{ marginBottom: 16, padding: 16 }}>
+        <h2 className="h2" style={{ marginBottom: 8 }}>Novo roteiro</h2>
         <p className="muted" style={{ marginBottom: 12 }}>
-          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de
-          presença (geo/raio) e para associações de tarefas do dia.
+          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de presença (geo/raio)
+          e para associações de tarefas do dia.
         </p>
+
+        {err && (
+          <p style={{ color: 'crimson', marginBottom: 8 }}>{err}</p>
+        )}
+        {msg && (
+          <p style={{ color: 'green', marginBottom: 8 }}>{msg}</p>
+        )}
 
         <form
           onSubmit={criarRoteiro}
@@ -240,13 +248,16 @@ export default function RoteirosPage() {
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: 12,
+            alignItems: 'flex-start',
           }}
         >
+          {/* COLABORADOR */}
           <div>
             <label className="muted">Colaborador</label>
             <select
-              value={form.usuario_id}
-              onChange={(e) => onChange('usuario_id', e.target.value)}
+              value={usuarioId}
+              onChange={(e) => setUsuarioId(e.target.value)}
+              required
               style={{
                 width: '100%',
                 padding: 10,
@@ -258,17 +269,19 @@ export default function RoteirosPage() {
               <option value="">Selecione…</option>
               {colabs.map((c) => (
                 <option key={c.user_id} value={c.user_id}>
-                  {labelColab(c)}
+                  {c.nome}
                 </option>
               ))}
             </select>
           </div>
 
+          {/* TAREFA */}
           <div>
             <label className="muted">Tarefa</label>
             <select
-              value={form.tarefa_id}
-              onChange={(e) => onChange('tarefa_id', e.target.value)}
+              value={tarefaId}
+              onChange={(e) => setTarefaId(e.target.value)}
+              required
               style={{
                 width: '100%',
                 padding: 10,
@@ -286,11 +299,12 @@ export default function RoteirosPage() {
             </select>
           </div>
 
+          {/* LOCAL */}
           <div>
             <label className="muted">Local de trabalho</label>
             <select
-              value={form.local_id}
-              onChange={(e) => onChange('local_id', e.target.value)}
+              value={localId}
+              onChange={(e) => setLocalId(e.target.value)}
               style={{
                 width: '100%',
                 padding: 10,
@@ -308,12 +322,14 @@ export default function RoteirosPage() {
             </select>
           </div>
 
+          {/* DATAS */}
           <div>
             <label className="muted">Data início</label>
             <input
               type="date"
-              value={form.data_dia}
-              onChange={(e) => onChange('data_dia', e.target.value)}
+              required
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
               style={{
                 width: '100%',
                 padding: 10,
@@ -328,8 +344,8 @@ export default function RoteirosPage() {
             <label className="muted">Data fim (opcional)</label>
             <input
               type="date"
-              value={form.data_fim}
-              onChange={(e) => onChange('data_fim', e.target.value)}
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
               style={{
                 width: '100%',
                 padding: 10,
@@ -340,12 +356,13 @@ export default function RoteirosPage() {
             />
           </div>
 
+          {/* OBS */}
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="muted">Observações (opcional)</label>
             <textarea
-              value={form.observacoes}
-              onChange={(e) => onChange('observacoes', e.target.value)}
-              rows={2}
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              rows={3}
               style={{
                 width: '100%',
                 padding: 10,
@@ -357,36 +374,31 @@ export default function RoteirosPage() {
             />
           </div>
 
-          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, marginTop: 4 }}>
-            <button className="btn btn-primary" type="submit" disabled={saving || loading}>
+          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={saving || loadingOptions}
+            >
               {saving ? 'A criar…' : 'Criar roteiro'}
             </button>
           </div>
         </form>
-
-        {err && (
-          <p style={{ color: 'crimson', marginTop: 8 }}>
-            {err}
-          </p>
-        )}
-        {msg && (
-          <p style={{ color: 'green', marginTop: 8 }}>
-            {msg}
-          </p>
-        )}
       </section>
 
-      {/* LISTA DE ROTEIROS EXISTENTES */}
-      <section className="card">
-        <h2 className="h2" style={{ marginBottom: 8 }}>
-          Roteiros existentes
-        </h2>
+      {/* LISTA DE ROTEIROS */}
+      <section className="card" style={{ padding: 16 }}>
+        <h2 className="h2" style={{ marginBottom: 8 }}>Roteiros existentes</h2>
 
-        {!lista.length && !loadingLista && <p className="muted">Sem roteiros registados.</p>}
+        {loadingLista && <p className="muted">A carregar roteiros…</p>}
+
+        {!loadingLista && !lista.length && (
+          <p className="muted">Sem roteiros registados.</p>
+        )}
 
         {!!lista.length && (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                   <th style={{ padding: 8 }}>Colaborador</th>
@@ -394,38 +406,31 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Data início</th>
                   <th style={{ padding: 8 }}>Data fim</th>
-                  <th style={{ padding: 8 }}>Estado</th>
+                  <th style={{ padding: 8 }}>Status</th>
+                  <th style={{ padding: 8 }}>Criado em</th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => {
-                  const colab = colabs.find((c) => c.user_id === r.usuario_id);
-                  return (
-                    <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: 8 }}>
-                        {colab ? labelColab(colab) : r.usuario_id}
-                      </td>
-                      <td style={{ padding: 8 }}>{nomeTarefa(r)}</td>
-                      <td style={{ padding: 8 }}>{nomeLocal(r)}</td>
-                      <td style={{ padding: 8 }}>
-                        {r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}
-                      </td>
-                      <td style={{ padding: 8 }}>
-                        {r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}
-                      </td>
-                      <td style={{ padding: 8 }}>{r.status || 'planeado'}</td>
-                    </tr>
-                  );
-                })}
+                {lista.map((r) => (
+                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: 8 }}>{nomeColab(r.usuario_id)}</td>
+                    <td style={{ padding: 8 }}>{nomeTarefa(r.tarefa_id)}</td>
+                    <td style={{ padding: 8 }}>{nomeLocal(r.local_id)}</td>
+                    <td style={{ padding: 8 }}>
+                      {r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      {r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}
+                    </td>
+                    <td style={{ padding: 8 }}>{r.status}</td>
+                    <td style={{ padding: 8 }}>
+                      {r.created_at ? new Date(r.created_at).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        )}
-
-        {loadingLista && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            A carregar roteiros…
-          </p>
         )}
       </section>
     </main>
