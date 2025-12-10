@@ -32,7 +32,6 @@ type RoteiroRow = {
   local_id: string | null;
   observacoes: string | null;
   tarefa_id: string;
-  // supabase retorna relação como array
   tarefas_padrao?: { nome: string }[] | null;
 };
 
@@ -68,17 +67,18 @@ export default function RoteirosPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // Carrega contexto (colaboradores, tarefas, locais)
+  // Carrega colaboradores / tarefas / locais
   async function loadContext() {
     setErr(null);
     setMsg(null);
     setLoading(true);
     try {
       const [colabRes, tarefaRes, localRes] = await Promise.all([
-        // VIEW: usa user_id + nome
+        // Tira direto da tabela "colaboradores"
         supa
-          .from('v_colaboradores_perfis')
-          .select('user_id, nome'),
+          .from('colaboradores')
+          .select('user_id, nome')
+          .not('user_id', 'is', null),
         supa
           .from('tarefas_padrao')
           .select('id, nome')
@@ -104,19 +104,21 @@ export default function RoteirosPage() {
     }
   }
 
-  // Carrega lista de roteiros existentes
+  // Carrega lista de roteiros
   async function loadLista() {
     setLoadingLista(true);
     setErr(null);
     try {
       const { data, error } = await supa
         .from('ponto_roteiros')
-        .select('id, usuario_id, data_dia, data_fim, status, local_label, local_id, observacoes, tarefa_id, tarefas_padrao(nome)')
+        .select(
+          'id, usuario_id, data_dia, data_fim, status, local_label, local_id, observacoes, tarefa_id, tarefas_padrao(nome)'
+        )
         .order('data_dia', { ascending: true })
         .limit(200);
 
       if (error) throw error;
-      setLista((data as unknown as RoteiroRow[]) || []);
+      setLista((data || []) as unknown as RoteiroRow[]);
     } catch (e: any) {
       console.error('Erro ao carregar ponto_roteiros', e);
       setErr(e?.message || 'Falha ao carregar roteiros.');
@@ -168,7 +170,6 @@ export default function RoteirosPage() {
       if (error) throw error;
 
       setMsg('Roteiro criado com sucesso.');
-      // limpa form
       setForm({
         usuario_id: '',
         tarefa_id: '',
