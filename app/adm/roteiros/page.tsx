@@ -71,7 +71,7 @@ export default function RoteirosPage() {
       // 1) Colaboradores: USAR APENAS user_id + nome
       const { data: colabData, error: colabError } = await supa
         .from('v_colaboradores_perfis')
-        .select('user_id, nome')
+        .select('user_id, nome_colaborador')
         .order('nome', { ascending: true });
 
       if (colabError) throw new Error(`Colaboradores: ${colabError.message}`);
