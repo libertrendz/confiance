@@ -4,8 +4,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 10,
+  border: '1px solid var(--border)',
+  borderRadius: 10,
+  background: '#fff',
+};
+
 type ColaboradorOption = {
-  user_id: string; // auth.users / profiles.user_id
+  colaborador_id: string; // colaboradores.id
+  user_id: string | null; // pode ser null (ex: Amanda)
   nome: string;
 };
 
@@ -68,29 +77,36 @@ export default function RoteirosPage() {
     setMsg(null);
 
     try {
-      // 1) Colaboradores: USAR APENAS user_id + nome
+      // 1) COLABORADORES — usar diretamente a tabela "colaboradores"
       const { data: colabData, error: colabError } = await supa
-        .from('v_colaboradores_perfis')
-        .select('user_id, nome_colaborador')
+        .from('colaboradores')
+        .select('id, user_id, nome')
         .order('nome', { ascending: true });
 
-      if (colabError) throw new Error(`Colaboradores: ${colabError.message}`);
+      if (colabError) {
+        console.error('Erro ao carregar colaboradores:', colabError);
+        throw new Error(`Colaboradores: ${colabError.message}`);
+      }
 
       const colabOpts: ColaboradorOption[] = (colabData || []).map((r: any) => ({
-        user_id: r.user_id,
+        colaborador_id: r.id,
+        user_id: r.user_id ?? null,
         nome: r.nome,
       }));
 
       setColabs(colabOpts);
 
-      // 2) Tarefas padrão
+      // 2) TAREFAS PADRÃO
       const { data: tarefaData, error: tarefaError } = await supa
         .from('tarefas_padrao')
         .select('id, nome, ativo')
         .eq('ativo', true)
         .order('nome', { ascending: true });
 
-      if (tarefaError) throw new Error(`Tarefas: ${tarefaError.message}`);
+      if (tarefaError) {
+        console.error('Erro ao carregar tarefas_padrao:', tarefaError);
+        throw new Error(`Tarefas: ${tarefaError.message}`);
+      }
 
       const tarefaOpts: TarefaOption[] = (tarefaData || []).map((r: any) => ({
         id: r.id,
@@ -99,14 +115,17 @@ export default function RoteirosPage() {
 
       setTarefas(tarefaOpts);
 
-      // 3) Locais permitidos
+      // 3) LOCAIS PERMITIDOS
       const { data: locaisData, error: locaisError } = await supa
         .from('locais_permitidos')
         .select('id, nome, ativo')
         .eq('ativo', true)
         .order('nome', { ascending: true });
 
-      if (locaisError) throw new Error(`Locais: ${locaisError.message}`);
+      if (locaisError) {
+        console.error('Erro ao carregar locais_permitidos:', locaisError);
+        throw new Error(`Locais: ${locaisError.message}`);
+      }
 
       const localOpts: LocalOption[] = (locaisData || []).map((r: any) => ({
         id: r.id,
@@ -115,7 +134,7 @@ export default function RoteirosPage() {
 
       setLocais(localOpts);
 
-      // 4) Roteiros existentes
+      // 4) ROTEIROS EXISTENTES
       const { data: rotData, error: rotError } = await supa
         .from('ponto_roteiros')
         .select(
@@ -124,7 +143,10 @@ export default function RoteirosPage() {
         .order('data_dia', { ascending: false })
         .limit(200);
 
-      if (rotError) throw new Error(`Roteiros: ${rotError.message}`);
+      if (rotError) {
+        console.error('Erro ao carregar ponto_roteiros:', rotError);
+        throw new Error(`Roteiros: ${rotError.message}`);
+      }
 
       setLista((rotData as RoteiroRow[]) || []);
     } catch (e: any) {
@@ -205,6 +227,7 @@ export default function RoteirosPage() {
         </button>
       </header>
 
+      {/* NOVO ROTEIRO */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2">Novo roteiro</h2>
         <p className="muted">
@@ -217,7 +240,7 @@ export default function RoteirosPage() {
           style={{
             display: 'grid',
             gap: 12,
-            gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))',
             marginTop: 12,
           }}
         >
@@ -227,18 +250,13 @@ export default function RoteirosPage() {
             <select
               value={form.usuario_id}
               onChange={(e) => setForm((f) => ({ ...f, usuario_id: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
+              style={inputStyle}
             >
               <option value="">Selecione…</option>
               {colabs.map((c) => (
-                <option key={c.user_id} value={c.user_id}>
+                <option key={c.colaborador_id} value={c.user_id || ''}>
                   {c.nome}
+                  {c.user_id ? '' : ' (sem utilizador ligado)'}
                 </option>
               ))}
             </select>
@@ -250,13 +268,7 @@ export default function RoteirosPage() {
             <select
               value={form.tarefa_id}
               onChange={(e) => setForm((f) => ({ ...f, tarefa_id: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
+              style={inputStyle}
             >
               <option value="">Selecione…</option>
               {tarefas.map((t) => (
@@ -273,13 +285,7 @@ export default function RoteirosPage() {
             <select
               value={form.local_id}
               onChange={(e) => setForm((f) => ({ ...f, local_id: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
+              style={inputStyle}
             >
               <option value="">Selecione…</option>
               {locais.map((l) => (
@@ -297,13 +303,7 @@ export default function RoteirosPage() {
               type="date"
               value={form.data_inicio}
               onChange={(e) => setForm((f) => ({ ...f, data_inicio: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
+              style={inputStyle}
             />
           </div>
           <div>
@@ -312,13 +312,7 @@ export default function RoteirosPage() {
               type="date"
               value={form.data_fim}
               onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
+              style={inputStyle}
             />
           </div>
 
@@ -332,11 +326,7 @@ export default function RoteirosPage() {
               }
               rows={2}
               style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
+                ...inputStyle,
                 resize: 'vertical',
               }}
             />
@@ -363,6 +353,7 @@ export default function RoteirosPage() {
         </form>
       </section>
 
+      {/* LISTA DE ROTEIROS */}
       <section className="card">
         <h2 className="h2">Roteiros existentes</h2>
         {!lista.length && !loading && !err && (
