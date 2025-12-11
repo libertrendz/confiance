@@ -5,8 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
 type ColaboradorOption = {
-  colaborador_id: string; // id da tabela colaboradores
-  user_id: string;        // user_id (auth.users / profiles.user_id)
+  user_id: string; // auth.users / profiles.user_id
   nome: string;
 };
 
@@ -25,7 +24,7 @@ type RoteiroRow = {
   usuario_id: string;
   tarefa_id: string;
   local_id: string | null;
-  data_dia: string;      // date string
+  data_dia: string;
   data_fim: string | null;
   status: string;
   local_label: string | null;
@@ -69,20 +68,18 @@ export default function RoteirosPage() {
     setMsg(null);
 
     try {
-      // 1) Colaboradores (view v_colaboradores_perfis: id, nome, user_id)
+      // 1) Colaboradores: USAR APENAS user_id + nome
       const { data: colabData, error: colabError } = await supa
         .from('v_colaboradores_perfis')
-        .select('id, nome, user_id')
+        .select('user_id, nome')
         .order('nome', { ascending: true });
 
       if (colabError) throw new Error(`Colaboradores: ${colabError.message}`);
 
-      const colabOpts: ColaboradorOption[] =
-        (colabData || []).map((r: any) => ({
-          colaborador_id: r.id,
-          user_id: r.user_id,
-          nome: r.nome,
-        }));
+      const colabOpts: ColaboradorOption[] = (colabData || []).map((r: any) => ({
+        user_id: r.user_id,
+        nome: r.nome,
+      }));
 
       setColabs(colabOpts);
 
@@ -95,15 +92,14 @@ export default function RoteirosPage() {
 
       if (tarefaError) throw new Error(`Tarefas: ${tarefaError.message}`);
 
-      const tarefaOpts: TarefaOption[] =
-        (tarefaData || []).map((r: any) => ({
-          id: r.id,
-          nome: r.nome,
-        }));
+      const tarefaOpts: TarefaOption[] = (tarefaData || []).map((r: any) => ({
+        id: r.id,
+        nome: r.nome,
+      }));
 
       setTarefas(tarefaOpts);
 
-      // 3) Locais de trabalho / permitidos
+      // 3) Locais permitidos
       const { data: locaisData, error: locaisError } = await supa
         .from('locais_permitidos')
         .select('id, nome, ativo')
@@ -112,11 +108,10 @@ export default function RoteirosPage() {
 
       if (locaisError) throw new Error(`Locais: ${locaisError.message}`);
 
-      const localOpts: LocalOption[] =
-        (locaisData || []).map((r: any) => ({
-          id: r.id,
-          nome: r.nome,
-        }));
+      const localOpts: LocalOption[] = (locaisData || []).map((r: any) => ({
+        id: r.id,
+        nome: r.nome,
+      }));
 
       setLocais(localOpts);
 
@@ -156,12 +151,9 @@ export default function RoteirosPage() {
         throw new Error('Preencha colaborador, tarefa, local e data de início.');
       }
 
-      // data_fim opcional; se vazio, usa data_inicio
       const dataDia = form.data_inicio;
       const dataFim = form.data_fim || form.data_inicio;
-
-      const localLabel =
-        locais.find((l) => l.id === form.local_id)?.nome || null;
+      const localLabel = locais.find((l) => l.id === form.local_id)?.nome || null;
 
       const { error } = await supa.from('ponto_roteiros').insert({
         usuario_id: form.usuario_id,
@@ -234,9 +226,7 @@ export default function RoteirosPage() {
             <label className="muted">Colaborador</label>
             <select
               value={form.usuario_id}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, usuario_id: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, usuario_id: e.target.value }))}
               style={{
                 width: '100%',
                 padding: 10,
@@ -259,9 +249,7 @@ export default function RoteirosPage() {
             <label className="muted">Tarefa</label>
             <select
               value={form.tarefa_id}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, tarefa_id: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, tarefa_id: e.target.value }))}
               style={{
                 width: '100%',
                 padding: 10,
@@ -284,9 +272,7 @@ export default function RoteirosPage() {
             <label className="muted">Local de trabalho</label>
             <select
               value={form.local_id}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, local_id: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, local_id: e.target.value }))}
               style={{
                 width: '100%',
                 padding: 10,
@@ -310,9 +296,7 @@ export default function RoteirosPage() {
             <input
               type="date"
               value={form.data_inicio}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, data_inicio: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, data_inicio: e.target.value }))}
               style={{
                 width: '100%',
                 padding: 10,
@@ -327,9 +311,7 @@ export default function RoteirosPage() {
             <input
               type="date"
               value={form.data_fim}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, data_fim: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
               style={{
                 width: '100%',
                 padding: 10,
@@ -374,11 +356,7 @@ export default function RoteirosPage() {
 
           {/* Botão */}
           <div style={{ gridColumn: '1 / -1', textAlign: 'right' }}>
-            <button
-              className="btn btn-primary"
-              disabled={saving}
-              type="submit"
-            >
+            <button className="btn btn-primary" disabled={saving} type="submit">
               {saving ? 'A criar…' : 'Criar roteiro'}
             </button>
           </div>
