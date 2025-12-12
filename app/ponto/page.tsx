@@ -22,13 +22,6 @@ type LocalPermitido = {
   raio_m?: number | null;
 };
 
-type TarefaRow = {
-  id: string;
-  empresa_id: string;
-  nome: string;
-  ativo: boolean;
-};
-
 type GeoState = {
   lat: number | null;
   lon: number | null;
@@ -99,9 +92,15 @@ export default function PontoPage() {
   const [locais, setLocais] = useState<LocalPermitido[]>([]);
   const [loadingLocais, setLoadingLocais] = useState(false);
 
-  const [tarefas, setTarefas] = useState<TarefaRow[]>([]);
-  const [loadingTarefas, setLoadingTarefas] = useState(false);
-  const [tarefaId, setTarefaId] = useState<string>('');
+  // Roteiro do dia (tarefa fixa)
+  const [roteiroHoje, setRoteiroHoje] = useState<{
+    tarefa_id: string;
+    tarefa_nome: string;
+    local_id: string | null;
+    local_nome: string | null;
+  } | null>(null);
+  const [loadingRoteiro, setLoadingRoteiro] = useState(false);
+  const [tarefaConcluida, setTarefaConcluida] = useState(false);
 
   const [geo, setGeo] = useState<GeoState>({
     lat: null,
@@ -192,42 +191,7 @@ export default function PontoPage() {
     };
   }, [empresaId, supa]);
 
-  // 3) tarefas padrão da empresa
-  useEffect(() => {
-    if (!empresaId) return;
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoadingTarefas(true);
-        const { data, error } = await supa
-          .from('tarefas_padrao')
-          .select('id, empresa_id, nome, ativo')
-          .eq('empresa_id', empresaId)
-          .eq('ativo', true)
-          .order('nome', { ascending: true });
-
-        if (error) throw error;
-        if (!alive) return;
-
-        const lista = (data || []) as TarefaRow[];
-        setTarefas(lista);
-        if (lista.length && !tarefaId) {
-          setTarefaId(lista[0].id);
-        }
-      } catch (e) {
-        console.error('Erro ao carregar tarefas_padrao', e);
-      } finally {
-        if (alive) setLoadingTarefas(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [empresaId, supa]);
-
-  // 4) últimos pontos do próprio user (para saber o último tipo)
+  // 3) últimos pontos do próprio user (para saber o último tipo)
   async function carregarUltimos() {
     if (!usuarioId || !empresaId) return;
     setLoadingLista(true);
@@ -256,11 +220,75 @@ export default function PontoPage() {
     }
   }
 
+  // 4) carregar roteiro do dia (tarefa fixa) para o utilizador
+  async function carregarRoteiroHoje() {
+    if (!usuarioId || !empresaId) return;
+
+    setLoadingRoteiro(true);
+    try {
+      const hoje = new Date();
+      const yyyy = hoje.getFullYear();
+      const mm = String(hoje.getMonth() + 1).padStart(2, '0');
+      const dd = String(hoje.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+
+      const { data, error } = await supa
+        .from('ponto_roteiros')
+        .select(
+          `
+          tarefa_id,
+          tarefas_padrao ( nome ),
+          local_id,
+          locais_permitidos ( nome ),
+          data_dia,
+          data_fim,
+          status
+        `
+        )
+        .eq('empresa_id', empresaId)
+        .eq('usuario_id', usuarioId)
+        .lte('data_dia', todayStr)
+        .or(`data_fim.is.null,data_fim.gte.${todayStr}`)
+        .in('status', ['planeado', 'ativo'])
+        .order('data_dia', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data?.tarefa_id) {
+        setRoteiroHoje({
+          tarefa_id: (data as any).tarefa_id,
+          tarefa_nome: (data as any).tarefas_padrao?.nome || '—',
+          local_id: (data as any).local_id ?? null,
+          local_nome: (data as any).locais_permitidos?.nome ?? null,
+        });
+      } else {
+        setRoteiroHoje(null);
+      }
+
+      setTarefaConcluida(false);
+    } catch (e: any) {
+      console.error('Erro ao carregar roteiro do dia', e);
+      // Não explode a UI, mas deixa visível pelo comportamento do checkout
+      setRoteiroHoje(null);
+    } finally {
+      setLoadingRoteiro(false);
+    }
+  }
+
   useEffect(() => {
     if (usuarioId && empresaId) {
       carregarUltimos();
+      carregarRoteiroHoje();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioId, empresaId]);
+
+  useEffect(() => {
+    // ao mudar tipo, reseta confirmação
+    setTarefaConcluida(false);
+  }, [tipo]);
 
   // 5) geolocalização
   async function obterGeo(): Promise<GeoState | null> {
@@ -283,12 +311,11 @@ export default function PontoPage() {
         },
         (error) => {
           console.error('Erro geolocalização', error);
-          let msg = 'Não foi possível obter a localização.';
+          let msg2 = 'Não foi possível obter a localização.';
           if (error.code === error.PERMISSION_DENIED) {
-            msg =
-              'Permissão de localização negada. Ative a localização para poder marcar ponto.';
+            msg2 = 'Permissão de localização negada. Ative a localização para poder marcar ponto.';
           }
-          setErr(msg);
+          setErr(msg2);
           setGettingGeo(false);
           resolve(null);
         },
@@ -328,10 +355,10 @@ export default function PontoPage() {
       };
     }
 
-    let melhor: {
-      local: LocalPermitido | null;
-      distancia: number;
-    } = { local: null, distancia: Infinity };
+    let melhor: { local: LocalPermitido | null; distancia: number } = {
+      local: null,
+      distancia: Infinity,
+    };
 
     locais.forEach((loc) => {
       if (loc.lat == null || loc.lon == null || loc.raio_m == null) return;
@@ -397,9 +424,7 @@ export default function PontoPage() {
       }
 
       const g = await obterGeo();
-      if (!g) {
-        return;
-      }
+      if (!g) return;
 
       const raioCheck = validarRaio(g);
       if (!raioCheck.ok) {
@@ -424,42 +449,41 @@ export default function PontoPage() {
         meta.dist_m = raioCheck.distancia;
       }
 
-      if (tipo === 'entrada') {
-        meta.foto_checkin = true;
-      }
-      if (tipo === 'saida') {
-        meta.foto_checkout = true;
-      }
-      if (tipo === 'saida_almoco') {
-        meta.foto_saida_almoco = true;
-      }
-      if (tipo === 'retorno_almoco') {
-        meta.foto_retorno_almoco = true;
-      }
+      if (tipo === 'entrada') meta.foto_checkin = true;
+      if (tipo === 'saida') meta.foto_checkout = true;
+      if (tipo === 'saida_almoco') meta.foto_saida_almoco = true;
+      if (tipo === 'retorno_almoco') meta.foto_retorno_almoco = true;
 
       const just = justificativa.trim();
-      if (just) {
-        meta.justificativa = just;
-      }
+      if (just) meta.justificativa = just;
 
-      // *** Regra: na SAÍDA é obrigatório selecionar tarefa executada ***
+      // *** Regra: na SAÍDA a tarefa vem do roteiro e é fixa ***
       if (tipo === 'saida') {
-        if (!tarefas.length) {
+        if (!roteiroHoje?.tarefa_id) {
           setErr(
-            'Nenhuma tarefa configurada para esta empresa. Peça ao administrador/gestor para configurar tarefas padrão antes de concluir o dia.'
+            'Não existe roteiro/tarefa atribuída para hoje. Contacte o administrador/gestor.'
           );
           return;
         }
-        if (!tarefaId) {
-          setErr('Selecione a tarefa executada para concluir o dia.');
-          return;
+
+        if (!tarefaConcluida) {
+          if (!just) {
+            setErr('Para finalizar sem concluir a tarefa, é obrigatória uma justificativa.');
+            return;
+          }
+          meta.tarefa_concluida = false;
+        } else {
+          meta.tarefa_concluida = true;
         }
-        const tarefa = tarefas.find((t) => t.id === tarefaId);
-        meta.tarefa_id = tarefaId;
-        meta.tarefa_nome = tarefa?.nome || null;
+
+        meta.tarefa_id = roteiroHoje.tarefa_id;
+        meta.tarefa_nome = roteiroHoje.tarefa_nome;
+
+        if (roteiroHoje.local_id) meta.roteiro_local_id = roteiroHoje.local_id;
+        if (roteiroHoje.local_nome) meta.roteiro_local_nome = roteiroHoje.local_nome;
       }
 
-      const { data, error } = await supa.rpc('rpc_ponto_bater', {
+      const { error } = await supa.rpc('rpc_ponto_bater', {
         p_empresa_id: empresaId,
         p_usuario_id: usuarioId,
         p_tipo: tipo,
@@ -471,7 +495,10 @@ export default function PontoPage() {
       setMsg('Ponto registado com sucesso.');
       setPhotoPreview(null);
       setJustificativa('');
+      setTarefaConcluida(false);
+
       await carregarUltimos();
+      await carregarRoteiroHoje();
     } catch (e: any) {
       console.error('Erro ao bater ponto', e);
       setErr(e?.message || 'Falha ao registar ponto.');
@@ -492,9 +519,7 @@ export default function PontoPage() {
       tipo === 'retorno_almoco';
 
     if (exigeFoto) {
-      if (fileInputRef.current) {
-        fileInputRef.current.click();
-      }
+      if (fileInputRef.current) fileInputRef.current.click();
       return;
     }
 
@@ -545,7 +570,7 @@ export default function PontoPage() {
 
   return (
     <main style={{ padding: 18 }}>
-      {/* LOGO CONFIANCE */}
+      {/* LOGO CONFIANCE + VOLTAR */}
       <header
         style={{
           display: 'flex',
@@ -568,10 +593,25 @@ export default function PontoPage() {
         >
           Ponto
         </span>
+
+        <a
+          href="/menu"
+          style={{
+            marginLeft: 'auto',
+            fontSize: 12,
+            textDecoration: 'none',
+            color: '#0e3258',
+            fontWeight: 600,
+          }}
+        >
+          ← Voltar
+        </a>
       </header>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="h1" style={{ marginBottom: 4 }}>Marcar Ponto</div>
+        <div className="h1" style={{ marginBottom: 4 }}>
+          Marcar Ponto
+        </div>
         {nome && (
           <p className="muted" style={{ marginBottom: 8 }}>
             Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua jornada.
@@ -581,8 +621,8 @@ export default function PontoPage() {
           <p className="muted">A carregar locais permitidos…</p>
         ) : locais.length ? (
           <p className="muted">
-            Locais configurados para esta empresa: {locais.length}. A localização será validada
-            num raio definido pelo administrador.
+            Locais configurados para esta empresa: {locais.length}. A localização será validada num
+            raio definido pelo administrador.
           </p>
         ) : (
           <p className="muted">
@@ -594,7 +634,9 @@ export default function PontoPage() {
 
       {/* FORM PRINCIPAL */}
       <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
-        <h2 className="h2" style={{ marginBottom: 12 }}>Bater ponto</h2>
+        <h2 className="h2" style={{ marginBottom: 12 }}>
+          Bater ponto
+        </h2>
 
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
@@ -616,6 +658,7 @@ export default function PontoPage() {
                 </option>
               ))}
             </select>
+
             {ultimoTipo && (
               <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
                 Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência é sempre:{' '}
@@ -629,44 +672,69 @@ export default function PontoPage() {
             )}
           </div>
 
-          {/* Tarefa (obrigatória na SAÍDA) */}
+          {/* Tarefa FIXA (obrigatória na SAÍDA) */}
           {tipo === 'saida' && (
             <div>
-              <label className="muted">Tarefa executada (obrigatória na saída)</label>
-              {loadingTarefas && (
+              <label className="muted">Tarefa atribuída (obrigatória na saída)</label>
+
+              {loadingRoteiro && (
                 <p className="muted" style={{ fontSize: 12 }}>
-                  A carregar tarefas padrão…
+                  A carregar roteiro do dia…
                 </p>
               )}
-              {!loadingTarefas && !tarefas.length && (
-                <p className="muted" style={{ fontSize: 12 }}>
-                  Nenhuma tarefa configurada. Contacte o administrador/gestor.
+
+              {!loadingRoteiro && !roteiroHoje && (
+                <p style={{ color: 'crimson', fontSize: 12, marginTop: 6 }}>
+                  Não existe tarefa atribuída para hoje. Contacte o administrador/gestor para criar
+                  um roteiro.
                 </p>
               )}
-              {!!tarefas.length && (
-                <select
-                  value={tarefaId}
-                  onChange={(e) => setTarefaId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    borderRadius: 10,
-                    border: '1px solid var(--border)',
-                    background: '#fff',
-                    marginTop: 4,
-                  }}
-                >
-                  {tarefas.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nome}
-                    </option>
-                  ))}
-                </select>
+
+              {!loadingRoteiro && roteiroHoje && (
+                <>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      padding: 10,
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      background: '#fff',
+                      fontSize: 13,
+                    }}
+                  >
+                    <strong>{roteiroHoje.tarefa_nome}</strong>
+                    {roteiroHoje.local_nome ? (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                        Local: {roteiroHoje.local_nome}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      gap: 10,
+                      alignItems: 'center',
+                      marginTop: 10,
+                      fontSize: 13,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={tarefaConcluida}
+                      onChange={(e) => setTarefaConcluida(e.target.checked)}
+                    />
+                    <span>Confirmo que concluí a tarefa atribuída.</span>
+                  </label>
+
+                  {!tarefaConcluida && (
+                    <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                      Se não concluiu, escreva uma justificativa abaixo (obrigatória quando não
+                      concluído).
+                    </p>
+                  )}
+                </>
               )}
-              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Ao concluir o dia, selecione a tarefa principal executada. Se não concluiu, use a
-                justificativa abaixo.
-              </p>
             </div>
           )}
 
@@ -708,7 +776,7 @@ export default function PontoPage() {
             </>
           )}
 
-          {/* Justificativa – opcional */}
+          {/* Justificativa – opcional (vira obrigatória no checkout quando não concluir) */}
           <div>
             <label className="muted">Justificativa (opcional)</label>
             <textarea
@@ -726,16 +794,10 @@ export default function PontoPage() {
             />
           </div>
 
-          {gettingGeo && (
-            <p className="muted">A obter localização do dispositivo…</p>
-          )}
+          {gettingGeo && <p className="muted">A obter localização do dispositivo…</p>}
 
-          {err && (
-            <p style={{ color: 'crimson' }}>{err}</p>
-          )}
-          {msg && (
-            <p style={{ color: 'green' }}>{msg}</p>
-          )}
+          {err && <p style={{ color: 'crimson' }}>{err}</p>}
+          {msg && <p style={{ color: 'green' }}>{msg}</p>}
 
           {/* BOTÃO ÚNICO, AZUL */}
           <button
@@ -752,9 +814,9 @@ export default function PontoPage() {
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2">Tarefas do dia</h2>
         <p className="muted" style={{ marginTop: 4 }}>
-          Em versões futuras, esta secção irá listar o roteiro definido pelo administrador
-          (projeto, fase/tarefa, local). O ponto de entrada/saída será ligado às tarefas
-          executadas neste período.
+          Em versões futuras, esta secção irá listar o roteiro definido pelo administrador (projeto,
+          fase/tarefa, local). O ponto de entrada/saída será ligado às tarefas executadas neste
+          período.
         </p>
       </section>
 
