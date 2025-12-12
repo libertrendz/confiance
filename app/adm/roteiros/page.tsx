@@ -28,7 +28,11 @@ export default function RoteirosPage() {
   const [lista, setLista] = useState<RoteiroRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
+  const colabNomePorId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of colabOpts) map[c.id] = c.nome;
+    return map;
+  }, [colabOpts]);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState<{
     usuario_id: string;
@@ -51,12 +55,19 @@ export default function RoteirosPage() {
     try {
       // 1) Colaboradores (view DEFINITIVA)
       const { data: colabs, error: colabErr } = await supa
-        .from('v_colaboradores_perfis')
-        .select('id, nome')
-        .order('nome', { ascending: true });
+  .from('v_adm_colaboradores')
+  .select('user_id, nome_exibicao, papel')
+  .eq('papel', 'externo')
+  .order('nome_exibicao', { ascending: true });
 
-      if (colabErr) throw colabErr;
-      setColabOpts((colabs || []) as Option[]);
+if (colabErr) throw colabErr;
+
+setColabOpts(
+  (colabs || []).map((c: any) => ({
+    id: c.user_id,
+    nome: c.nome_exibicao,
+  }))
+);
 
       // 2) Tarefas padrão
       const { data: tarefas, error: tarefaErr } = await supa
