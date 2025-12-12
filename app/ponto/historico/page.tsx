@@ -109,17 +109,66 @@ export default function PontoHistoricoPage() {
         margin: '0 auto',
       }}
     >
-      <header style={{ marginBottom: 12 }}>
-        <h1
+      {/* HEADER COM LOGO + VOLTAR */}
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          marginBottom: 12,
+        }}
+      >
+        <img
+          src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
+          alt="CONFIANCE"
+          style={{ height: 28, width: 'auto', display: 'block' }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              color: '#6b7280',
+              lineHeight: 1.1,
+            }}
+          >
+            Confiance
+          </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
+              color: '#0e3258',
+              lineHeight: 1.1,
+            }}
+          >
+            Histórico de ponto
+          </div>
+        </div>
+
+        <a
+          href="/menu"
+          className="btn btn-ghost"
           style={{
-            margin: 0,
-            fontSize: 20,
-            fontWeight: 800,
+            marginLeft: 'auto',
+            textDecoration: 'none',
+            padding: '8px 12px',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: '#fff',
             color: '#0e3258',
+            fontWeight: 700,
+            fontSize: 13,
+            whiteSpace: 'nowrap',
           }}
         >
-          Histórico de ponto
-        </h1>
+          ← Voltar
+        </a>
+      </header>
+
+      {/* Subheader original (mantido) */}
+      <header style={{ marginBottom: 12 }}>
         <p
           style={{
             margin: '4px 0 0 0',
@@ -141,11 +190,7 @@ export default function PontoHistoricoPage() {
           boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
         }}
       >
-        {err && (
-          <p style={{ color: 'crimson', marginBottom: 8 }}>
-            {err}
-          </p>
-        )}
+        {err && <p style={{ color: 'crimson', marginBottom: 8 }}>{err}</p>}
 
         {!rows?.length && !loading && !err && (
           <p className="muted" style={{ color: '#666' }}>
@@ -187,19 +232,11 @@ export default function PontoHistoricoPage() {
                       >
                         {r.tipo || '—'}
                       </div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: '#58627A',
-                        }}
-                      >
-                        {r.batida_at
-                          ? new Date(r.batida_at).toLocaleString()
-                          : '—'}
+                      <div style={{ fontSize: 12, color: '#58627A' }}>
+                        {r.batida_at ? new Date(r.batida_at).toLocaleString() : '—'}
                       </div>
                     </div>
 
-                    {/* badge simples por enquanto */}
                     <div
                       style={{
                         fontSize: 11,
@@ -215,7 +252,6 @@ export default function PontoHistoricoPage() {
                     </div>
                   </div>
 
-                  {/* Resumo meta */}
                   <div
                     style={{
                       display: 'grid',
@@ -226,12 +262,10 @@ export default function PontoHistoricoPage() {
                     }}
                   >
                     <div>
-                      <strong>Foto no local:</strong>{' '}
-                      {s.foto === null ? '—' : s.foto ? 'Sim' : 'Não'}
+                      <strong>Foto no local:</strong> {s.foto === null ? '—' : s.foto ? 'Sim' : 'Não'}
                     </div>
                     <div>
-                      <strong>Geo registado:</strong>{' '}
-                      {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
+                      <strong>Geo registado:</strong> {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
                     </div>
                     <div>
                       <strong>Validação de raio:</strong>{' '}
@@ -250,15 +284,8 @@ export default function PontoHistoricoPage() {
                     )}
                   </div>
 
-                  {/* JSON técnico opcional */}
                   <details style={{ marginTop: 6 }}>
-                    <summary
-                      style={{
-                        cursor: 'pointer',
-                        fontSize: 11,
-                        color: '#445',
-                      }}
-                    >
+                    <summary style={{ cursor: 'pointer', fontSize: 11, color: '#445' }}>
                       Ver detalhes técnicos
                     </summary>
                     <pre
