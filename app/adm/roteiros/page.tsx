@@ -49,36 +49,14 @@ export default function RoteirosPage() {
   async function loadOptions() {
     setErr(null);
     try {
-      // 1) Colaboradores (view) + filtro apenas EXTERNOS via profiles
-      const { data: colabsRaw, error: colabErr } = await supa
+      // 1) Colaboradores (view DEFINITIVA)
+      const { data: colabs, error: colabErr } = await supa
         .from('v_colaboradores_perfis')
-        .select('id, nome, user_id')
+        .select('id, nome')
         .order('nome', { ascending: true });
 
       if (colabErr) throw colabErr;
-
-      const { data: perfisRaw, error: perfErr } = await supa
-        .from('profiles')
-        .select('user_id, papel');
-
-      if (perfErr) throw perfErr;
-
-      const externosSet = new Set(
-        (perfisRaw || [])
-          .filter((p: any) => p.papel === 'externo')
-          .map((p: any) => p.user_id)
-      );
-
-      const apenasExternos = (colabsRaw || []).filter(
-        (c: any) => c.user_id && externosSet.has(c.user_id)
-      );
-
-      setColabOpts(
-        apenasExternos.map((c: any) => ({
-          id: c.id,
-          nome: c.nome,
-        }))
-      );
+      setColabOpts((colabs || []) as Option[]);
 
       // 2) Tarefas padrão
       const { data: tarefas, error: tarefaErr } = await supa
@@ -215,26 +193,16 @@ export default function RoteirosPage() {
         }}
       >
         <h1 className="h1">Roteiros de trabalho</h1>
-        <button
-          className="btn btn-ghost"
-          onClick={() => {
-            loadOptions();
-            loadLista();
-          }}
-          disabled={loading}
-        >
+        <button className="btn btn-ghost" onClick={() => { loadOptions(); loadLista(); }} disabled={loading}>
           {loading ? 'A carregar…' : 'Recarregar'}
         </button>
       </header>
 
       {/* FORM NOVO ROTEIRO */}
       <section className="card" style={{ marginBottom: 16 }}>
-        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
-          Novo roteiro
-        </h2>
+        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>Novo roteiro</h2>
         <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no
-          cálculo de presença (geo/raio) e para associações de tarefas do dia.
+          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de presença (geo/raio) e para associações de tarefas do dia.
         </p>
 
         <form
@@ -250,11 +218,11 @@ export default function RoteirosPage() {
             <label className="muted">Colaborador</label>
             <select
               value={form.usuario_id}
-              onChange={(e) => setForm((f) => ({ ...f, usuario_id: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, usuario_id: e.target.value }))}
               style={selectStyle}
             >
               <option value="">Selecione…</option>
-              {colabOpts.map((c) => (
+              {colabOpts.map(c => (
                 <option key={c.id} value={c.id}>
                   {c.nome}
                 </option>
@@ -267,11 +235,11 @@ export default function RoteirosPage() {
             <label className="muted">Tarefa</label>
             <select
               value={form.tarefa_id}
-              onChange={(e) => setForm((f) => ({ ...f, tarefa_id: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, tarefa_id: e.target.value }))}
               style={selectStyle}
             >
               <option value="">Selecione…</option>
-              {tarefaOpts.map((t) => (
+              {tarefaOpts.map(t => (
                 <option key={t.id} value={t.id}>
                   {t.nome}
                 </option>
@@ -284,11 +252,11 @@ export default function RoteirosPage() {
             <label className="muted">Local de trabalho</label>
             <select
               value={form.local_id}
-              onChange={(e) => setForm((f) => ({ ...f, local_id: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, local_id: e.target.value }))}
               style={selectStyle}
             >
               <option value="">Selecione…</option>
-              {localOpts.map((l) => (
+              {localOpts.map(l => (
                 <option key={l.id} value={l.id}>
                   {l.nome}
                 </option>
@@ -302,7 +270,7 @@ export default function RoteirosPage() {
             <input
               type="date"
               value={form.data_dia}
-              onChange={(e) => setForm((f) => ({ ...f, data_dia: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, data_dia: e.target.value }))}
               style={inputStyle}
               placeholder="dd/mm/aaaa"
             />
@@ -314,7 +282,7 @@ export default function RoteirosPage() {
             <input
               type="date"
               value={form.data_fim}
-              onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, data_fim: e.target.value }))}
               style={inputStyle}
               placeholder="dd/mm/aaaa"
             />
@@ -325,7 +293,7 @@ export default function RoteirosPage() {
             <label className="muted">Observações (opcional)</label>
             <textarea
               value={form.observacoes}
-              onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
               style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
             />
           </div>
@@ -346,9 +314,7 @@ export default function RoteirosPage() {
 
       {/* LISTA DE ROTEIROS */}
       <section className="card">
-        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
-          Roteiros existentes
-        </h2>
+        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>Roteiros existentes</h2>
 
         {!lista.length && !loading && (
           <p className="muted">Sem roteiros registados.</p>
@@ -359,7 +325,7 @@ export default function RoteirosPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: 8 }}>Colaborador</th>
+                  <th style={{ padding: 8 }}>Colaborador (user_id)</th>
                   <th style={{ padding: 8 }}>Tarefa</th>
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Data início</th>
@@ -369,30 +335,25 @@ export default function RoteirosPage() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => {
-                  const colab = colabOpts.find((c) => c.id === r.usuario_id);
-                  const nomeColab = colab?.nome || r.usuario_id;
-
-                  return (
-                    <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: 8 }}>
-                        {nomeColab}
-                      </td>
-                      <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
-                      <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
-                      <td style={{ padding: 8 }}>
-                        {r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}
-                      </td>
-                      <td style={{ padding: 8 }}>
-                        {r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}
-                      </td>
-                      <td style={{ padding: 8 }}>{r.status || '—'}</td>
-                      <td style={{ padding: 8, maxWidth: 260 }}>
-                        {r.observacoes || '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {lista.map(r => (
+                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>
+                      {r.usuario_id}
+                    </td>
+                    <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
+                    <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
+                    <td style={{ padding: 8 }}>
+                      {r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      {r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}
+                    </td>
+                    <td style={{ padding: 8 }}>{r.status || '—'}</td>
+                    <td style={{ padding: 8, maxWidth: 260 }}>
+                      {r.observacoes || '—'}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
