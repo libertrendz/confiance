@@ -348,9 +348,10 @@ setColabOpts(
               <tbody>
                 {lista.map(r => (
                   <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 11 }}>
-                      {r.usuario_id}
+                    <td style={{ padding: 8 }}>
+                        {colabNomePorId[r.usuario_id] ?? r.usuario_id}
                     </td>
+
                     <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
                     <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
                     <td style={{ padding: 8 }}>
