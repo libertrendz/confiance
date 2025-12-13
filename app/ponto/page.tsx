@@ -534,13 +534,12 @@ export default function PontoPage() {
       }}
     >
       {/* HEADER (padrão do histórico) + logo + botão */}
-      <header
+    <header
         style={{
-          marginBottom: 12,
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr auto',
+          display: 'flex',
           alignItems: 'center',
-          gap: 12,
+          gap: 10,
+          marginBottom: 12,
         }}
       >
         <img
@@ -548,49 +547,64 @@ export default function PontoPage() {
           alt="CONFIANCE"
           style={{ height: 28, width: 'auto', display: 'block' }}
         />
-
         <div style={{ minWidth: 0 }}>
-          <h1
+          <div
             style={{
-              margin: 0,
-              fontSize: 20,
-              fontWeight: 800,
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              color: '#6b7280',
+              lineHeight: 1.1,
+            }}
+          >
+            Confiance
+          </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
               color: '#0e3258',
+              lineHeight: 1.1,
             }}
           >
-            Marcar ponto
-          </h1>
-          <p
-            style={{
-              margin: '4px 0 0 0',
-              fontSize: 13,
-              color: '#49546A',
-            }}
-          >
-            {nome
-              ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.`
-              : 'Utilize esta página para registar a sua jornada.'}
-          </p>
+            Histórico de ponto
+          </div>
         </div>
 
         <a
           href="/menu"
           className="btn btn-ghost"
           style={{
+            marginLeft: 'auto',
+            textDecoration: 'none',
             padding: '8px 12px',
             borderRadius: 10,
             border: '1px solid var(--border)',
             background: '#fff',
-            cursor: 'pointer',
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-            textDecoration: 'none',
             color: '#0e3258',
+            fontWeight: 700,
+            fontSize: 13,
+            whiteSpace: 'nowrap',
           }}
         >
           ← Voltar
         </a>
       </header>
+
+      {/* Subheader original (mantido) */}
+      <header style={{ marginBottom: 12 }}>
+        <p
+          style={{
+            margin: '4px 0 0 0',
+            fontSize: 13,
+            color: '#49546A',
+          }}
+        >
+         {nome
+              ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.`
+              : 'Utilize esta página para registar a sua jornada.'}
+          </p>
+        </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         {loadingLocais ? (
