@@ -270,7 +270,6 @@ export default function PontoPage() {
       setTarefaConcluida(false);
     } catch (e: any) {
       console.error('Erro ao carregar roteiro do dia', e);
-      // Não explode a UI, mas deixa visível pelo comportamento do checkout
       setRoteiroHoje(null);
     } finally {
       setLoadingRoteiro(false);
@@ -575,14 +574,15 @@ export default function PontoPage() {
         margin: '0 auto',
       }}
     >
-      {/* HEADER NO PADRÃO DO HISTÓRICO (logo + voltar + título + subtítulo) */}
+      {/* HEADER PADRÃO (logo + título + subtítulo + botão) */}
       <header style={{ marginBottom: 12 }}>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            marginBottom: 8,
+            justifyContent: 'space-between',
+            gap: 12,
+            marginBottom: 10,
           }}
         >
           <img
@@ -594,11 +594,15 @@ export default function PontoPage() {
           <a
             href="/menu"
             style={{
-              marginLeft: 'auto',
-              fontSize: 12,
               textDecoration: 'none',
+              fontSize: 13,
+              padding: '8px 12px',
+              borderRadius: 10,
+              border: '1px solid #D7E3FF',
+              background: '#EEF3FF',
               color: '#0e3258',
               fontWeight: 700,
+              whiteSpace: 'nowrap',
             }}
           >
             ← Voltar
@@ -633,6 +637,7 @@ export default function PontoPage() {
         </p>
       </header>
 
+      {/* Card informativo de locais (mantido) */}
       <div className="card" style={{ marginBottom: 16 }}>
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
