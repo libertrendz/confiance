@@ -567,7 +567,7 @@ export default function PontoPage() {
               lineHeight: 1.1,
             }}
           >
-            Histórico de ponto
+            Marcar Ponto
           </div>
         </div>
 
