@@ -574,15 +574,15 @@ export default function PontoPage() {
         margin: '0 auto',
       }}
     >
-      {/* HEADER PADRÃO (logo + título + subtítulo + botão) */}
+      {/* HEADER PADRÃO (igual ao do Histórico): logo + título + botão / subtítulo */}
       <header style={{ marginBottom: 12 }}>
         <div
           style={{
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr auto',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            marginBottom: 10,
+            gap: 10,
+            marginBottom: 4,
           }}
         >
           <img
@@ -590,6 +590,17 @@ export default function PontoPage() {
             alt="CONFIANCE"
             style={{ height: 28, width: 'auto', display: 'block' }}
           />
+
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 20,
+              fontWeight: 800,
+              color: '#0e3258',
+            }}
+          >
+            Marcar ponto
+          </h1>
 
           <a
             href="/menu"
@@ -609,17 +620,6 @@ export default function PontoPage() {
           </a>
         </div>
 
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 20,
-            fontWeight: 800,
-            color: '#0e3258',
-          }}
-        >
-          Marcar Ponto
-        </h1>
-
         <p
           style={{
             margin: '4px 0 0 0',
@@ -637,7 +637,6 @@ export default function PontoPage() {
         </p>
       </header>
 
-      {/* Card informativo de locais (mantido) */}
       <div className="card" style={{ marginBottom: 16 }}>
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
