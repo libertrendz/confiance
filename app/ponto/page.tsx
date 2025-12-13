@@ -460,9 +460,7 @@ export default function PontoPage() {
       // *** Regra: na SAÍDA a tarefa vem do roteiro e é fixa ***
       if (tipo === 'saida') {
         if (!roteiroHoje?.tarefa_id) {
-          setErr(
-            'Não existe roteiro/tarefa atribuída para hoje. Contacte o administrador/gestor.'
-          );
+          setErr('Não existe roteiro/tarefa atribuída para hoje. Contacte o administrador/gestor.');
           return;
         }
 
@@ -569,54 +567,73 @@ export default function PontoPage() {
   const allowedTipos = nextAllowedTipos(ultimoTipo);
 
   return (
-    <main style={{ padding: 18 }}>
-      {/* LOGO CONFIANCE + VOLTAR */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
-        <img
-          src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
-          alt="CONFIANCE"
-          style={{ height: 28 }}
-        />
-        <span
+    <main
+      style={{
+        padding: 16,
+        fontFamily: 'system-ui',
+        maxWidth: 1100,
+        margin: '0 auto',
+      }}
+    >
+      {/* HEADER NO PADRÃO DO HISTÓRICO (logo + voltar + título + subtítulo) */}
+      <header style={{ marginBottom: 12 }}>
+        <div
           style={{
-            fontSize: 11,
-            textTransform: 'uppercase',
-            color: '#6b7280',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: 8,
           }}
         >
-          Ponto
-        </span>
+          <img
+            src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
+            alt="CONFIANCE"
+            style={{ height: 28, width: 'auto', display: 'block' }}
+          />
 
-        <a
-          href="/menu"
+          <a
+            href="/menu"
+            style={{
+              marginLeft: 'auto',
+              fontSize: 12,
+              textDecoration: 'none',
+              color: '#0e3258',
+              fontWeight: 700,
+            }}
+          >
+            ← Voltar
+          </a>
+        </div>
+
+        <h1
           style={{
-            marginLeft: 'auto',
-            fontSize: 12,
-            textDecoration: 'none',
+            margin: 0,
+            fontSize: 20,
+            fontWeight: 800,
             color: '#0e3258',
-            fontWeight: 600,
           }}
         >
-          ← Voltar
-        </a>
+          Marcar Ponto
+        </h1>
+
+        <p
+          style={{
+            margin: '4px 0 0 0',
+            fontSize: 13,
+            color: '#49546A',
+          }}
+        >
+          {nome ? (
+            <>
+              Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua jornada.
+            </>
+          ) : (
+            'Utilize esta página para registar a sua jornada.'
+          )}
+        </p>
       </header>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="h1" style={{ marginBottom: 4 }}>
-          Marcar Ponto
-        </div>
-        {nome && (
-          <p className="muted" style={{ marginBottom: 8 }}>
-            Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua jornada.
-          </p>
-        )}
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
         ) : locais.length ? (
