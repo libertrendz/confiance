@@ -207,7 +207,7 @@ export default function MenuPage() {
         <Card
           title="Marcar Ponto"
           desc="Registar ponto com foto e localização."
-          actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
+          actions={[{ href: '/ponto', label: 'Registar agora', kind: 'primary' }]}
         />
         <Card
           title="Histórico"
