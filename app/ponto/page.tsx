@@ -605,7 +605,7 @@ export default function PontoPage() {
               : 'Utilize esta página para registar a sua jornada.'}
           </p>
         </div>
-
+       </header>
       <div className="card" style={{ marginBottom: 16 }}>
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
