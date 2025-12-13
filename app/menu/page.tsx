@@ -212,7 +212,7 @@ export default function MenuPage() {
         <Card
           title="Histórico"
           desc="Consultar marcações e estado (validado/pendente/recusado)."
-          actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'ghost' }]}
+          actions={[{ href: '/ponto/historico', label: 'Ver histórico', kind: 'accent' }]}
         />
       </section>
     </main>
