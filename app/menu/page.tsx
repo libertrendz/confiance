@@ -91,23 +91,47 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* LOGO CONFIANCE */}
-      <div
+      {/* Header: Logo + CONFIANCE + Área do colaborador */}
+      <header
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          marginBottom: 8,
+          gap: 10,
+          marginBottom: 10,
         }}
       >
         <img
           src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
           alt="CONFIANCE"
-          style={{ height: 28 }}
+          style={{ height: 28, width: 'auto', display: 'block' }}
         />
-      </div>
 
-      {/* Cabeçalho: role + nome + sair */}
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              color: '#6b7280',
+              lineHeight: 1.1,
+            }}
+          >
+            CONFIANCE
+          </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
+              color: '#0e3258',
+              lineHeight: 1.1,
+            }}
+          >
+            Área do colaborador
+          </div>
+        </div>
+      </header>
+
+      {/* Cabeçalho: role + nome + sair (mantido exatamente como estava) */}
       <header
         className="topbar"
         style={{
