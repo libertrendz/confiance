@@ -28,13 +28,7 @@ type GeoState = {
   accuracy: number | null;
 };
 
-type TipoPonto =
-  | 'entrada'
-  | 'saida_almoco'
-  | 'retorno_almoco'
-  | 'saida'
-  | 'in'
-  | 'out';
+type TipoPonto = 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida' | 'in' | 'out';
 
 function labelTipo(t: string | null | undefined): string {
   switch (t) {
@@ -126,9 +120,7 @@ export default function PontoPage() {
 
         const { data: authData, error: authError } = await supa.auth.getUser();
         if (authError) throw authError;
-        if (!authData?.user) {
-          throw new Error('Sessão expirada. Faça login novamente.');
-        }
+        if (!authData?.user) throw new Error('Sessão expirada. Faça login novamente.');
 
         const user = authData.user;
         const uid = user.id;
@@ -143,9 +135,7 @@ export default function PontoPage() {
           .maybeSingle();
 
         if (profError) throw profError;
-        if (!profile) {
-          throw new Error('Perfil não encontrado. Contacte o administrador.');
-        }
+        if (!profile) throw new Error('Perfil não encontrado. Contacte o administrador.');
 
         setEmpresaId(profile.empresa_id);
         setNome(profile.nome_exibicao || profile.nome || null);
@@ -210,9 +200,7 @@ export default function PontoPage() {
 
       const last = rows[0]?.tipo ?? null;
       const allowed = nextAllowedTipos(last);
-      if (allowed.length) {
-        setTipo(allowed[0]);
-      }
+      if (allowed.length) setTipo(allowed[0]);
     } catch (e: any) {
       console.error('Erro ao carregar últimos pontos', e);
     } finally {
@@ -317,11 +305,7 @@ export default function PontoPage() {
           setGettingGeo(false);
           resolve(null);
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0,
-        }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     });
   }
@@ -347,10 +331,7 @@ export default function PontoPage() {
     if (!g.lat || !g.lon) return { ok: true, motivo: 'Sem geo' };
 
     if (!locais.length) {
-      return {
-        ok: true,
-        motivo: 'Sem locais configurados; ponto registado sem validação de raio.',
-      };
+      return { ok: true, motivo: 'Sem locais configurados; ponto registado sem validação de raio.' };
     }
 
     let melhor: { local: LocalPermitido | null; distancia: number } = {
@@ -361,33 +342,21 @@ export default function PontoPage() {
     locais.forEach((loc) => {
       if (loc.lat == null || loc.lon == null || loc.raio_m == null) return;
       const d = distanceMeters(g.lat!, g.lon!, Number(loc.lat), Number(loc.lon));
-      if (d < melhor.distancia) {
-        melhor = { local: loc, distancia: d };
-      }
+      if (d < melhor.distancia) melhor = { local: loc, distancia: d };
     });
 
     if (!melhor.local) {
-      return {
-        ok: true,
-        motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.',
-      };
+      return { ok: true, motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.' };
     }
 
     const raio = Number(melhor.local.raio_m || 0);
     if (raio > 0 && melhor.distancia > raio) {
-      return {
-        ok: false,
-        motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(
-          1
-        )}m (raio permitido ${raio}m).`,
-      };
+      return { ok: false, motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio permitido ${raio}m).` };
     }
 
     return {
       ok: true,
-      motivo: `Dentro da zona permitida. Distância ~${melhor.distancia.toFixed(
-        1
-      )}m (raio ${raio}m).`,
+      motivo: `Dentro da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio ${raio}m).`,
       localId: melhor.local.id,
       distancia: melhor.distancia,
     };
@@ -426,10 +395,7 @@ export default function PontoPage() {
 
       const raioCheck = validarRaio(g);
       if (!raioCheck.ok) {
-        setErr(
-          `Não foi possível registar ponto: ${raioCheck.motivo} ` +
-            'Fale com o responsável ou verifique se está no local correto.'
-        );
+        setErr(`Não foi possível registar ponto: ${raioCheck.motivo} Fale com o responsável ou verifique se está no local correto.`);
         return;
       }
 
@@ -508,11 +474,7 @@ export default function PontoPage() {
     setErr(null);
     setMsg(null);
 
-    const exigeFoto =
-      tipo === 'entrada' ||
-      tipo === 'saida' ||
-      tipo === 'saida_almoco' ||
-      tipo === 'retorno_almoco';
+    const exigeFoto = tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco';
 
     if (exigeFoto) {
       if (fileInputRef.current) fileInputRef.current.click();
@@ -541,8 +503,6 @@ export default function PontoPage() {
 
     await baterPonto();
   }
-
-  // UI
 
   if (loadingUser) {
     return (
@@ -573,20 +533,20 @@ export default function PontoPage() {
         margin: '0 auto',
       }}
     >
-      {/* HEADER — MESMO PADRÃO DO HISTÓRICO */}
+      {/* HEADER (padrão do histórico) + logo + botão */}
       <header
         style={{
           marginBottom: 12,
           display: 'grid',
           gridTemplateColumns: 'auto 1fr auto',
           alignItems: 'center',
-          gap: 10,
+          gap: 12,
         }}
       >
         <img
           src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
           alt="CONFIANCE"
-          style={{ height: 34, width: 'auto', display: 'block' }}
+          style={{ height: 28, width: 'auto', display: 'block' }}
         />
 
         <div style={{ minWidth: 0 }}>
@@ -605,11 +565,7 @@ export default function PontoPage() {
               margin: '4px 0 0 0',
               fontSize: 13,
               color: '#49546A',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
             }}
-            title={nome ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.` : undefined}
           >
             {nome
               ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.`
@@ -630,16 +586,12 @@ export default function PontoPage() {
             whiteSpace: 'nowrap',
             textDecoration: 'none',
             color: '#0e3258',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
           }}
         >
           ← Voltar
         </a>
       </header>
 
-      {/* INFO (mantida, sem repetir título) */}
       <div className="card" style={{ marginBottom: 16 }}>
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
