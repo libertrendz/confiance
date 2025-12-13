@@ -82,8 +82,6 @@ export default function MenuPage() {
     );
   }
 
-  const displayName = nome || email || '—';
-
   return (
     <main
       style={{
@@ -93,75 +91,83 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* HEADER — padrão do histórico: logo + label + título + subtítulo + botão */}
-      <header style={{ marginBottom: 12 }}>
-        <div
+      {/* LOGO CONFIANCE */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
+        <img
+          src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
+          alt="CONFIANCE"
+          style={{ height: 28 }}
+        />
+      </div>
+
+      {/* Cabeçalho: role + nome + sair */}
+      <header
+        className="topbar"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'auto 1fr auto',
+          alignItems: 'center',
+          gap: 10,
+          background: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <span
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
+            fontSize: 12,
+            fontWeight: 700,
+            background: '#EEF3FF',
+            color: '#0e3258',
+            padding: '6px 10px',
+            borderRadius: 999,
+            border: '1px solid #D7E3FF',
+            whiteSpace: 'nowrap',
           }}
         >
-          <img
-            src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
-            alt="CONFIANCE"
-            style={{ height: 28, width: 'auto', display: 'block' }}
-          />
+          {role.toUpperCase()}
+        </span>
 
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 11,
-                textTransform: 'uppercase',
-                letterSpacing: 0.8,
-                color: '#6b7280',
-                lineHeight: 1.1,
-              }}
-            >
-              Confiance
-            </div>
-            <div
-              style={{
-                margin: 0,
-                fontSize: 20,
-                fontWeight: 800,
-                color: '#0e3258',
-                lineHeight: 1.1,
-              }}
-            >
-              Menu
-            </div>
-          </div>
+        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              color: '#0e3258',
+              fontWeight: 800,
+              fontSize: 18,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '100%',
+            }}
+            title={(nome || email) ?? undefined}
+          >
+            {nome || email || '—'}
+          </span>
+        </div>
 
+        <div>
           <button
             onClick={sair}
             className="btn btn-ghost"
             style={{
-              marginLeft: 'auto',
               padding: '8px 12px',
               borderRadius: 10,
               border: '1px solid var(--border)',
               background: '#fff',
               cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: 13,
+              fontWeight: 600,
               whiteSpace: 'nowrap',
-              color: '#0e3258',
             }}
           >
             Sair
           </button>
         </div>
-
-        <p
-          style={{
-            margin: '4px 0 0 0',
-            fontSize: 13,
-            color: '#49546A',
-          }}
-        >
-          {role.toUpperCase()} • {displayName}
-        </p>
       </header>
 
       {/* Cards do colaborador/externo */}
@@ -228,7 +234,6 @@ function Card({
         </h3>
         <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>{desc}</p>
       </div>
-
       {!!actions.length && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           {actions.map((a) => (
@@ -244,7 +249,6 @@ function Card({
                 background:
                   a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff',
                 color: a.kind === 'primary' ? '#fff' : '#0e3258',
-                fontWeight: 700,
               }}
             >
               {a.label}
