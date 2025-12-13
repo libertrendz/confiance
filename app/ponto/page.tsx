@@ -566,78 +566,88 @@ export default function PontoPage() {
   const allowedTipos = nextAllowedTipos(ultimoTipo);
 
   return (
-    <main
-      style={{
-        padding: 16,
-        fontFamily: 'system-ui',
-        maxWidth: 1100,
-        margin: '0 auto',
-      }}
-    >
-      {/* HEADER PADRÃO (igual ao do Histórico): logo + título + botão / subtítulo */}
-      <header style={{ marginBottom: 12 }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'auto 1fr auto',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: 4,
-          }}
-        >
+    <main style={{ padding: 18 }}>
+      {/* HEADER PADRÃO (igual ao Histórico): logo + CONFIANCE + título + botão */}
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <img
             src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
             alt="CONFIANCE"
-            style={{ height: 28, width: 'auto', display: 'block' }}
+            style={{ height: 44, width: 44, objectFit: 'contain', display: 'block' }}
           />
 
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 20,
-              fontWeight: 800,
-              color: '#0e3258',
-            }}
-          >
-            Marcar ponto
-          </h1>
-
-          <a
-            href="/menu"
-            style={{
-              textDecoration: 'none',
-              fontSize: 13,
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid #D7E3FF',
-              background: '#EEF3FF',
-              color: '#0e3258',
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ← Voltar
-          </a>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                color: '#6b7280',
+                lineHeight: 1.1,
+                marginBottom: 2,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              CONFIANCE
+            </div>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 34,
+                fontWeight: 900,
+                color: '#0e3258',
+                lineHeight: 1.05,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              Marcar ponto
+            </h1>
+          </div>
         </div>
 
-        <p
+        <a
+          href="/menu"
           style={{
-            margin: '4px 0 0 0',
-            fontSize: 13,
-            color: '#49546A',
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 18px',
+            borderRadius: 18,
+            border: '1px solid #E5E7EB',
+            background: '#fff',
+            color: '#0e3258',
+            fontWeight: 800,
+            fontSize: 14,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
           }}
         >
-          {nome ? (
-            <>
-              Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua jornada.
-            </>
-          ) : (
-            'Utilize esta página para registar a sua jornada.'
-          )}
-        </p>
+          ← <span>Voltar</span>
+        </a>
       </header>
 
       <div className="card" style={{ marginBottom: 16 }}>
+        <div className="h1" style={{ marginBottom: 4 }}>
+          Marcar Ponto
+        </div>
+        {nome && (
+          <p className="muted" style={{ marginBottom: 8 }}>
+            Olá, <strong>{nome}</strong>. Utilize esta página para registar a sua jornada.
+          </p>
+        )}
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
         ) : locais.length ? (
