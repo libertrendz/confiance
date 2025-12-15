@@ -1,8 +1,14 @@
-// public/sw.js — SW minimalista com versão nova de cache
-const CACHE = 'confiance-static-v5'; // <— bump aqui sempre que layout/js mudar
+// public/sw.js — SW minimalista (corrigido)
+const CACHE = 'confiance-static-v6'; // bump sempre que mexer
 const CORE = [
-  '/', '/manifest.webmanifest',
-  '/icon-192.png','/icon-512.png','/apple-touch-icon.png','/favicon.ico'
+  '/',
+  '/manifest.webmanifest',
+  '/favicon.ico',
+  '/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/maskable-192.png',
+  '/icons/maskable-512.png',
 ];
 
 self.addEventListener('install', (e) => {
@@ -13,13 +19,13 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-// Network-first para HTML; cache-first pro resto
+// Network-first para HTML; cache-first pro resto (mas só cacheia se res.ok)
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
@@ -29,22 +35,30 @@ self.addEventListener('fetch', (e) => {
 
   if (isHTML) {
     e.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(()=>{});
-        return res;
-      }).catch(() => caches.match(req).then((r) => r || caches.match('/')))
+      fetch(req)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(req).then((r) => r || caches.match('/')))
     );
     return;
   }
 
   e.respondWith(
-    caches.match(req).then((r) =>
-      r || fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(()=>{});
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(req).then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
         return res;
-      })
-    )
+      });
+    })
   );
 });
