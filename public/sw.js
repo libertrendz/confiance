@@ -1,14 +1,17 @@
 // public/sw.js — SW minimalista (corrigido)
-const CACHE = 'confiance-static-v6'; // bump sempre que mexer
+const CACHE = 'confiance-static-v7'; // bump sempre que mexer
 const CORE = [
   '/',
   '/login',
   '/menu',
   '/manifest.webmanifest',
+  '/sw.js',
   '/favicon.ico',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/maskable-192.png',
+  '/icons/maskable-512.png',
 ];
 
 self.addEventListener('install', (e) => {
