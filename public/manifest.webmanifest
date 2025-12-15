@@ -1,7 +1,7 @@
 {
   "name": "CONFIANCE",
   "short_name": "CONFIANCE",
-  "start_url": "/menu",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
