@@ -2,6 +2,7 @@
 import './globals.css';
 import type { ReactNode } from 'react';
 import SwRegister from './_components/SwRegister';
+import IdleLogout from './_components/IdleLogout';
 
 export const metadata = {
   applicationName: 'CONFIANCE',
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="pt">
       <body>
         <SwRegister />
+        <IdleLogout minutes={10} />
         {children}
       </body>
     </html>
