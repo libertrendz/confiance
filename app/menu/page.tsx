@@ -67,10 +67,51 @@ export default function MenuPage() {
     };
   }, [supa]);
 
+  function clearSupabaseStorage() {
+    try {
+      const keys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) keys.push(k);
+      }
+      keys
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    try {
+      const keys: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k) keys.push(k);
+      }
+      keys
+        .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
+        .forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
+  }
+
   async function sair() {
     try {
       await supa.auth.signOut();
     } catch {}
+
+    // garante que não fica “grudado” no user anterior na mesma janela
+    clearSupabaseStorage();
+
+    // evita SW servir HTML/cache “antigo” após logout (sintoma do dashboard vazio)
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch {}
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {}
+
     window.location.replace('/login');
   }
 
@@ -91,47 +132,23 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* Header: Logo + CONFIANCE + Área do colaborador */}
-      <header
+      {/* LOGO CONFIANCE */}
+      <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          marginBottom: 10,
+          gap: 8,
+          marginBottom: 8,
         }}
       >
         <img
           src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
           alt="CONFIANCE"
-          style={{ height: 28, width: 'auto', display: 'block' }}
+          style={{ height: 28 }}
         />
+      </div>
 
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: 0.8,
-              color: '#6b7280',
-              lineHeight: 1.1,
-            }}
-          >
-            CONFIANCE
-          </div>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 900,
-              color: '#0e3258',
-              lineHeight: 1.1,
-            }}
-          >
-            Área do colaborador
-          </div>
-        </div>
-      </header>
-
-      {/* Cabeçalho: role + nome + sair (mantido exatamente como estava) */}
+      {/* Cabeçalho: role + nome + sair */}
       <header
         className="topbar"
         style={{
@@ -207,7 +224,7 @@ export default function MenuPage() {
         <Card
           title="Marcar Ponto"
           desc="Registar ponto com foto e localização."
-          actions={[{ href: '/ponto', label: 'Registar agora', kind: 'primary' }]}
+          actions={[{ href: '/ponto', label: 'Abrir', kind: 'primary' }]}
         />
         <Card
           title="Histórico"
