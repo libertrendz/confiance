@@ -42,6 +42,16 @@ function summarizeMeta(meta: any) {
   return { foto, geo, raio, origem };
 }
 
+function formatWhen(r: PontoRow) {
+  const d = r.batida_at || r.created_at || null;
+  if (!d) return '—';
+  try {
+    return new Date(d).toLocaleString();
+  } catch {
+    return '—';
+  }
+}
+
 export default function PontoHistoricoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [rows, setRows] = useState<PontoRow[] | null>(null);
@@ -69,7 +79,8 @@ export default function PontoHistoricoPage() {
           .from('ponto_registro')
           .select('*')
           .eq('usuario_id', uid)
-          .order('batida_at', { ascending: false })
+          // IMPORTANTÍSSIMO: created_at garante ordenação correta mesmo quando batida_at vem null
+          .order('created_at', { ascending: false })
           .limit(50);
 
         if (error) throw error;
@@ -232,9 +243,7 @@ export default function PontoHistoricoPage() {
                       >
                         {r.tipo || '—'}
                       </div>
-                      <div style={{ fontSize: 12, color: '#58627A' }}>
-                        {r.batida_at ? new Date(r.batida_at).toLocaleString() : '—'}
-                      </div>
+                      <div style={{ fontSize: 12, color: '#58627A' }}>{formatWhen(r)}</div>
                     </div>
 
                     <div
