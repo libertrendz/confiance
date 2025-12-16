@@ -5,15 +5,19 @@ import { useEffect, useMemo, useRef } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
 type Props = {
-  timeoutMs?: number; // default: 10 min
+  minutes?: number;     // compat: usado no layout atual
+  timeoutMs?: number;   // opcional: alternativa em ms
 };
 
-export default function IdleLogout({ timeoutMs = 10 * 60 * 1000 }: Props) {
+export default function IdleLogout({ minutes = 10, timeoutMs }: Props) {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const timerRef = useRef<number | null>(null);
 
+  const effectiveTimeoutMs =
+    typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : minutes * 60 * 1000;
+
   function clearTimer() {
-    if (timerRef.current) {
+    if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
@@ -29,16 +33,14 @@ export default function IdleLogout({ timeoutMs = 10 * 60 * 1000 }: Props) {
       } finally {
         window.location.replace('/login');
       }
-    }, timeoutMs);
+    }, effectiveTimeoutMs);
   }
 
   useEffect(() => {
-    // inicia quando o componente monta
     startTimer();
 
     const onActivity = () => startTimer();
 
-    // desktop + mobile
     const events: Array<keyof WindowEventMap> = [
       'mousemove',
       'mousedown',
@@ -55,7 +57,7 @@ export default function IdleLogout({ timeoutMs = 10 * 60 * 1000 }: Props) {
       clearTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [effectiveTimeoutMs]);
 
   return null;
 }
