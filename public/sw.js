@@ -1,9 +1,7 @@
-// public/sw.js — SW minimalista (corrigido)
-const CACHE = 'confiance-static-v7'; // bump sempre que mexer
+// public/sw.js — SW minimalista (auth-safe)
+const CACHE = 'confiance-static-v8';
+
 const CORE = [
-  '/',
-  '/login',
-  '/menu',
   '/manifest.webmanifest',
   '/sw.js',
   '/favicon.ico',
@@ -28,29 +26,45 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Network-first para HTML; cache-first pro resto (mas só cacheia se res.ok)
+function isSameOrigin(url) {
+  try {
+    return new URL(url).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function isAuthPath(pathname) {
+  return pathname === '/login' || pathname.startsWith('/auth/');
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
 
-  const accept = req.headers.get('accept') || '';
-  const isHTML = accept.includes('text/html');
+  const url = new URL(req.url);
 
-  if (isHTML) {
+  // só controla same-origin
+  if (!isSameOrigin(req.url)) return;
+
+  // Navegação (HTML/document)
+  if (req.mode === 'navigate') {
+    // Páginas de auth: SEM cache (evita sessão velha / redirects estranhos)
+    if (isAuthPath(url.pathname)) {
+      e.respondWith(fetch(req));
+      return;
+    }
+
+    // Outras páginas: network-first, fallback cache (opcional)
     e.respondWith(
       fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => caches.match(req).then((r) => r || caches.match('/')))
+        .then((res) => res)
+        .catch(() => caches.match(req).then((r) => r || caches.match('/menu') || fetch('/menu')))
     );
     return;
   }
 
+  // Assets: cache-first com preenchimento
   e.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
