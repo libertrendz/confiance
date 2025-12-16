@@ -346,12 +346,20 @@ export default function PontoPage() {
     });
 
     if (!melhor.local) {
-      return { ok: true, motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.' };
+      return {
+        ok: true,
+        motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.',
+      };
     }
 
     const raio = Number(melhor.local.raio_m || 0);
     if (raio > 0 && melhor.distancia > raio) {
-      return { ok: false, motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio permitido ${raio}m).` };
+      return {
+        ok: false,
+        motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(
+          1
+        )}m (raio permitido ${raio}m).`,
+      };
     }
 
     return {
@@ -395,7 +403,9 @@ export default function PontoPage() {
 
       const raioCheck = validarRaio(g);
       if (!raioCheck.ok) {
-        setErr(`Não foi possível registar ponto: ${raioCheck.motivo} Fale com o responsável ou verifique se está no local correto.`);
+        setErr(
+          `Não foi possível registar ponto: ${raioCheck.motivo} Fale com o responsável ou verifique se está no local correto.`
+        );
         return;
       }
 
@@ -421,28 +431,40 @@ export default function PontoPage() {
       const just = justificativa.trim();
       if (just) meta.justificativa = just;
 
-      // *** Regra: na SAÍDA a tarefa vem do roteiro e é fixa ***
+      // *** Regra: na SAÍDA a tarefa vem do roteiro e é fixa
+      //     Contingência: permitir checkout sem roteiro SOMENTE com justificativa, com rastreio no meta ***
       if (tipo === 'saida') {
-        if (!roteiroHoje?.tarefa_id) {
-          setErr('Não existe roteiro/tarefa atribuída para hoje. Contacte o administrador/gestor.');
-          return;
-        }
+        const temRoteiro = !!roteiroHoje?.tarefa_id;
 
-        if (!tarefaConcluida) {
+        if (!temRoteiro) {
           if (!just) {
-            setErr('Para finalizar sem concluir a tarefa, é obrigatória uma justificativa.');
+            setErr(
+              'Não existe roteiro/tarefa atribuída para hoje. Para finalizar em contingência, é obrigatória uma justificativa.'
+            );
             return;
           }
-          meta.tarefa_concluida = false;
+
+          meta.contingencia = true;
+          meta.motivo_contingencia = 'sem_roteiro';
+          meta.tarefa_concluida = null; // ou false; null deixa explícito que não havia tarefa atribuída
         } else {
-          meta.tarefa_concluida = true;
+          // fluxo normal (com roteiro)
+          if (!tarefaConcluida) {
+            if (!just) {
+              setErr('Para finalizar sem concluir a tarefa, é obrigatória uma justificativa.');
+              return;
+            }
+            meta.tarefa_concluida = false;
+          } else {
+            meta.tarefa_concluida = true;
+          }
+
+          meta.tarefa_id = roteiroHoje!.tarefa_id;
+          meta.tarefa_nome = roteiroHoje!.tarefa_nome;
+
+          if (roteiroHoje!.local_id) meta.roteiro_local_id = roteiroHoje!.local_id;
+          if (roteiroHoje!.local_nome) meta.roteiro_local_nome = roteiroHoje!.local_nome;
         }
-
-        meta.tarefa_id = roteiroHoje.tarefa_id;
-        meta.tarefa_nome = roteiroHoje.tarefa_nome;
-
-        if (roteiroHoje.local_id) meta.roteiro_local_id = roteiroHoje.local_id;
-        if (roteiroHoje.local_nome) meta.roteiro_local_nome = roteiroHoje.local_nome;
       }
 
       const { error } = await supa.rpc('rpc_ponto_bater', {
@@ -474,7 +496,11 @@ export default function PontoPage() {
     setErr(null);
     setMsg(null);
 
-    const exigeFoto = tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco';
+    const exigeFoto =
+      tipo === 'entrada' ||
+      tipo === 'saida' ||
+      tipo === 'saida_almoco' ||
+      tipo === 'retorno_almoco';
 
     if (exigeFoto) {
       if (fileInputRef.current) fileInputRef.current.click();
@@ -534,7 +560,7 @@ export default function PontoPage() {
       }}
     >
       {/* HEADER (padrão do histórico) + logo + botão */}
-    <header
+      <header
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -600,12 +626,12 @@ export default function PontoPage() {
             color: '#49546A',
           }}
         >
-         {nome
-              ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.`
-              : 'Utilize esta página para registar a sua jornada.'}
-          </p>
-        </header>
-       
+          {nome
+            ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.`
+            : 'Utilize esta página para registar a sua jornada.'}
+        </p>
+      </header>
+
       <div className="card" style={{ marginBottom: 16 }}>
         {loadingLocais ? (
           <p className="muted">A carregar locais permitidos…</p>
@@ -766,7 +792,7 @@ export default function PontoPage() {
             </>
           )}
 
-          {/* Justificativa – opcional (vira obrigatória no checkout quando não concluir) */}
+          {/* Justificativa – opcional (vira obrigatória no checkout quando não concluir / contingência) */}
           <div>
             <label className="muted">Justificativa (opcional)</label>
             <textarea
