@@ -1,4 +1,3 @@
-// app/ponto/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -21,7 +20,6 @@ type LocalPermitido = {
   lat?: number | null;
   lng?: number | null;
   radius_m?: number | null;
-  ativo?: boolean | null;
 };
 
 type GeoState = {
@@ -68,12 +66,6 @@ function nextAllowedTipos(last: string | null): TipoPonto[] {
     default:
       return ['entrada'];
   }
-}
-
-function fmtDist(m: number) {
-  if (!Number.isFinite(m)) return '—';
-  if (m < 1000) return `${m.toFixed(0)}m`;
-  return `${(m / 1000).toFixed(2)}km`;
 }
 
 export default function PontoPage() {
@@ -160,7 +152,7 @@ export default function PontoPage() {
     };
   }, [supa]);
 
-  // 2) locais permitidos (CORRIGIDO: lat/lng/radius_m)
+  // 2) locais permitidos (ATENÇÃO: colunas do DB são lat/lng/radius_m)
   useEffect(() => {
     if (!empresaId) return;
     let alive = true;
@@ -170,7 +162,7 @@ export default function PontoPage() {
         setLoadingLocais(true);
         const { data, error } = await supa
           .from('locais_permitidos')
-          .select('id, empresa_id, nome, lat, lng, radius_m, ativo')
+          .select('id, empresa_id, nome, lat, lng, radius_m')
           .eq('empresa_id', empresaId)
           .eq('ativo', true);
 
@@ -282,31 +274,6 @@ export default function PontoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioId, empresaId]);
 
-  // Atualiza quando volta pra aba/janela (resolve “roteiro foi criado e não atualizou”)
-  useEffect(() => {
-    if (!usuarioId || !empresaId) return;
-
-    const onFocus = () => {
-      carregarUltimos();
-      carregarRoteiroHoje();
-    };
-
-    const onVis = () => {
-      if (document.visibilityState === 'visible') {
-        carregarUltimos();
-        carregarRoteiroHoje();
-      }
-    };
-
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usuarioId, empresaId]);
-
   useEffect(() => {
     setTarefaConcluida(false);
   }, [tipo]);
@@ -353,15 +320,12 @@ export default function PontoPage() {
     const dLon = toRad(lon2 - lon1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
-  // 7) validação de raio
+  // 7) validação de raio (usa lat/lng/radius_m do DB)
   function validarRaio(g: GeoState) {
     if (g.lat == null || g.lon == null) return { ok: true, motivo: 'Sem geo' };
 
@@ -369,66 +333,33 @@ export default function PontoPage() {
       return { ok: true, motivo: 'Sem locais configurados; ponto registado sem validação de raio.' };
     }
 
-    // Se o roteiro tiver um local, valida contra ELE (mais correto)
-    if (roteiroHoje?.local_id) {
-      const alvo = locais.find((l) => l.id === roteiroHoje.local_id) || null;
-
-      if (!alvo || alvo.lat == null || alvo.lng == null || alvo.radius_m == null) {
-        return {
-          ok: true,
-          motivo:
-            'Roteiro tem local, mas o local não está completo (lat/lng/raio). Ponto registado sem validação de raio.',
-        };
-      }
-
-      const d = distanceMeters(g.lat, g.lon, Number(alvo.lat), Number(alvo.lng));
-      const raio = Number(alvo.radius_m || 0);
-
-      if (raio > 0 && d > raio) {
-        return {
-          ok: false,
-          motivo: `Fora do local do roteiro (${alvo.nome || '—'}). Distância ~${fmtDist(d)} (raio ${raio}m).`,
-        };
-      }
-
-      return {
-        ok: true,
-        motivo: `Dentro do local do roteiro (${alvo.nome || '—'}). Distância ~${fmtDist(d)} (raio ${raio}m).`,
-        localId: alvo.id,
-        distancia: d,
-      };
-    }
-
-    // Sem local no roteiro: valida contra o local mais próximo
     let melhor: { local: LocalPermitido | null; distancia: number } = {
       local: null,
       distancia: Infinity,
     };
 
     locais.forEach((loc) => {
-      if (loc.lat == null || loc.lng == null || loc.radius_m == null) return;
-      const d = distanceMeters(g.lat!, g.lon!, Number(loc.lat), Number(loc.lng));
+      if (loc.lat == null || loc.lng == null) return;
+      const d = distanceMeters(g.lat as number, g.lon as number, Number(loc.lat), Number(loc.lng));
       if (d < melhor.distancia) melhor = { local: loc, distancia: d };
     });
 
     if (!melhor.local) {
-      return {
-        ok: true,
-        motivo: 'Locais configurados sem lat/lng/raio; ponto registado sem validação de raio.',
-      };
+      return { ok: true, motivo: 'Locais configurados sem lat/lng; ponto registado sem validação de raio.' };
     }
 
-    const raio = Number(melhor.local.radius_m || 0);
+    const raio = Number(melhor.local.radius_m ?? 0);
+
     if (raio > 0 && melhor.distancia > raio) {
       return {
         ok: false,
-        motivo: `Fora da zona permitida. Distância ~${fmtDist(melhor.distancia)} (raio permitido ${raio}m).`,
+        motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio permitido ${raio}m).`,
       };
     }
 
     return {
       ok: true,
-      motivo: `Dentro da zona permitida. Distância ~${fmtDist(melhor.distancia)} (raio ${raio}m).`,
+      motivo: `Dentro da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio ${raio}m).`,
       localId: melhor.local.id,
       distancia: melhor.distancia,
     };
@@ -608,12 +539,6 @@ export default function PontoPage() {
   const ultimoTipo = ultimos[0]?.tipo ?? null;
   const allowedTipos = nextAllowedTipos(ultimoTipo);
 
-  const hasLocais = locais.length > 0;
-  const hasRoteiro = !!roteiroHoje?.tarefa_id;
-
-  const localAlvo =
-    roteiroHoje?.local_id && hasLocais ? locais.find((l) => l.id === roteiroHoje.local_id) || null : null;
-
   return (
     <main
       style={{
@@ -714,31 +639,19 @@ export default function PontoPage() {
 
         {loadingLocais ? (
           <p className="muted">A carregar configuração de locais…</p>
-        ) : hasLocais ? (
-          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
-            <p className="muted" style={{ margin: 0 }}>
-              Ativa. O ponto é validado por raio.
-            </p>
-
-            {hasRoteiro && roteiroHoje?.local_id ? (
-              <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                Local do roteiro: <strong>{roteiroHoje.local_nome || localAlvo?.nome || '—'}</strong>
-                {localAlvo?.radius_m ? ` (raio ${localAlvo.radius_m}m)` : ''}
-              </p>
-            ) : (
-              <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                Existem {locais.length} local(is) permitido(s) configurado(s).
-              </p>
-            )}
-          </div>
+        ) : locais.length ? (
+          <p className="muted">
+            Ativa. Existem {locais.length} local(is) configurado(s) e o ponto é validado por raio.
+          </p>
         ) : (
           <p className="muted">
-            Desativada. Ainda não existem locais configurados; o ponto será registado sem validação de raio.
+            Desativada. Ainda não existem locais configurados; o ponto será registado sem validação
+            de raio.
           </p>
         )}
       </section>
 
-      {/* Roteiro do dia (sem placeholder confuso) */}
+      {/* Roteiro do dia */}
       <section
         className="card"
         style={{
@@ -810,8 +723,8 @@ export default function PontoPage() {
 
             {ultimoTipo && (
               <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência: Entrada → Saída almoço → Retorno
-                almoço → Saída.
+                Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência: Entrada → Saída
+                almoço → Retorno almoço → Saída.
               </p>
             )}
             {!ultimoTipo && (
@@ -874,7 +787,8 @@ export default function PontoPage() {
 
                   {!tarefaConcluida && (
                     <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                      Se não concluiu, escreva uma justificativa abaixo (obrigatória quando não concluído).
+                      Se não concluiu, escreva uma justificativa abaixo (obrigatória quando não
+                      concluído).
                     </p>
                   )}
                 </>
@@ -902,8 +816,9 @@ export default function PontoPage() {
           {(tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco') && (
             <>
               <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                Ao clicar em <strong>Bater ponto agora</strong>, a câmara será aberta. Tire a foto no local (sem usar
-                galeria). Após confirmar a foto, o ponto será registado automaticamente.
+                Ao clicar em <strong>Bater ponto agora</strong>, a câmara será aberta. Tire a foto
+                no local (sem usar galeria). Após confirmar a foto, o ponto será registado
+                automaticamente.
               </p>
               {photoPreview && (
                 <div style={{ marginTop: 4 }}>
@@ -922,7 +837,7 @@ export default function PontoPage() {
             </>
           )}
 
-          {/* Justificativa – opcional (vira obrigatória no checkout quando não concluir / contingência) */}
+          {/* Justificativa */}
           <div>
             <label className="muted">Justificativa (quando necessário)</label>
             <textarea
@@ -945,12 +860,10 @@ export default function PontoPage() {
           {err && <p style={{ color: 'crimson' }}>{err}</p>}
           {msg && <p style={{ color: 'green' }}>{msg}</p>}
 
-          {/* BOTÃO ÚNICO, AZUL */}
           <button className="btn btn-primary" onClick={handleBaterClick} disabled={batendo || !usuarioId || !empresaId}>
             {batendo ? 'A registar…' : 'Bater ponto agora'}
           </button>
 
-          {/* Link claro para histórico */}
           <a
             href="/ponto/historico"
             className="btn btn-ghost"
