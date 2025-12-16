@@ -1,4 +1,3 @@
-// app/adm/roteiros/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -55,39 +54,33 @@ export default function RoteirosPage() {
     observacoes: '',
   });
 
-  async function loadEmpresa() {
+  async function carregarEmpresaDoAdmin() {
     setLoadingEmpresa(true);
     setErr(null);
 
     try {
-      const { data: ud, error: uerr } = await supa.auth.getUser();
-      if (uerr) throw uerr;
+      const { data: ud, error: userErr } = await supa.auth.getUser();
+      if (userErr) throw userErr;
 
       const uid = ud.user?.id ?? null;
-      if (!uid) {
-        setEmpresaId(null);
-        setErr('Sessão expirada. Faça login novamente.');
-        return;
-      }
+      if (!uid) throw new Error('Sessão expirada. Faça login novamente.');
 
-      const { data: prof, error: perr } = await supa
+      const { data: prof, error: profErr } = await supa
         .from('profiles')
         .select('empresa_id')
         .eq('user_id', uid)
         .maybeSingle();
 
-      if (perr) throw perr;
+      if (profErr) throw profErr;
+      const eid = prof?.empresa_id ?? null;
 
-      const eid = (prof as any)?.empresa_id ?? null;
       if (!eid) {
-        setEmpresaId(null);
-        setErr('Não foi possível identificar a empresa do utilizador (profiles.empresa_id).');
-        return;
+        throw new Error('Perfil sem empresa_id. Contacte o administrador do sistema.');
       }
 
       setEmpresaId(eid);
     } catch (e: any) {
-      console.error('Erro ao carregar empresa do utilizador', e);
+      console.error('Erro ao carregar empresa do admin', e);
       setEmpresaId(null);
       setErr(e?.message || 'Falha ao carregar empresa do utilizador.');
     } finally {
@@ -98,7 +91,7 @@ export default function RoteirosPage() {
   async function loadOptions(eid: string) {
     setErr(null);
     try {
-      // 1) Colaboradores (view DEFINITIVA)
+      // 1) Colaboradores (view definitiva)
       const { data: colabs, error: colabErr } = await supa
         .from('v_adm_colaboradores')
         .select('user_id, nome_exibicao, papel')
@@ -114,7 +107,7 @@ export default function RoteirosPage() {
         }))
       );
 
-      // 2) Tarefas padrão
+      // 2) Tarefas padrão (se forem por empresa, filtramos; se não, fica geral)
       const { data: tarefas, error: tarefaErr } = await supa
         .from('tarefas_padrao')
         .select('id, nome')
@@ -124,7 +117,7 @@ export default function RoteirosPage() {
       if (tarefaErr) throw tarefaErr;
       setTarefaOpts((tarefas || []) as Option[]);
 
-      // 3) Locais permitidos (FILTRADO POR EMPRESA)
+      // 3) Locais permitidos (por empresa + ativos)
       const { data: locais, error: localErr } = await supa
         .from('locais_permitidos')
         .select('id, nome')
@@ -156,7 +149,7 @@ export default function RoteirosPage() {
           local_label,
           observacoes,
           tarefa_id,
-          tarefas_padrao!inner ( nome ),
+          tarefas_padrao ( nome ),
           locais_permitidos ( nome )
         `
         )
@@ -193,13 +186,8 @@ export default function RoteirosPage() {
     e.preventDefault();
     setErr(null);
 
-    if (loadingEmpresa) {
-      setErr('A aguardar identificação da empresa…');
-      return;
-    }
-
     if (!empresaId) {
-      setErr('Empresa não identificada. Faça login novamente.');
+      setErr('Empresa não carregada. Recarregue a página e tente novamente.');
       return;
     }
 
@@ -211,7 +199,7 @@ export default function RoteirosPage() {
     setSalvando(true);
     try {
       const payload: any = {
-        empresa_id: empresaId, // ✅ CRÍTICO: sem isso o SELECT/VIEW do colaborador não encontra
+        empresa_id: empresaId, // ✅ ESSENCIAL para passar no RLS
         usuario_id: form.usuario_id,
         tarefa_id: form.tarefa_id,
         local_id: form.local_id,
@@ -220,9 +208,7 @@ export default function RoteirosPage() {
         observacoes: form.observacoes || null,
       };
 
-      if (form.data_fim) {
-        payload.data_fim = form.data_fim;
-      }
+      if (form.data_fim) payload.data_fim = form.data_fim;
 
       const { error } = await supa.from('ponto_roteiros').insert(payload);
       if (error) throw error;
@@ -246,8 +232,18 @@ export default function RoteirosPage() {
     }
   }
 
+  async function recarregarTudo() {
+    if (!empresaId) {
+      await carregarEmpresaDoAdmin();
+      return;
+    }
+    await Promise.all([loadOptions(empresaId), loadLista(empresaId)]);
+  }
+
   useEffect(() => {
-    loadEmpresa();
+    (async () => {
+      await carregarEmpresaDoAdmin();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -268,28 +264,23 @@ export default function RoteirosPage() {
           marginBottom: 16,
         }}
       >
-        <h1 className="h1">Roteiros de trabalho</h1>
-        <button
-          className="btn btn-ghost"
-          onClick={() => {
-            if (empresaId) {
-              loadOptions(empresaId);
-              loadLista(empresaId);
-            } else {
-              loadEmpresa();
-            }
-          }}
-          disabled={loading || loadingEmpresa}
-        >
+        <div>
+          <h1 className="h1" style={{ marginBottom: 4 }}>
+            Roteiros de trabalho
+          </h1>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {loadingEmpresa
+              ? 'A carregar empresa…'
+              : empresaId
+              ? `Empresa: ${empresaId.slice(0, 8)}…`
+              : 'Empresa não carregada'}
+          </div>
+        </div>
+
+        <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
           {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
         </button>
       </header>
-
-      {err && (
-        <section className="card" style={{ marginBottom: 16 }}>
-          <p style={{ color: 'crimson', margin: 0 }}>{err}</p>
-        </section>
-      )}
 
       {/* FORM NOVO ROTEIRO */}
       <section className="card" style={{ marginBottom: 16 }}>
@@ -371,7 +362,6 @@ export default function RoteirosPage() {
               value={form.data_dia}
               onChange={(e) => setForm((f) => ({ ...f, data_dia: e.target.value }))}
               style={inputStyle}
-              placeholder="dd/mm/aaaa"
               disabled={!empresaId || loadingEmpresa}
             />
           </div>
@@ -384,7 +374,6 @@ export default function RoteirosPage() {
               value={form.data_fim}
               onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
               style={inputStyle}
-              placeholder="dd/mm/aaaa"
               disabled={!empresaId || loadingEmpresa}
             />
           </div>
@@ -400,12 +389,14 @@ export default function RoteirosPage() {
             />
           </div>
 
+          {err && (
+            <p style={{ color: 'crimson', gridColumn: '1 / -1', margin: 0 }}>
+              {err}
+            </p>
+          )}
+
           <div style={{ gridColumn: '1 / -1', textAlign: 'right', marginTop: 4 }}>
-            <button
-              className="btn btn-primary"
-              type="submit"
-              disabled={salvando || !empresaId || loadingEmpresa}
-            >
+            <button className="btn btn-primary" type="submit" disabled={salvando || !empresaId || loadingEmpresa}>
               {salvando ? 'A criar…' : 'Criar roteiro'}
             </button>
           </div>
@@ -427,7 +418,7 @@ export default function RoteirosPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: 8 }}>Colaborador (user_id)</th>
+                  <th style={{ padding: 8 }}>Colaborador</th>
                   <th style={{ padding: 8 }}>Tarefa</th>
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Data início</th>
@@ -439,21 +430,13 @@ export default function RoteirosPage() {
               <tbody>
                 {lista.map((r) => (
                   <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>
-                      {colabNomePorId[r.usuario_id] ?? r.usuario_id}
-                    </td>
+                    <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
                     <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
                     <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
-                    <td style={{ padding: 8 }}>
-                      {r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}
-                    </td>
-                    <td style={{ padding: 8 }}>
-                      {r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}
-                    </td>
+                    <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
+                    <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
                     <td style={{ padding: 8 }}>{r.status || '—'}</td>
-                    <td style={{ padding: 8, maxWidth: 260 }}>
-                      {r.observacoes || '—'}
-                    </td>
+                    <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
                   </tr>
                 ))}
               </tbody>
