@@ -10,11 +10,11 @@ export default function SignOutPage() {
   useEffect(() => {
     (async () => {
       try {
-        await supa.auth.signOut();      // limpa sessão (localStorage + listeners)
+        await supa.auth.signOut(); // limpa sessão (localStorage + listeners)
       } catch {
         // ignoramos erros
       } finally {
-        window.location.replace('/login');  // redireciona sempre
+        window.location.replace('/login'); // redireciona sempre
       }
     })();
   }, [supa]);
