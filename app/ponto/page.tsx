@@ -1,3 +1,4 @@
+// app/ponto/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,7 +10,7 @@ type PontoRow = {
   usuario_id: string;
   tipo: string;
   meta: any;
-  batida_at: string;
+  batida_at: string | null;
   created_at: string;
 };
 
@@ -191,7 +192,8 @@ export default function PontoPage() {
         .select('*')
         .eq('usuario_id', usuarioId)
         .eq('empresa_id', empresaId)
-        .order('batida_at', { ascending: false })
+        // IMPORTANTE: ordena por created_at para não “sumir” registo quando batida_at vem null
+        .order('created_at', { ascending: false })
         .limit(10);
 
       if (error) throw error;
@@ -346,19 +348,14 @@ export default function PontoPage() {
     });
 
     if (!melhor.local) {
-      return {
-        ok: true,
-        motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.',
-      };
+      return { ok: true, motivo: 'Locais configurados sem lat/lon; ponto registado sem validação de raio.' };
     }
 
     const raio = Number(melhor.local.raio_m || 0);
     if (raio > 0 && melhor.distancia > raio) {
       return {
         ok: false,
-        motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(
-          1
-        )}m (raio permitido ${raio}m).`,
+        motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio permitido ${raio}m).`,
       };
     }
 
@@ -404,7 +401,8 @@ export default function PontoPage() {
       const raioCheck = validarRaio(g);
       if (!raioCheck.ok) {
         setErr(
-          `Não foi possível registar ponto: ${raioCheck.motivo} Fale com o responsável ou verifique se está no local correto.`
+          `Não foi possível registar ponto: ${raioCheck.motivo} ` +
+            'Fale com o responsável ou verifique se está no local correto.'
         );
         return;
       }
@@ -431,24 +429,20 @@ export default function PontoPage() {
       const just = justificativa.trim();
       if (just) meta.justificativa = just;
 
-      // *** Regra: na SAÍDA a tarefa vem do roteiro e é fixa
-      //     Contingência: permitir checkout sem roteiro SOMENTE com justificativa, com rastreio no meta ***
+      // *** Regra: na SAÍDA a tarefa vem do roteiro (ou contingência) ***
       if (tipo === 'saida') {
-        const temRoteiro = !!roteiroHoje?.tarefa_id;
-
-        if (!temRoteiro) {
+        // Contingência: permite saída sem roteiro, mas exige justificativa
+        if (!roteiroHoje?.tarefa_id) {
           if (!just) {
-            setErr(
-              'Não existe roteiro/tarefa atribuída para hoje. Para finalizar em contingência, é obrigatória uma justificativa.'
-            );
+            setErr('Sem roteiro atribuído para hoje. Para finalizar, informe uma justificativa.');
             return;
           }
 
           meta.contingencia = true;
           meta.motivo_contingencia = 'sem_roteiro';
-          meta.tarefa_concluida = null; // ou false; null deixa explícito que não havia tarefa atribuída
+          meta.tarefa_concluida = null;
         } else {
-          // fluxo normal (com roteiro)
+          // Fluxo normal com roteiro fixo + confirmação
           if (!tarefaConcluida) {
             if (!just) {
               setErr('Para finalizar sem concluir a tarefa, é obrigatória uma justificativa.');
@@ -459,11 +453,11 @@ export default function PontoPage() {
             meta.tarefa_concluida = true;
           }
 
-          meta.tarefa_id = roteiroHoje!.tarefa_id;
-          meta.tarefa_nome = roteiroHoje!.tarefa_nome;
+          meta.tarefa_id = roteiroHoje.tarefa_id;
+          meta.tarefa_nome = roteiroHoje.tarefa_nome;
 
-          if (roteiroHoje!.local_id) meta.roteiro_local_id = roteiroHoje!.local_id;
-          if (roteiroHoje!.local_nome) meta.roteiro_local_nome = roteiroHoje!.local_nome;
+          if (roteiroHoje.local_id) meta.roteiro_local_id = roteiroHoje.local_id;
+          if (roteiroHoje.local_nome) meta.roteiro_local_nome = roteiroHoje.local_nome;
         }
       }
 
@@ -593,7 +587,7 @@ export default function PontoPage() {
               lineHeight: 1.1,
             }}
           >
-            Marcar Ponto
+            Marcar ponto
           </div>
         </div>
 
@@ -617,7 +611,7 @@ export default function PontoPage() {
         </a>
       </header>
 
-      {/* Subheader original (mantido) */}
+      {/* Subheader (mensagem clara) */}
       <header style={{ marginBottom: 12 }}>
         <p
           style={{
@@ -627,26 +621,83 @@ export default function PontoPage() {
           }}
         >
           {nome
-            ? `Olá, ${nome}. Utilize esta página para registar a sua jornada.`
-            : 'Utilize esta página para registar a sua jornada.'}
+            ? `Olá, ${nome}. Registe aqui a sua entrada/saídas com foto e localização.`
+            : 'Registe aqui a sua entrada/saídas com foto e localização.'}
         </p>
       </header>
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      {/* Status: validação de local */}
+      <section
+        className="card"
+        style={{
+          border: '1px solid #E9EEF7',
+          borderRadius: 16,
+          padding: 16,
+          background: '#fff',
+          boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#0e3258', marginBottom: 6 }}>
+          Validação de local
+        </div>
+
         {loadingLocais ? (
-          <p className="muted">A carregar locais permitidos…</p>
+          <p className="muted">A carregar configuração de locais…</p>
         ) : locais.length ? (
           <p className="muted">
-            Locais configurados para esta empresa: {locais.length}. A localização será validada num
-            raio definido pelo administrador.
+            Ativa. Existem {locais.length} local(is) configurado(s) e o ponto é validado por raio.
           </p>
         ) : (
           <p className="muted">
-            Ainda não existem locais de trabalho configurados. O ponto será registado sem validação
-            de raio até configuração pelo administrador.
+            Desativada. Ainda não existem locais configurados; o ponto será registado sem validação
+            de raio.
           </p>
         )}
-      </div>
+      </section>
+
+      {/* Roteiro do dia (sem placeholder) */}
+      <section
+        className="card"
+        style={{
+          border: '1px solid #E9EEF7',
+          borderRadius: 16,
+          padding: 16,
+          background: '#fff',
+          boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#0e3258', marginBottom: 6 }}>
+          Roteiro de hoje
+        </div>
+
+        {loadingRoteiro ? (
+          <p className="muted">A carregar roteiro do dia…</p>
+        ) : roteiroHoje ? (
+          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
+            <div>
+              <strong>Tarefa:</strong> {roteiroHoje.tarefa_nome}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <strong>Local:</strong> {roteiroHoje.local_nome || '—'}
+            </div>
+            <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+              Na <strong>Saída</strong>, esta tarefa fica fixa e você confirma a conclusão.
+            </p>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
+            <p className="muted" style={{ margin: 0 }}>
+              Ainda não existe roteiro atribuído para hoje.
+            </p>
+            <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+              Se precisar finalizar o dia mesmo assim, a <strong>Saída</strong> funcionará em modo{' '}
+              <strong>contingência</strong> com justificativa obrigatória.
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* FORM PRINCIPAL */}
       <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
@@ -677,8 +728,8 @@ export default function PontoPage() {
 
             {ultimoTipo && (
               <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência é sempre:{' '}
-                Entrada → Saída almoço → Retorno almoço → Saída.
+                Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência: Entrada → Saída
+                almoço → Retorno almoço → Saída.
               </p>
             )}
             {!ultimoTipo && (
@@ -688,21 +739,14 @@ export default function PontoPage() {
             )}
           </div>
 
-          {/* Tarefa FIXA (obrigatória na SAÍDA) */}
+          {/* Tarefa FIXA (obrigatória na SAÍDA quando existe roteiro) */}
           {tipo === 'saida' && (
             <div>
-              <label className="muted">Tarefa atribuída (obrigatória na saída)</label>
+              <label className="muted">Encerramento do dia</label>
 
               {loadingRoteiro && (
                 <p className="muted" style={{ fontSize: 12 }}>
                   A carregar roteiro do dia…
-                </p>
-              )}
-
-              {!loadingRoteiro && !roteiroHoje && (
-                <p style={{ color: 'crimson', fontSize: 12, marginTop: 6 }}>
-                  Não existe tarefa atribuída para hoje. Contacte o administrador/gestor para criar
-                  um roteiro.
                 </p>
               )}
 
@@ -718,6 +762,9 @@ export default function PontoPage() {
                       fontSize: 13,
                     }}
                   >
+                    <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+                      Tarefa atribuída (fixa)
+                    </div>
                     <strong>{roteiroHoje.tarefa_nome}</strong>
                     {roteiroHoje.local_nome ? (
                       <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
@@ -750,6 +797,12 @@ export default function PontoPage() {
                     </p>
                   )}
                 </>
+              )}
+
+              {!loadingRoteiro && !roteiroHoje && (
+                <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Sem roteiro para hoje. Para finalizar, será exigida justificativa (contingência).
+                </p>
               )}
             </div>
           )}
@@ -794,12 +847,12 @@ export default function PontoPage() {
 
           {/* Justificativa – opcional (vira obrigatória no checkout quando não concluir / contingência) */}
           <div>
-            <label className="muted">Justificativa (opcional)</label>
+            <label className="muted">Justificativa (quando necessário)</label>
             <textarea
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
               rows={3}
-              placeholder="Descreva o motivo caso esteja fora do horário normal, fora do local ou não consiga concluir a tarefa."
+              placeholder="Use quando não concluir a tarefa, estiver fora do local, ou precisar finalizar sem roteiro."
               style={{
                 width: '100%',
                 padding: 10,
@@ -823,26 +876,28 @@ export default function PontoPage() {
           >
             {batendo ? 'A registar…' : 'Bater ponto agora'}
           </button>
+
+          {/* Link claro para histórico */}
+          <a
+            href="/ponto/historico"
+            className="btn btn-ghost"
+            style={{
+              textDecoration: 'none',
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: '#fff',
+              color: '#0e3258',
+              fontWeight: 700,
+              fontSize: 13,
+              textAlign: 'center',
+            }}
+          >
+            Ver histórico
+          </a>
+
+          {loadingLista && <p className="muted">A atualizar estado do dia…</p>}
         </div>
-      </section>
-
-      {/* TAREFAS DO DIA – placeholder */}
-      <section className="card" style={{ marginBottom: 16 }}>
-        <h2 className="h2">Tarefas do dia</h2>
-        <p className="muted" style={{ marginTop: 4 }}>
-          Em versões futuras, esta secção irá listar o roteiro definido pelo administrador (projeto,
-          fase/tarefa, local). O ponto de entrada/saída será ligado às tarefas executadas neste
-          período.
-        </p>
-      </section>
-
-      {/* Histórico direcionado para /ponto/historico */}
-      <section className="card">
-        <h2 className="h2">Histórico completo</h2>
-        <p className="muted" style={{ marginTop: 4 }}>
-          Para consultar todos os registos de ponto, utilize a opção <strong>Histórico</strong> no
-          menu principal.
-        </p>
       </section>
     </main>
   );
