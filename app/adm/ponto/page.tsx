@@ -12,6 +12,10 @@ type PontoRow = {
   meta: any;
   batida_at: string;
   created_at: string;
+
+  // vindo da VIEW
+  usuario_nome: string | null;
+  empresa_nome: string | null;
 };
 
 function summarizeMeta(meta: any) {
@@ -53,7 +57,7 @@ export default function PontoAdmPage() {
     setErr(null);
     try {
       const { data, error } = await supa
-        .from('ponto_registro')
+        .from('v_adm_ponto_registros')
         .select('*')
         .order('batida_at', { ascending: false })
         .limit(200);
@@ -61,7 +65,7 @@ export default function PontoAdmPage() {
       if (error) throw error;
       setRows((data as PontoRow[]) || []);
     } catch (e: any) {
-      console.error('Erro ao carregar ponto_registro', e);
+      console.error('Erro ao carregar v_adm_ponto_registros', e);
       setErr(e?.message || 'Falha ao carregar registos de ponto.');
       setRows([]);
     } finally {
@@ -71,6 +75,7 @@ export default function PontoAdmPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -90,15 +95,9 @@ export default function PontoAdmPage() {
       </header>
 
       <section className="card">
-        {err && (
-          <p style={{ color: 'crimson', marginBottom: 8 }}>
-            {err}
-          </p>
-        )}
+        {err && <p style={{ color: 'crimson', marginBottom: 8 }}>{err}</p>}
 
-        {!rows?.length && !loading && !err && (
-          <p className="muted">Sem registos de ponto.</p>
-        )}
+        {!rows?.length && !loading && !err && <p className="muted">Sem registos de ponto.</p>}
 
         {!!rows?.length && (
           <div style={{ overflowX: 'auto' }}>
@@ -107,8 +106,8 @@ export default function PontoAdmPage() {
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                   <th style={{ padding: 8 }}>Data / Hora</th>
                   <th style={{ padding: 8 }}>Tipo</th>
-                  <th style={{ padding: 8 }}>Utilizador (ID)</th>
-                  <th style={{ padding: 8 }}>Empresa (ID)</th>
+                  <th style={{ padding: 8 }}>Colaborador</th>
+                  <th style={{ padding: 8 }}>Empresa</th>
                   <th style={{ padding: 8 }}>Resumo (meta)</th>
                 </tr>
               </thead>
@@ -118,26 +117,36 @@ export default function PontoAdmPage() {
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
                       <td style={{ padding: 8 }}>
-                        {r.batida_at
-                          ? new Date(r.batida_at).toLocaleString()
-                          : '—'}
+                        {r.batida_at ? new Date(r.batida_at).toLocaleString() : '—'}
                       </td>
+
                       <td style={{ padding: 8 }}>{r.tipo || '—'}</td>
-                      <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>
-                        {r.usuario_id}
+
+                      <td style={{ padding: 8 }}>
+                        <div style={{ fontWeight: 700, color: '#0e3258' }}>
+                          {r.usuario_nome || '—'}
+                        </div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#667085' }}>
+                          {r.usuario_id}
+                        </div>
                       </td>
-                      <td style={{ padding: 8, fontFamily: 'monospace', fontSize: 12 }}>
-                        {r.empresa_id}
+
+                      <td style={{ padding: 8 }}>
+                        <div style={{ fontWeight: 700, color: '#0e3258' }}>
+                          {r.empresa_nome || '—'}
+                        </div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#667085' }}>
+                          {r.empresa_id}
+                        </div>
                       </td>
+
                       <td style={{ padding: 8, fontSize: 12 }}>
                         <div style={{ lineHeight: 1.4 }}>
                           <div>
-                            Foto no local:{' '}
-                            {s.foto === null ? '—' : s.foto ? 'Sim' : 'Não'}
+                            Foto no local: {s.foto === null ? '—' : s.foto ? 'Sim' : 'Não'}
                           </div>
                           <div>
-                            Geo registado:{' '}
-                            {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
+                            Geo registado: {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
                           </div>
                           <div>
                             Validação de raio:{' '}
@@ -149,19 +158,11 @@ export default function PontoAdmPage() {
                               ? 'Não validado'
                               : '—'}
                           </div>
-                          {s.origem && (
-                            <div>Origem: {s.origem}</div>
-                          )}
+                          {s.origem && <div>Origem: {s.origem}</div>}
                         </div>
 
                         <details style={{ marginTop: 4 }}>
-                          <summary
-                            style={{
-                              cursor: 'pointer',
-                              fontSize: 11,
-                              color: '#445',
-                            }}
-                          >
+                          <summary style={{ cursor: 'pointer', fontSize: 11, color: '#445' }}>
                             Ver JSON completo
                           </summary>
                           <pre
