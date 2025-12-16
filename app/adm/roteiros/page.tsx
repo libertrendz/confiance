@@ -22,17 +22,22 @@ type RoteiroRow = {
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [loadingEmpresa, setLoadingEmpresa] = useState(true);
+
   const [colabOpts, setColabOpts] = useState<Option[]>([]);
   const [tarefaOpts, setTarefaOpts] = useState<Option[]>([]);
   const [localOpts, setLocalOpts] = useState<Option[]>([]);
   const [lista, setLista] = useState<RoteiroRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
   const colabNomePorId = useMemo(() => {
     const map: Record<string, string> = {};
     for (const c of colabOpts) map[c.id] = c.nome;
     return map;
   }, [colabOpts]);
+
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState<{
     usuario_id: string;
@@ -50,24 +55,64 @@ export default function RoteirosPage() {
     observacoes: '',
   });
 
-  async function loadOptions() {
+  async function loadEmpresa() {
+    setLoadingEmpresa(true);
+    setErr(null);
+
+    try {
+      const { data: ud, error: uerr } = await supa.auth.getUser();
+      if (uerr) throw uerr;
+
+      const uid = ud.user?.id ?? null;
+      if (!uid) {
+        setEmpresaId(null);
+        setErr('Sessão expirada. Faça login novamente.');
+        return;
+      }
+
+      const { data: prof, error: perr } = await supa
+        .from('profiles')
+        .select('empresa_id')
+        .eq('user_id', uid)
+        .maybeSingle();
+
+      if (perr) throw perr;
+
+      const eid = (prof as any)?.empresa_id ?? null;
+      if (!eid) {
+        setEmpresaId(null);
+        setErr('Não foi possível identificar a empresa do utilizador (profiles.empresa_id).');
+        return;
+      }
+
+      setEmpresaId(eid);
+    } catch (e: any) {
+      console.error('Erro ao carregar empresa do utilizador', e);
+      setEmpresaId(null);
+      setErr(e?.message || 'Falha ao carregar empresa do utilizador.');
+    } finally {
+      setLoadingEmpresa(false);
+    }
+  }
+
+  async function loadOptions(eid: string) {
     setErr(null);
     try {
       // 1) Colaboradores (view DEFINITIVA)
       const { data: colabs, error: colabErr } = await supa
-  .from('v_adm_colaboradores')
-  .select('user_id, nome_exibicao, papel')
-  .eq('papel', 'externo')
-  .order('nome_exibicao', { ascending: true });
+        .from('v_adm_colaboradores')
+        .select('user_id, nome_exibicao, papel')
+        .eq('papel', 'externo')
+        .order('nome_exibicao', { ascending: true });
 
-if (colabErr) throw colabErr;
+      if (colabErr) throw colabErr;
 
-setColabOpts(
-  (colabs || []).map((c: any) => ({
-    id: c.user_id,
-    nome: c.nome_exibicao,
-  }))
-);
+      setColabOpts(
+        (colabs || []).map((c: any) => ({
+          id: c.user_id,
+          nome: c.nome_exibicao,
+        }))
+      );
 
       // 2) Tarefas padrão
       const { data: tarefas, error: tarefaErr } = await supa
@@ -79,10 +124,11 @@ setColabOpts(
       if (tarefaErr) throw tarefaErr;
       setTarefaOpts((tarefas || []) as Option[]);
 
-      // 3) Locais permitidos
+      // 3) Locais permitidos (FILTRADO POR EMPRESA)
       const { data: locais, error: localErr } = await supa
         .from('locais_permitidos')
         .select('id, nome')
+        .eq('empresa_id', eid)
         .eq('ativo', true)
         .order('nome', { ascending: true });
 
@@ -94,7 +140,7 @@ setColabOpts(
     }
   }
 
-  async function loadLista() {
+  async function loadLista(eid: string) {
     setLoading(true);
     setErr(null);
     try {
@@ -114,6 +160,7 @@ setColabOpts(
           locais_permitidos ( nome )
         `
         )
+        .eq('empresa_id', eid)
         .order('data_dia', { ascending: false })
         .limit(200);
 
@@ -146,6 +193,16 @@ setColabOpts(
     e.preventDefault();
     setErr(null);
 
+    if (loadingEmpresa) {
+      setErr('A aguardar identificação da empresa…');
+      return;
+    }
+
+    if (!empresaId) {
+      setErr('Empresa não identificada. Faça login novamente.');
+      return;
+    }
+
     if (!form.usuario_id || !form.tarefa_id || !form.local_id || !form.data_dia) {
       setErr('Preencha colaborador, tarefa, local e data início.');
       return;
@@ -154,6 +211,7 @@ setColabOpts(
     setSalvando(true);
     try {
       const payload: any = {
+        empresa_id: empresaId, // ✅ CRÍTICO: sem isso o SELECT/VIEW do colaborador não encontra
         usuario_id: form.usuario_id,
         tarefa_id: form.tarefa_id,
         local_id: form.local_id,
@@ -178,7 +236,7 @@ setColabOpts(
         observacoes: '',
       });
 
-      await loadLista();
+      await loadLista(empresaId);
       alert('Roteiro criado com sucesso.');
     } catch (e: any) {
       console.error('Erro ao criar roteiro', e);
@@ -189,9 +247,16 @@ setColabOpts(
   }
 
   useEffect(() => {
-    loadOptions();
-    loadLista();
+    loadEmpresa();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!empresaId) return;
+    loadOptions(empresaId);
+    loadLista(empresaId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId]);
 
   return (
     <main style={{ padding: 18 }}>
@@ -204,16 +269,36 @@ setColabOpts(
         }}
       >
         <h1 className="h1">Roteiros de trabalho</h1>
-        <button className="btn btn-ghost" onClick={() => { loadOptions(); loadLista(); }} disabled={loading}>
-          {loading ? 'A carregar…' : 'Recarregar'}
+        <button
+          className="btn btn-ghost"
+          onClick={() => {
+            if (empresaId) {
+              loadOptions(empresaId);
+              loadLista(empresaId);
+            } else {
+              loadEmpresa();
+            }
+          }}
+          disabled={loading || loadingEmpresa}
+        >
+          {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
         </button>
       </header>
 
+      {err && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <p style={{ color: 'crimson', margin: 0 }}>{err}</p>
+        </section>
+      )}
+
       {/* FORM NOVO ROTEIRO */}
       <section className="card" style={{ marginBottom: 16 }}>
-        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>Novo roteiro</h2>
+        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
+          Novo roteiro
+        </h2>
         <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de presença (geo/raio) e para associações de tarefas do dia.
+          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de presença
+          (geo/raio) e para associações de tarefas do dia.
         </p>
 
         <form
@@ -229,11 +314,12 @@ setColabOpts(
             <label className="muted">Colaborador</label>
             <select
               value={form.usuario_id}
-              onChange={e => setForm(f => ({ ...f, usuario_id: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, usuario_id: e.target.value }))}
               style={selectStyle}
+              disabled={!empresaId || loadingEmpresa}
             >
               <option value="">Selecione…</option>
-              {colabOpts.map(c => (
+              {colabOpts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nome}
                 </option>
@@ -246,11 +332,12 @@ setColabOpts(
             <label className="muted">Tarefa</label>
             <select
               value={form.tarefa_id}
-              onChange={e => setForm(f => ({ ...f, tarefa_id: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, tarefa_id: e.target.value }))}
               style={selectStyle}
+              disabled={!empresaId || loadingEmpresa}
             >
               <option value="">Selecione…</option>
-              {tarefaOpts.map(t => (
+              {tarefaOpts.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nome}
                 </option>
@@ -263,11 +350,12 @@ setColabOpts(
             <label className="muted">Local de trabalho</label>
             <select
               value={form.local_id}
-              onChange={e => setForm(f => ({ ...f, local_id: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, local_id: e.target.value }))}
               style={selectStyle}
+              disabled={!empresaId || loadingEmpresa}
             >
               <option value="">Selecione…</option>
-              {localOpts.map(l => (
+              {localOpts.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.nome}
                 </option>
@@ -281,9 +369,10 @@ setColabOpts(
             <input
               type="date"
               value={form.data_dia}
-              onChange={e => setForm(f => ({ ...f, data_dia: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, data_dia: e.target.value }))}
               style={inputStyle}
               placeholder="dd/mm/aaaa"
+              disabled={!empresaId || loadingEmpresa}
             />
           </div>
 
@@ -293,9 +382,10 @@ setColabOpts(
             <input
               type="date"
               value={form.data_fim}
-              onChange={e => setForm(f => ({ ...f, data_fim: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
               style={inputStyle}
               placeholder="dd/mm/aaaa"
+              disabled={!empresaId || loadingEmpresa}
             />
           </div>
 
@@ -304,19 +394,18 @@ setColabOpts(
             <label className="muted">Observações (opcional)</label>
             <textarea
               value={form.observacoes}
-              onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
               style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
+              disabled={!empresaId || loadingEmpresa}
             />
           </div>
 
-          {err && (
-            <p style={{ color: 'crimson', gridColumn: '1 / -1' }}>
-              {err}
-            </p>
-          )}
-
           <div style={{ gridColumn: '1 / -1', textAlign: 'right', marginTop: 4 }}>
-            <button className="btn btn-primary" type="submit" disabled={salvando}>
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={salvando || !empresaId || loadingEmpresa}
+            >
               {salvando ? 'A criar…' : 'Criar roteiro'}
             </button>
           </div>
@@ -325,7 +414,9 @@ setColabOpts(
 
       {/* LISTA DE ROTEIROS */}
       <section className="card">
-        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>Roteiros existentes</h2>
+        <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
+          Roteiros existentes
+        </h2>
 
         {!lista.length && !loading && (
           <p className="muted">Sem roteiros registados.</p>
@@ -346,12 +437,11 @@ setColabOpts(
                 </tr>
               </thead>
               <tbody>
-                {lista.map(r => (
+                {lista.map((r) => (
                   <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: 8 }}>
-                        {colabNomePorId[r.usuario_id] ?? r.usuario_id}
+                      {colabNomePorId[r.usuario_id] ?? r.usuario_id}
                     </td>
-
                     <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
                     <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
                     <td style={{ padding: 8 }}>
