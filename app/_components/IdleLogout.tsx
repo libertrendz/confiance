@@ -1,71 +1,61 @@
-///app/_components/IdleLogout.tsx
-in
-main
+// app/_components/IdleLogout.tsx
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
 type Props = {
-  minutes?: number; // default 10
+  timeoutMs?: number; // default: 10 min
 };
 
-export default function IdleLogout({ minutes = 10 }: Props) {
+export default function IdleLogout({ timeoutMs = 10 * 60 * 1000 }: Props) {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const timerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') return;
-
-    const idleMs = Math.max(1, minutes) * 60 * 1000;
-
-    const clearTimer = () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
+  function clearTimer() {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
       timerRef.current = null;
-    };
+    }
+  }
 
-    const schedule = () => {
-      clearTimer();
-      timerRef.current = window.setTimeout(async () => {
-        try {
-          await supa.auth.signOut();
-        } catch {}
-        try {
-          // remove só chaves do supabase (não limpa tudo do cliente)
-          const keys: string[] = [];
-          for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (k) keys.push(k);
-          }
-          keys
-            .filter((k) => k.startsWith('sb-') || k.includes('supabase'))
-            .forEach((k) => localStorage.removeItem(k));
-        } catch {}
-        window.location.replace('/login?err=Sess%C3%A3o%20expirada%20por%20inatividade');
-      }, idleMs);
-    };
+  function startTimer() {
+    clearTimer();
+    timerRef.current = window.setTimeout(async () => {
+      try {
+        await supa.auth.signOut();
+      } catch {
+        // ignora
+      } finally {
+        window.location.replace('/login');
+      }
+    }, timeoutMs);
+  }
 
-    const bump = () => schedule();
+  useEffect(() => {
+    // inicia quando o componente monta
+    startTimer();
 
-    // inicia
-    schedule();
+    const onActivity = () => startTimer();
 
+    // desktop + mobile
     const events: Array<keyof WindowEventMap> = [
       'mousemove',
       'mousedown',
       'keydown',
-      'touchstart',
       'scroll',
-      'click',
+      'touchstart',
+      'touchmove',
     ];
 
-    events.forEach((ev) => window.addEventListener(ev, bump, { passive: true }));
+    events.forEach((ev) => window.addEventListener(ev, onActivity, { passive: true }));
 
     return () => {
+      events.forEach((ev) => window.removeEventListener(ev, onActivity as any));
       clearTimer();
-      events.forEach((ev) => window.removeEventListener(ev, bump as any));
     };
-  }, [minutes, supa]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return null;
 }
