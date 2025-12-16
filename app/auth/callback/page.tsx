@@ -8,8 +8,7 @@ export const dynamic = 'force-dynamic';
 
 function safeNext(nextRaw: string | null) {
   if (!nextRaw) return '/menu';
-  // evita open-redirect (só aceita paths internos)
-  if (nextRaw.startsWith('/')) return nextRaw;
+  if (nextRaw.startsWith('/')) return nextRaw; // só path interno
   return '/menu';
 }
 
@@ -52,19 +51,9 @@ export default function AuthCallbackPage() {
     const run = async () => {
       try {
         const { token_hash, type, code, next } = getParams();
-        const incomingCredential = !!code || (!!token_hash && !!type) || hasHashTokens();
 
-        // Se chegou um link de autenticação, limpamos sessão local antes
-        // para não “reaproveitar” o user anterior na mesma janela.
-        if (incomingCredential) {
-          try {
-            await supa.auth.signOut();
-          } catch {
-            // ignora
-          }
-        }
-
-        // 1) PKCE / OAuth: veio ?code=
+        // 1) PKCE: veio ?code=
+        // NÃO fazer signOut antes, senão pode apagar o code_verifier.
         if (code) {
           setStatus('Confirmando login…');
           const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
@@ -76,7 +65,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 2) Magic link antigo: ?token_hash=&type=magiclink
+        // 2) Magic link clássico: ?token_hash=&type=magiclink
         if (token_hash && type) {
           setStatus('Confirmando login…');
           const { error } = await supa.auth.verifyOtp({ type, token_hash });
@@ -88,7 +77,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 3) Fallback webview: tokens no hash #access_token=...
+        // 3) Fallback webview: tokens no hash
         if (hasHashTokens()) {
           setStatus('Confirmando login…');
           const params = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
@@ -104,7 +93,7 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // 4) Sem credencial no URL: se já tem sessão, ok. Senão, volta pro login.
+        // 4) Se não veio nada no URL, só redireciona se já existe sessão
         const { data } = await supa.auth.getSession();
         if (data.session?.user?.id) {
           if (!alive) return;
@@ -114,11 +103,12 @@ export default function AuthCallbackPage() {
         }
 
         if (!alive) return;
-        setStatus('Não foi possível confirmar. Voltando ao login…');
+        setStatus('Link inválido/expirado. Voltando ao login…');
         window.location.replace('/login?err=Link%20inv%C3%A1lido%20ou%20expirado');
       } catch (e: any) {
         console.error('auth/callback error:', e);
         if (!alive) return;
+
         setStatus('Erro ao confirmar. Voltando ao login…');
         window.location.replace(
           `/login?err=${encodeURIComponent(e?.message || 'Falha ao efetuar login')}`
