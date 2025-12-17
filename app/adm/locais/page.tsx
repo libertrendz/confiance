@@ -299,19 +299,26 @@ export default function AdmLocaisPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <a
-            href="/adm/roteiros"
-            className="btn btn-ghost"
-            style={{ textDecoration: 'none' }}
-          >
-            ← Roteiros
-          </a>
-          <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
-            {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
-          </button>
-        </div>
-      </header>
+       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+  <a
+    href="/adm/roteiros"
+    className="btn btn-ghost"
+    style={{
+      textDecoration: 'none',
+      background: '#FFD24D',
+      color: '#0e3258',
+      border: '1px solid #E9C23A',
+      fontWeight: 800,
+    }}
+  >
+    ← Roteiros
+  </a>
+
+  <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
+    {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
+  </button>
+</div>
+</header>
 
       {/* FORM */}
       <section className="card" style={{ marginBottom: 16 }}>
