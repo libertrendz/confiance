@@ -2,24 +2,46 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import getBrowserSupabase from '@/lib/supa';
 
 type Props = {
-  minutes?: number;     // compat
-  timeoutMs?: number;   // opcional
-  graceMs?: number;     // tolerância (ex.: relógio/visibilidade)
+  minutes?: number; // compat: usado no layout atual
+  timeoutMs?: number;
 };
 
-export default function IdleLogout({ minutes = 10, timeoutMs, graceMs = 15_000 }: Props) {
+const LS_KEY = 'confiance:lastActivityAt';
+
+export default function IdleLogout({ minutes = 10, timeoutMs }: Props) {
   const supa = useMemo(() => getBrowserSupabase(), []);
-  const lastRef = useRef<number>(Date.now());
+  const pathname = usePathname();
+
   const intervalRef = useRef<number | null>(null);
 
   const effectiveTimeoutMs =
     typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : minutes * 60 * 1000;
 
-  function touch() {
-    lastRef.current = Date.now();
+  const shouldSkip =
+    !pathname ||
+    pathname === '/login' ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api');
+
+  function nowMs() {
+    return Date.now();
+  }
+
+  function readLast(): number {
+    const raw = localStorage.getItem(LS_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function writeLast(ts: number) {
+    try {
+      localStorage.setItem(LS_KEY, String(ts));
+    } catch {}
   }
 
   async function doLogout() {
@@ -32,33 +54,44 @@ export default function IdleLogout({ minutes = 10, timeoutMs, graceMs = 15_000 }
     }
   }
 
-  function start() {
-    // marca início como “ativo”
-    touch();
+  function markActivity() {
+    const ts = nowMs();
+    writeLast(ts);
+  }
 
-    // limpa interval antigo
-    if (intervalRef.current != null) {
+  function clearIntervalTimer() {
+    if (intervalRef.current !== null) {
       window.clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+  }
 
-    // verifica a cada 5s (leve e confiável)
+  function startLoop() {
+    clearIntervalTimer();
+
+    // garante base inicial (importante ao abrir 2 abas)
+    if (!readLast()) writeLast(nowMs());
+
     intervalRef.current = window.setInterval(() => {
-      const now = Date.now();
-      const idleFor = now - lastRef.current;
+      const last = readLast();
+      const idleFor = nowMs() - last;
 
-      if (idleFor > effectiveTimeoutMs + graceMs) {
-        doLogout();
+      if (idleFor >= effectiveTimeoutMs) {
+        clearIntervalTimer();
+        void doLogout();
       }
     }, 5000);
   }
 
   useEffect(() => {
-    start();
+    if (shouldSkip) return;
 
-    const onActivity = () => touch();
+    // marca atividade na entrada
+    markActivity();
+    startLoop();
 
-    // (desktop + mobile)
+    const onActivity = () => markActivity();
+
     const events: Array<keyof WindowEventMap> = [
       'mousemove',
       'mousedown',
@@ -66,31 +99,28 @@ export default function IdleLogout({ minutes = 10, timeoutMs, graceMs = 15_000 }
       'scroll',
       'touchstart',
       'touchmove',
-      'click',
+      'pointerdown',
+      'pointermove',
+      'visibilitychange',
     ];
 
-    const opts: AddEventListenerOptions = { passive: true };
+    events.forEach((ev) => window.addEventListener(ev, onActivity, { passive: true }));
 
-    events.forEach((ev) => window.addEventListener(ev, onActivity, opts));
-
-    const onVisibility = () => {
-      // quando volta pro app, considera atividade e reavalia
-      touch();
+    // sincroniza entre abas (quando outra aba marca atividade)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LS_KEY) {
+        // nada a fazer aqui além de “acordar” o loop; ele já lê o LS_KEY
+      }
     };
-
-    window.addEventListener('focus', onVisibility);
-    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('storage', onStorage);
 
     return () => {
-      events.forEach((ev) => window.removeEventListener(ev, onActivity, opts as any));
-      window.removeEventListener('focus', onVisibility);
-      document.removeEventListener('visibilitychange', onVisibility);
-
-      if (intervalRef.current != null) window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
+      events.forEach((ev) => window.removeEventListener(ev, onActivity as any));
+      window.removeEventListener('storage', onStorage);
+      clearIntervalTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveTimeoutMs, graceMs]);
+  }, [effectiveTimeoutMs, shouldSkip]);
 
   return null;
 }
