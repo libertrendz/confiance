@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
 
-type Option = { id: string; nome: string };
+///type Option = { id: string; nome: string };
 
 type RoteiroRow = {
   id: string;
