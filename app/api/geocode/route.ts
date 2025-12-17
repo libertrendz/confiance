@@ -3,15 +3,18 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+function looksLikePtPostalCode(q: string) {
+  return /^\d{4}-\d{3}$/.test(q.trim());
+}
+
 export async function GET(req: NextRequest) {
   try {
-    const q = req.nextUrl.searchParams.get('q')?.trim() || '';
-    if (!q) {
-      return NextResponse.json({ ok: false, error: 'Missing query param: q' }, { status: 400 });
-    }
+    let q = req.nextUrl.searchParams.get('q')?.trim() || '';
+    if (!q) return NextResponse.json({ ok: false, error: 'Missing query param: q' }, { status: 400 });
 
-    // Nominatim (OpenStreetMap) — uso simples para geocoding
-    // IMPORTANTE: precisa de User-Agent (e idealmente Referer) para evitar bloqueios.
+    // Se for CP PT, ajuda a API acrescentando o país
+    if (looksLikePtPostalCode(q)) q = `${q}, Portugal`;
+
     const url =
       'https://nominatim.openstreetmap.org/search?' +
       new URLSearchParams({
@@ -19,6 +22,7 @@ export async function GET(req: NextRequest) {
         format: 'json',
         limit: '5',
         addressdetails: '1',
+        countrycodes: 'pt', // força Portugal
       }).toString();
 
     const res = await fetch(url, {
@@ -26,7 +30,6 @@ export async function GET(req: NextRequest) {
         'User-Agent': 'CONFIANCE ERP (geocode) - Vercel',
         Accept: 'application/json',
       },
-      // evita cache estranho no edge/browser
       cache: 'no-store',
     });
 
@@ -39,7 +42,6 @@ export async function GET(req: NextRequest) {
     }
 
     const data = (await res.json()) as any[];
-
     const results =
       (data || []).map((r) => ({
         display_name: r.display_name as string,
@@ -49,9 +51,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ ok: true, results }, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message || 'Unhandled geocode error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: e?.message || 'Unhandled geocode error' }, { status: 500 });
   }
 }
