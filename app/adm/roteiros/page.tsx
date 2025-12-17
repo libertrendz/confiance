@@ -401,18 +401,26 @@ export default function RoteirosPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <a
-            href="/adm/locais"
-            className="btn btn-ghost"
-            style={{ textDecoration: 'none' }}
-          >
-            Locais permitidos →
-          </a>
-          <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
-            {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
-          </button>
-        </div>
+       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+  <a
+    href="/adm/locais"
+    className="btn btn-ghost"
+    style={{
+      textDecoration: 'none',
+      background: '#FFD24D',
+      color: '#0e3258',
+      border: '1px solid #E9C23A',
+      fontWeight: 800,
+    }}
+  >
+    Locais permitidos →
+  </a>
+
+  <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
+    {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
+  </button>
+</div>
+
       </header>
 
       {/* FORM NOVO ROTEIRO */}
