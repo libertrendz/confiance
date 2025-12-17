@@ -746,7 +746,7 @@ export default function PontoPage() {
         {diaFinalizado ? (
           <div style={{ fontSize: 13, color: '#3F4A5F' }}>
             <p className="muted" style={{ margin: 0 }}>
-              <strong>Dia finalizado.</strong> Aguarde a próxima tarefa.
+              <strong>Tarefa finalizada.</strong> Aguarde a próxima tarefa.
             </p>
           </div>
         ) : loadingRoteiro ? (
