@@ -1,3 +1,4 @@
+// app/adm/roteiros/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -16,7 +17,10 @@ type RoteiroRow = {
   tarefa_id: string;
   tarefa_nome: string | null;
   local_nome: string | null;
+  local_id?: string | null;
 };
+
+type StatusRoteiro = 'planeado' | 'ativo' | 'concluido' | 'cancelado';
 
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
@@ -38,6 +42,7 @@ export default function RoteirosPage() {
   }, [colabOpts]);
 
   const [salvando, setSalvando] = useState(false);
+
   const [form, setForm] = useState<{
     usuario_id: string;
     tarefa_id: string;
@@ -51,6 +56,26 @@ export default function RoteirosPage() {
     local_id: '',
     data_dia: '',
     data_fim: '',
+    observacoes: '',
+  });
+
+  // edição
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    usuario_id: string;
+    tarefa_id: string;
+    local_id: string;
+    data_dia: string;
+    data_fim: string;
+    status: StatusRoteiro;
+    observacoes: string;
+  }>({
+    usuario_id: '',
+    tarefa_id: '',
+    local_id: '',
+    data_dia: '',
+    data_fim: '',
+    status: 'planeado',
     observacoes: '',
   });
 
@@ -91,7 +116,6 @@ export default function RoteirosPage() {
   async function loadOptions(eid: string) {
     setErr(null);
     try {
-      // 1) Colaboradores (view definitiva)
       const { data: colabs, error: colabErr } = await supa
         .from('v_adm_colaboradores')
         .select('user_id, nome_exibicao, papel')
@@ -107,7 +131,6 @@ export default function RoteirosPage() {
         }))
       );
 
-      // 2) Tarefas padrão (se forem por empresa, filtramos; se não, fica geral)
       const { data: tarefas, error: tarefaErr } = await supa
         .from('tarefas_padrao')
         .select('id, nome')
@@ -117,7 +140,6 @@ export default function RoteirosPage() {
       if (tarefaErr) throw tarefaErr;
       setTarefaOpts((tarefas || []) as Option[]);
 
-      // 3) Locais permitidos (por empresa + ativos)
       const { data: locais, error: localErr } = await supa
         .from('locais_permitidos')
         .select('id, nome')
@@ -149,6 +171,7 @@ export default function RoteirosPage() {
           local_label,
           observacoes,
           tarefa_id,
+          local_id,
           tarefas_padrao ( nome ),
           locais_permitidos ( nome )
         `
@@ -168,6 +191,7 @@ export default function RoteirosPage() {
         local_label: r.local_label,
         observacoes: r.observacoes,
         tarefa_id: r.tarefa_id,
+        local_id: r.local_id ?? null,
         tarefa_nome: r.tarefas_padrao?.nome ?? null,
         local_nome: r.locais_permitidos?.nome ?? null,
       }));
@@ -199,7 +223,7 @@ export default function RoteirosPage() {
     setSalvando(true);
     try {
       const payload: any = {
-        empresa_id: empresaId, // ✅ ESSENCIAL para passar no RLS
+        empresa_id: empresaId,
         usuario_id: form.usuario_id,
         tarefa_id: form.tarefa_id,
         local_id: form.local_id,
@@ -227,6 +251,105 @@ export default function RoteirosPage() {
     } catch (e: any) {
       console.error('Erro ao criar roteiro', e);
       setErr(e?.message || 'Falha ao criar roteiro.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function startEdit(r: RoteiroRow) {
+    setErr(null);
+    setEditId(r.id);
+    setEditForm({
+      usuario_id: r.usuario_id || '',
+      tarefa_id: r.tarefa_id || '',
+      local_id: (r.local_id as string) || '',
+      data_dia: r.data_dia || '',
+      data_fim: r.data_fim || '',
+      status: (r.status as StatusRoteiro) || 'planeado',
+      observacoes: r.observacoes || '',
+    });
+  }
+
+  function cancelEdit() {
+    setEditId(null);
+    setEditForm({
+      usuario_id: '',
+      tarefa_id: '',
+      local_id: '',
+      data_dia: '',
+      data_fim: '',
+      status: 'planeado',
+      observacoes: '',
+    });
+  }
+
+  async function salvarEdicao() {
+    setErr(null);
+
+    if (!empresaId) {
+      setErr('Empresa não carregada.');
+      return;
+    }
+    if (!editId) return;
+
+    if (!editForm.usuario_id || !editForm.tarefa_id || !editForm.local_id || !editForm.data_dia) {
+      setErr('Na edição, preencha colaborador, tarefa, local e data início.');
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      const payload: any = {
+        usuario_id: editForm.usuario_id,
+        tarefa_id: editForm.tarefa_id,
+        local_id: editForm.local_id,
+        data_dia: editForm.data_dia,
+        status: editForm.status,
+        observacoes: editForm.observacoes || null,
+        data_fim: editForm.data_fim || null,
+      };
+
+      const { error } = await supa
+        .from('ponto_roteiros')
+        .update(payload)
+        .eq('id', editId)
+        .eq('empresa_id', empresaId);
+
+      if (error) throw error;
+
+      await loadLista(empresaId);
+      cancelEdit();
+      alert('Roteiro atualizado.');
+    } catch (e: any) {
+      console.error('Erro ao atualizar roteiro', e);
+      setErr(e?.message || 'Falha ao atualizar roteiro.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirRoteiro(id: string) {
+    if (!empresaId) return;
+    const ok = window.confirm('Tem certeza que deseja excluir este roteiro?');
+    if (!ok) return;
+
+    setErr(null);
+    setSalvando(true);
+    try {
+      const { error } = await supa
+        .from('ponto_roteiros')
+        .delete()
+        .eq('id', id)
+        .eq('empresa_id', empresaId);
+
+      if (error) throw error;
+
+      await loadLista(empresaId);
+      if (editId === id) cancelEdit();
+      alert('Roteiro excluído.');
+    } catch (e: any) {
+      console.error('Erro ao excluir roteiro', e);
+      setErr(e?.message || 'Falha ao excluir roteiro.');
     } finally {
       setSalvando(false);
     }
@@ -262,6 +385,7 @@ export default function RoteirosPage() {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 16,
+          gap: 12,
         }}
       >
         <div>
@@ -277,9 +401,18 @@ export default function RoteirosPage() {
           </div>
         </div>
 
-        <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
-          {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <a
+            href="/adm/locais"
+            className="btn btn-ghost"
+            style={{ textDecoration: 'none' }}
+          >
+            Locais permitidos →
+          </a>
+          <button className="btn btn-ghost" onClick={recarregarTudo} disabled={loading || loadingEmpresa}>
+            {loading || loadingEmpresa ? 'A carregar…' : 'Recarregar'}
+          </button>
+        </div>
       </header>
 
       {/* FORM NOVO ROTEIRO */}
@@ -288,8 +421,7 @@ export default function RoteirosPage() {
           Novo roteiro
         </h2>
         <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de presença
-          (geo/raio) e para associações de tarefas do dia.
+          Defina colaborador, tarefa, período e local de trabalho.
         </p>
 
         <form
@@ -300,7 +432,6 @@ export default function RoteirosPage() {
             gap: 12,
           }}
         >
-          {/* Colaborador */}
           <div>
             <label className="muted">Colaborador</label>
             <select
@@ -318,7 +449,6 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* Tarefa */}
           <div>
             <label className="muted">Tarefa</label>
             <select
@@ -336,7 +466,6 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* Local */}
           <div>
             <label className="muted">Local de trabalho</label>
             <select
@@ -354,7 +483,6 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* Data início */}
           <div>
             <label className="muted">Data início</label>
             <input
@@ -366,7 +494,6 @@ export default function RoteirosPage() {
             />
           </div>
 
-          {/* Data fim */}
           <div>
             <label className="muted">Data fim (opcional)</label>
             <input
@@ -378,7 +505,6 @@ export default function RoteirosPage() {
             />
           </div>
 
-          {/* Observações */}
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="muted">Observações (opcional)</label>
             <textarea
@@ -403,15 +529,130 @@ export default function RoteirosPage() {
         </form>
       </section>
 
-      {/* LISTA DE ROTEIROS */}
+      {/* EDITOR INLINE */}
+      {editId && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
+            Editar roteiro
+          </h2>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <div>
+              <label className="muted">Colaborador</label>
+              <select
+                value={editForm.usuario_id}
+                onChange={(e) => setEditForm((f) => ({ ...f, usuario_id: e.target.value }))}
+                style={selectStyle}
+              >
+                <option value="">Selecione…</option>
+                {colabOpts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="muted">Tarefa</label>
+              <select
+                value={editForm.tarefa_id}
+                onChange={(e) => setEditForm((f) => ({ ...f, tarefa_id: e.target.value }))}
+                style={selectStyle}
+              >
+                <option value="">Selecione…</option>
+                {tarefaOpts.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="muted">Local</label>
+              <select
+                value={editForm.local_id}
+                onChange={(e) => setEditForm((f) => ({ ...f, local_id: e.target.value }))}
+                style={selectStyle}
+              >
+                <option value="">Selecione…</option>
+                {localOpts.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="muted">Data início</label>
+              <input
+                type="date"
+                value={editForm.data_dia}
+                onChange={(e) => setEditForm((f) => ({ ...f, data_dia: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="muted">Data fim</label>
+              <input
+                type="date"
+                value={editForm.data_fim}
+                onChange={(e) => setEditForm((f) => ({ ...f, data_fim: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label className="muted">Status</label>
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as StatusRoteiro }))}
+                style={selectStyle}
+              >
+                <option value="planeado">planeado</option>
+                <option value="ativo">ativo</option>
+                <option value="concluido">concluido</option>
+                <option value="cancelado">cancelado</option>
+              </select>
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="muted">Observações</label>
+              <textarea
+                value={editForm.observacoes}
+                onChange={(e) => setEditForm((f) => ({ ...f, observacoes: e.target.value }))}
+                style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-ghost" type="button" onClick={cancelEdit} disabled={salvando}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" type="button" onClick={salvarEdicao} disabled={salvando}>
+                {salvando ? 'A salvar…' : 'Salvar edição'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* LISTA */}
       <section className="card">
         <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
           Roteiros existentes
         </h2>
 
-        {!lista.length && !loading && (
-          <p className="muted">Sem roteiros registados.</p>
-        )}
+        {!lista.length && !loading && <p className="muted">Sem roteiros registados.</p>}
 
         {!!lista.length && (
           <div style={{ overflowX: 'auto' }}>
@@ -424,7 +665,7 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Data início</th>
                   <th style={{ padding: 8 }}>Data fim</th>
                   <th style={{ padding: 8 }}>Status</th>
-                  <th style={{ padding: 8 }}>Observações</th>
+                  <th style={{ padding: 8 }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -436,7 +677,16 @@ export default function RoteirosPage() {
                     <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
                     <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
                     <td style={{ padding: 8 }}>{r.status || '—'}</td>
-                    <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
+                    <td style={{ padding: 8 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button className="btn btn-ghost" type="button" onClick={() => startEdit(r)} disabled={salvando}>
+                          Editar
+                        </button>
+                        <button className="btn btn-ghost" type="button" onClick={() => excluirRoteiro(r.id)} disabled={salvando}>
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -444,11 +694,7 @@ export default function RoteirosPage() {
           </div>
         )}
 
-        {loading && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            A carregar roteiros…
-          </p>
-        )}
+        {loading && <p className="muted" style={{ marginTop: 8 }}>A carregar roteiros…</p>}
       </section>
     </main>
   );
