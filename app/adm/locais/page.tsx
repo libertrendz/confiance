@@ -307,8 +307,8 @@ export default function AdmLocaisPage() {
       textDecoration: 'none',
       background: '#FFD24D',
       color: '#0e3258',
-      border: '1px solid #E9C23A',
-      fontWeight: 800,
+      border: 'none',
+      fontWeight: 700,
     }}
   >
     ← Roteiros
