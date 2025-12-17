@@ -289,7 +289,7 @@ export default function RoteirosPage() {
               background: '#FFD24D', // accent igual ao menu externo
               color: '#0e3258',
               border: 'none',
-              fontWeight: 700,
+              fontWeight: 500,
             }}
           >
             Locais permitidos →
