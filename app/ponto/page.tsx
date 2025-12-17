@@ -108,6 +108,40 @@ export default function PontoPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Upload da foto para o bucket "ponto-fotos" e retorna info auditável
+  async function uploadFoto(file: File, tipoAtual: string) {
+    if (!empresaId || !usuarioId) throw new Error('Sessão inválida para upload.');
+
+    const ext =
+      file.type === 'image/png'
+        ? 'png'
+        : file.type === 'image/webp'
+        ? 'webp'
+        : 'jpg';
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const dia = new Date().toISOString().slice(0, 10);
+
+    const path = `${empresaId}/${usuarioId}/${dia}/${tipoAtual}-${ts}.${ext}`;
+
+    const { error: upErr } = await supa.storage
+      .from('ponto-fotos')
+      .upload(path, file, {
+        upsert: false,
+        contentType: file.type || 'image/jpeg',
+      });
+
+    if (upErr) throw upErr;
+
+    const { data: pub } = supa.storage.from('ponto-fotos').getPublicUrl(path);
+
+    return {
+      bucket: 'ponto-fotos',
+      path,
+      publicUrl: pub?.publicUrl || null,
+    };
+  }
+
   // 1) user + empresa via auth + profiles
   useEffect(() => {
     let alive = true;
@@ -379,8 +413,8 @@ export default function PontoPage() {
     return { ok: true };
   }
 
-  // 8) fluxo central de bater ponto
-  async function baterPonto() {
+  // 8) fluxo central de bater ponto (agora aceita foto)
+  async function baterPonto(photoFile?: File | null) {
     if (!usuarioId || !empresaId) return;
     setBatendo(true);
     setErr(null);
@@ -405,6 +439,19 @@ export default function PontoPage() {
         return;
       }
 
+      const exigeFoto =
+        tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco';
+
+      let fotoInfo: { bucket: string; path: string; publicUrl: string | null } | null = null;
+
+      if (exigeFoto) {
+        if (!photoFile) {
+          setErr('Foto obrigatória. Abra a câmara e tire a foto para continuar.');
+          return;
+        }
+        fotoInfo = await uploadFoto(photoFile, tipo);
+      }
+
       const meta: Record<string, any> = {
         origem: 'externo-web',
         device: 'browser',
@@ -413,6 +460,13 @@ export default function PontoPage() {
         accuracy: g.accuracy,
         raio_validacao: raioCheck.motivo,
       };
+
+      if (fotoInfo) {
+        meta.foto_bucket = fotoInfo.bucket;
+        meta.foto_path = fotoInfo.path;
+        meta.foto_url = fotoInfo.publicUrl; // se bucket for público
+        meta.foto_capturada = true; // compat p/ auditoria
+      }
 
       if (raioCheck.localId) {
         meta.local_id = raioCheck.localId;
@@ -516,7 +570,7 @@ export default function PontoPage() {
     };
     reader.readAsDataURL(file);
 
-    await baterPonto();
+    await baterPonto(file);
   }
 
   if (loadingUser) {
