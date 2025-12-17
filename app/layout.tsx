@@ -3,6 +3,7 @@ import './globals.css';
 import type { ReactNode } from 'react';
 import SwRegister from './_components/SwRegister';
 import IdleLogout from './_components/IdleLogout';
+import AuthGate from './_components/AuthGate';
 
 export const metadata = {
   applicationName: 'CONFIANCE',
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="pt">
       <body>
         <SwRegister />
+        <AuthGate />
         <IdleLogout minutes={10} />
         {children}
       </body>
