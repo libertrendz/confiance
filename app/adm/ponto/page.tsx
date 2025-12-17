@@ -25,10 +25,18 @@ function summarizeMeta(meta: any) {
       geo: null as boolean | null,
       raio: null as 'ok' | 'fora' | 'nao_validado' | null,
       origem: null as string | null,
+      foto_url: null as string | null,
     };
   }
 
-  const foto = meta.foto_capturada === true;
+  const foto =
+    meta.foto_capturada === true ||
+    typeof meta.foto_url === 'string' ||
+    typeof meta.foto_path === 'string' ||
+    meta.foto_checkin === true ||
+    meta.foto_checkout === true ||
+    meta.foto_saida_almoco === true ||
+    meta.foto_retorno_almoco === true;
 
   const geo =
     typeof meta.lat === 'number' &&
@@ -42,8 +50,9 @@ function summarizeMeta(meta: any) {
   else raio = 'nao_validado';
 
   const origem = (meta.origem as string) || (meta.device as string) || null;
+  const foto_url = typeof meta.foto_url === 'string' ? meta.foto_url : null;
 
-  return { foto, geo, raio, origem };
+  return { foto, geo, raio, origem, foto_url };
 }
 
 export default function PontoAdmPage() {
@@ -159,6 +168,15 @@ export default function PontoAdmPage() {
                               : '—'}
                           </div>
                           {s.origem && <div>Origem: {s.origem}</div>}
+
+                          {/* Auditoria imediata */}
+                          {s.foto_url && (
+                            <div style={{ marginTop: 6 }}>
+                              <a href={s.foto_url} target="_blank" rel="noreferrer">
+                                Ver foto
+                              </a>
+                            </div>
+                          )}
                         </div>
 
                         <details style={{ marginTop: 4 }}>
