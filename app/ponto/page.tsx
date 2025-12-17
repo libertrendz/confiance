@@ -1,3 +1,5 @@
+///app/ponto/page.tsx
+
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -66,6 +68,22 @@ function nextAllowedTipos(last: string | null): TipoPonto[] {
     default:
       return ['entrada'];
   }
+}
+
+function todayLocalStr() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function localDateStrFromIso(iso: string) {
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export default function PontoPage() {
@@ -593,6 +611,10 @@ export default function PontoPage() {
   const ultimoTipo = ultimos[0]?.tipo ?? null;
   const allowedTipos = nextAllowedTipos(ultimoTipo);
 
+  const hojeStr = todayLocalStr();
+  const lastCreatedDay = ultimos[0]?.created_at ? localDateStrFromIso(ultimos[0].created_at) : null;
+  const diaFinalizado = lastCreatedDay === hojeStr && (ultimos[0]?.tipo === 'saida');
+
   return (
     <main
       style={{
@@ -721,7 +743,13 @@ export default function PontoPage() {
           Roteiro de hoje
         </div>
 
-        {loadingRoteiro ? (
+        {diaFinalizado ? (
+          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
+            <p className="muted" style={{ margin: 0 }}>
+              <strong>Dia finalizado.</strong> Aguarde a próxima tarefa.
+            </p>
+          </div>
+        ) : loadingRoteiro ? (
           <p className="muted">A carregar roteiro do dia…</p>
         ) : roteiroHoje ? (
           <div style={{ fontSize: 13, color: '#3F4A5F' }}>
