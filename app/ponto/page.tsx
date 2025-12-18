@@ -1,4 +1,4 @@
-///app/ponto/page.tsx
+// app/ponto/page.tsx
 
 'use client';
 
@@ -126,6 +126,12 @@ export default function PontoPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  function isDiaFinalizado(): boolean {
+    const hojeStr = todayLocalStr();
+    const lastCreatedDay = ultimos[0]?.created_at ? localDateStrFromIso(ultimos[0].created_at) : null;
+    return lastCreatedDay === hojeStr && ultimos[0]?.tipo === 'saida';
+  }
+
   // Upload da foto para o bucket "ponto-fotos" e retorna info auditável
   async function uploadFoto(file: File, tipoAtual: string) {
     if (!empresaId || !usuarioId) throw new Error('Sessão inválida para upload.');
@@ -142,12 +148,10 @@ export default function PontoPage() {
 
     const path = `${empresaId}/${usuarioId}/${dia}/${tipoAtual}-${ts}.${ext}`;
 
-    const { error: upErr } = await supa.storage
-      .from('ponto-fotos')
-      .upload(path, file, {
-        upsert: false,
-        contentType: file.type || 'image/jpeg',
-      });
+    const { error: upErr } = await supa.storage.from('ponto-fotos').upload(path, file, {
+      upsert: false,
+      contentType: file.type || 'image/jpeg',
+    });
 
     if (upErr) throw upErr;
 
@@ -439,6 +443,11 @@ export default function PontoPage() {
     setMsg(null);
 
     try {
+      if (isDiaFinalizado()) {
+        setErr('Dia já finalizado. Aguarde a próxima tarefa.');
+        return;
+      }
+
       const seq = validarSequencia(tipo);
       if (!seq.ok) {
         setErr(seq.msg || 'Sequência de ponto inválida.');
@@ -531,9 +540,8 @@ export default function PontoPage() {
         }
       }
 
+      // ✅ chama RPC sem passar usuario/empresa (evita RLS quebrar no mobile)
       const { error } = await supa.rpc('rpc_ponto_bater', {
-        p_empresa_id: empresaId,
-        p_usuario_id: usuarioId,
         p_tipo: tipo,
         p_meta: meta,
       });
@@ -613,7 +621,7 @@ export default function PontoPage() {
 
   const hojeStr = todayLocalStr();
   const lastCreatedDay = ultimos[0]?.created_at ? localDateStrFromIso(ultimos[0].created_at) : null;
-  const diaFinalizado = lastCreatedDay === hojeStr && (ultimos[0]?.tipo === 'saida');
+  const diaFinalizado = lastCreatedDay === hojeStr && ultimos[0]?.tipo === 'saida';
 
   return (
     <main
@@ -942,7 +950,11 @@ export default function PontoPage() {
           {err && <p style={{ color: 'crimson' }}>{err}</p>}
           {msg && <p style={{ color: 'green' }}>{msg}</p>}
 
-          <button className="btn btn-primary" onClick={handleBaterClick} disabled={batendo || !usuarioId || !empresaId}>
+          <button
+            className="btn btn-primary"
+            onClick={handleBaterClick}
+            disabled={batendo || !usuarioId || !empresaId || diaFinalizado}
+          >
             {batendo ? 'A registar…' : 'Bater ponto agora'}
           </button>
 
