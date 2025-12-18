@@ -123,7 +123,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <span
             style={{
               fontWeight: 900,
-              fontSize: 20,
+              fontSize: 26,
               letterSpacing: 1,
               textTransform: 'uppercase',
               whiteSpace: 'nowrap',
