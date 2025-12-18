@@ -195,7 +195,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         >
           <div
             style={{
-              fontSize: 14,
+              fontSize: 12,
               opacity: 0.85,
               marginBottom: 8,
               overflow: 'hidden',
