@@ -18,13 +18,18 @@ function summarizeMeta(meta: any) {
   if (!meta || typeof meta !== 'object') {
     return {
       foto: null as boolean | null,
+      foto_bucket: null as string | null,
+      foto_path: null as string | null,
       geo: null as boolean | null,
       raio: null as 'ok' | 'fora' | 'nao_validado' | null,
       origem: null as string | null,
+      roteiro: null as string | null,
     };
   }
 
-  const foto = meta.foto_capturada === true;
+  const foto_bucket = (meta.foto_bucket as string) || null;
+  const foto_path = (meta.foto_path as string) || null;
+  const foto = !!foto_bucket && !!foto_path;
 
   const geo =
     typeof meta.lat === 'number' &&
@@ -32,14 +37,23 @@ function summarizeMeta(meta: any) {
     typeof meta.lon === 'number' &&
     !Number.isNaN(meta.lon);
 
+  // compatibilidade: alguns fluxos tinham raio_ok, outros só texto em raio_validacao
   let raio: 'ok' | 'fora' | 'nao_validado' | null = null;
   if (meta.raio_ok === true) raio = 'ok';
   else if (meta.raio_ok === false) raio = 'fora';
-  else raio = 'nao_validado';
+  else if (typeof meta.raio_validacao === 'string') {
+    const txt = String(meta.raio_validacao).toLowerCase();
+    if (txt.includes('dentro')) raio = 'ok';
+    else if (txt.includes('fora')) raio = 'fora';
+    else raio = 'nao_validado';
+  } else {
+    raio = 'nao_validado';
+  }
 
   const origem = (meta.origem as string) || (meta.device as string) || null;
+  const roteiro = (meta.roteiro_id as string) || null;
 
-  return { foto, geo, raio, origem };
+  return { foto, foto_bucket, foto_path, geo, raio, origem, roteiro };
 }
 
 function formatWhen(r: PontoRow) {
@@ -52,12 +66,39 @@ function formatWhen(r: PontoRow) {
   }
 }
 
+function tipoLabel(t: string) {
+  switch (t) {
+    case 'entrada':
+      return 'Check-in';
+    case 'saida_almoco':
+      return 'Saída almoço';
+    case 'retorno_almoco':
+      return 'Retorno almoço';
+    case 'saida':
+      return 'Check-out';
+    default:
+      return t || '—';
+  }
+}
+
 export default function PontoHistoricoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const [rows, setRows] = useState<PontoRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+
+  async function abrirFoto(bucket: string, path: string) {
+    try {
+      const { data, error } = await supa.storage.from(bucket).createSignedUrl(path, 60 * 10);
+      if (error) throw error;
+      const url = data?.signedUrl;
+      if (!url) throw new Error('Não foi possível gerar URL.');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      alert(e?.message || 'Falha ao abrir a foto.');
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -79,9 +120,8 @@ export default function PontoHistoricoPage() {
           .from('ponto_registro')
           .select('*')
           .eq('usuario_id', uid)
-          // IMPORTANTÍSSIMO: created_at garante ordenação correta mesmo quando batida_at vem null
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(80);
 
         if (error) throw error;
         if (alive) setRows((data as PontoRow[]) || []);
@@ -178,16 +218,9 @@ export default function PontoHistoricoPage() {
         </a>
       </header>
 
-      {/* Subheader original (mantido) */}
       <header style={{ marginBottom: 12 }}>
-        <p
-          style={{
-            margin: '4px 0 0 0',
-            fontSize: 13,
-            color: '#49546A',
-          }}
-        >
-          Consulte as últimas marcações de entrada e saída registadas no sistema.
+        <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#49546A' }}>
+          Consulte as últimas marcações registadas no sistema.
         </p>
       </header>
 
@@ -233,55 +266,60 @@ export default function PontoHistoricoPage() {
                     }}
                   >
                     <div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: '#0e3258',
-                          textTransform: 'capitalize',
-                        }}
-                      >
-                        {r.tipo || '—'}
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#0e3258' }}>
+                        {tipoLabel(r.tipo || '—')}
                       </div>
                       <div style={{ fontSize: 12, color: '#58627A' }}>{formatWhen(r)}</div>
                     </div>
 
-                    <div
-                      style={{
-                        fontSize: 11,
-                        padding: '4px 8px',
-                        borderRadius: 999,
-                        border: '1px solid #D7E3FF',
-                        background: '#EEF3FF',
-                        color: '#0e3258',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Registo #{r.id.slice(0, 8)}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {s.foto && s.foto_bucket && s.foto_path && (
+                        <button
+                          className="btn btn-ghost"
+                          type="button"
+                          onClick={() => abrirFoto(s.foto_bucket!, s.foto_path!)}
+                        >
+                          Ver foto
+                        </button>
+                      )}
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          padding: '4px 8px',
+                          borderRadius: 999,
+                          border: '1px solid #D7E3FF',
+                          background: '#EEF3FF',
+                          color: '#0e3258',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        #{r.id.slice(0, 8)}
+                      </div>
                     </div>
                   </div>
 
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
                       gap: 4,
                       fontSize: 12,
                       color: '#3F4A5F',
                     }}
                   >
                     <div>
-                      <strong>Foto no local:</strong> {s.foto === null ? '—' : s.foto ? 'Sim' : 'Não'}
+                      <strong>Foto:</strong> {s.foto === null ? '—' : s.foto ? 'Sim' : 'Não'}
                     </div>
                     <div>
-                      <strong>Geo registado:</strong> {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
+                      <strong>Geo:</strong> {s.geo === null ? '—' : s.geo ? 'Sim' : 'Não'}
                     </div>
                     <div>
-                      <strong>Validação de raio:</strong>{' '}
+                      <strong>Raio:</strong>{' '}
                       {s.raio === 'ok'
                         ? 'OK'
                         : s.raio === 'fora'
-                        ? 'Fora do raio'
+                        ? 'Fora'
                         : s.raio === 'nao_validado'
                         ? 'Não validado'
                         : '—'}
@@ -291,12 +329,15 @@ export default function PontoHistoricoPage() {
                         <strong>Origem:</strong> {s.origem}
                       </div>
                     )}
+                    {s.roteiro && (
+                      <div>
+                        <strong>Roteiro:</strong> {String(s.roteiro).slice(0, 8)}…
+                      </div>
+                    )}
                   </div>
 
                   <details style={{ marginTop: 6 }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 11, color: '#445' }}>
-                      Ver detalhes técnicos
-                    </summary>
+                    <summary style={{ cursor: 'pointer', fontSize: 11, color: '#445' }}>Ver detalhes técnicos</summary>
                     <pre
                       style={{
                         margin: 0,
