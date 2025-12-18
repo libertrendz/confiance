@@ -372,7 +372,7 @@ export default function RoteirosPage() {
           <h1 className="h1" style={{ marginBottom: 4 }}>
             Roteiros de trabalho
           </h1>
-          <div className="muted" style={{ fontSize: 12 }}>
+          <div className="muted" style={{ fontSize: 10 }}>
             {loadingEmpresa ? 'A carregar empresa…' : empresaId ? `Empresa: ${empresaId.slice(0, 8)}…` : 'Empresa não carregada'}
           </div>
         </div>
@@ -386,7 +386,7 @@ export default function RoteirosPage() {
               background: '#FFD24D',
               color: '#0e3258',
               border: 'none',
-              fontWeight: 700,
+              fontWeight: 500,
             }}
           >
             Locais permitidos →
