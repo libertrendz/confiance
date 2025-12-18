@@ -1,28 +1,8 @@
-// app/ponto/page.tsx
-
+///app/ponto/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import getBrowserSupabase from '@/lib/supa';
-
-type PontoRow = {
-  id: string;
-  empresa_id: string;
-  usuario_id: string;
-  tipo: string;
-  meta: any;
-  batida_at: string | null;
-  created_at: string;
-};
-
-type LocalPermitido = {
-  id: string;
-  empresa_id: string;
-  nome?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  radius_m?: number | null;
-};
 
 type GeoState = {
   lat: number | null;
@@ -30,45 +10,25 @@ type GeoState = {
   accuracy: number | null;
 };
 
-type TipoPonto = 'entrada' | 'saida_almoco' | 'retorno_almoco' | 'saida' | 'in' | 'out';
+type RoteiroHojeRow = {
+  id: string;
+  data_dia: string;
+  data_fim: string | null;
+  status: string | null;
 
-function labelTipo(t: string | null | undefined): string {
-  switch (t) {
-    case 'entrada':
-      return 'Entrada';
-    case 'saida_almoco':
-      return 'Saída para almoço';
-    case 'retorno_almoco':
-      return 'Retorno do almoço';
-    case 'saida':
-      return 'Saída';
-    case 'in':
-      return 'In (legacy)';
-    case 'out':
-      return 'Out (legacy)';
-    default:
-      return t || '—';
-  }
-}
+  tarefa_id: string;
+  tarefa_nome: string | null;
 
-function nextAllowedTipos(last: string | null): TipoPonto[] {
-  switch (last) {
-    case null:
-    case undefined:
-    case 'saida':
-      return ['entrada'];
-    case 'entrada':
-      return ['saida_almoco'];
-    case 'saida_almoco':
-      return ['retorno_almoco'];
-    case 'retorno_almoco':
-      return ['saida'];
-    case 'in':
-    case 'out':
-    default:
-      return ['entrada'];
-  }
-}
+  local_id: string | null;
+  local_nome: string | null;
+  local_lat: number | null;
+  local_lng: number | null;
+  local_radius_m: number | null;
+
+  observacoes: string | null;
+};
+
+type TipoPonto = 'entrada' | 'saida';
 
 function todayLocalStr() {
   const d = new Date();
@@ -78,75 +38,57 @@ function todayLocalStr() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function localDateStrFromIso(iso: string) {
-  const d = new Date(iso);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+function statusLabel(s: string | null) {
+  switch (s) {
+    case 'planeado':
+      return 'Planeado';
+    case 'em_andamento':
+      return 'Em andamento';
+    case 'executado':
+      return 'Executado';
+    default:
+      return s || '—';
+  }
 }
 
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
-  const [usuarioId, setUsuarioId] = useState<string | null>(null);
-  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
 
-  const [tipo, setTipo] = useState<TipoPonto>('entrada');
+  const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+
   const [loadingUser, setLoadingUser] = useState(true);
+
+  const [roteirosHoje, setRoteirosHoje] = useState<RoteiroHojeRow[]>([]);
+  const [loadingRoteiros, setLoadingRoteiros] = useState(false);
+
+  const [geo, setGeo] = useState<GeoState>({ lat: null, lon: null, accuracy: null });
+  const [gettingGeo, setGettingGeo] = useState(false);
+
   const [batendo, setBatendo] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const [ultimos, setUltimos] = useState<PontoRow[]>([]);
-  const [loadingLista, setLoadingLista] = useState(false);
-
-  const [locais, setLocais] = useState<LocalPermitido[]>([]);
-  const [loadingLocais, setLoadingLocais] = useState(false);
-
-  // Roteiro do dia (tarefa fixa)
-  const [roteiroHoje, setRoteiroHoje] = useState<{
-    tarefa_id: string;
-    tarefa_nome: string;
-    local_id: string | null;
-    local_nome: string | null;
-  } | null>(null);
-  const [loadingRoteiro, setLoadingRoteiro] = useState(false);
-  const [tarefaConcluida, setTarefaConcluida] = useState(false);
-
-  const [geo, setGeo] = useState<GeoState>({
-    lat: null,
-    lon: null,
-    accuracy: null,
-  });
-  const [gettingGeo, setGettingGeo] = useState(false);
+  const [roteiroSelecionado, setRoteiroSelecionado] = useState<RoteiroHojeRow | null>(null);
+  const [acaoTipo, setAcaoTipo] = useState<TipoPonto>('entrada');
 
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [justificativa, setJustificativa] = useState<string>('');
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  function isDiaFinalizado(): boolean {
-    const hojeStr = todayLocalStr();
-    const lastCreatedDay = ultimos[0]?.created_at ? localDateStrFromIso(ultimos[0].created_at) : null;
-    return lastCreatedDay === hojeStr && ultimos[0]?.tipo === 'saida';
-  }
-
-  // Upload da foto para o bucket "ponto-fotos" e retorna info auditável
-  async function uploadFoto(file: File, tipoAtual: string) {
+  // ---------- Foto: upload no bucket privado ponto-fotos ----------
+  async function uploadFoto(file: File, roteiroId: string, tipoAtual: TipoPonto) {
     if (!empresaId || !usuarioId) throw new Error('Sessão inválida para upload.');
 
     const ext =
-      file.type === 'image/png'
-        ? 'png'
-        : file.type === 'image/webp'
-        ? 'webp'
-        : 'jpg';
+      file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
 
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const dia = new Date().toISOString().slice(0, 10);
 
-    const path = `${empresaId}/${usuarioId}/${dia}/${tipoAtual}-${ts}.${ext}`;
+    // inclui roteiroId no path para facilitar auditoria
+    const path = `${empresaId}/${usuarioId}/${dia}/${roteiroId}/${tipoAtual}-${ts}.${ext}`;
 
     const { error: upErr } = await supa.storage.from('ponto-fotos').upload(path, file, {
       upsert: false,
@@ -155,16 +97,10 @@ export default function PontoPage() {
 
     if (upErr) throw upErr;
 
-    const { data: pub } = supa.storage.from('ponto-fotos').getPublicUrl(path);
-
-    return {
-      bucket: 'ponto-fotos',
-      path,
-      publicUrl: pub?.publicUrl || null,
-    };
+    return { bucket: 'ponto-fotos', path };
   }
 
-  // 1) user + empresa via auth + profiles
+  // ---------- Sessão + perfil ----------
   useEffect(() => {
     let alive = true;
 
@@ -208,133 +144,76 @@ export default function PontoPage() {
     };
   }, [supa]);
 
-  // 2) locais permitidos (ATENÇÃO: colunas do DB são lat/lng/radius_m)
-  useEffect(() => {
-    if (!empresaId) return;
-    let alive = true;
+  // ---------- Carregar roteiros do dia (multi-roteiro) ----------
+  async function carregarRoteirosHoje() {
+    if (!empresaId || !usuarioId) return;
 
-    (async () => {
-      try {
-        setLoadingLocais(true);
-        const { data, error } = await supa
-          .from('locais_permitidos')
-          .select('id, empresa_id, nome, lat, lng, radius_m')
-          .eq('empresa_id', empresaId)
-          .eq('ativo', true);
-
-        if (error) throw error;
-        if (!alive) return;
-
-        setLocais((data || []) as LocalPermitido[]);
-      } catch (e) {
-        console.error('Erro ao carregar locais_permitidos', e);
-      } finally {
-        if (alive) setLoadingLocais(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [empresaId, supa]);
-
-  // 3) últimos pontos do próprio user (para saber o último tipo)
-  async function carregarUltimos() {
-    if (!usuarioId || !empresaId) return;
-    setLoadingLista(true);
+    setLoadingRoteiros(true);
     try {
-      const { data, error } = await supa
-        .from('ponto_registro')
-        .select('*')
-        .eq('usuario_id', usuarioId)
-        .eq('empresa_id', empresaId)
-        // IMPORTANTE: ordena por created_at para não “sumir” registo quando batida_at vem null
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-      const rows = (data || []) as PontoRow[];
-      setUltimos(rows);
-
-      const last = rows[0]?.tipo ?? null;
-      const allowed = nextAllowedTipos(last);
-      if (allowed.length) setTipo(allowed[0]);
-    } catch (e: any) {
-      console.error('Erro ao carregar últimos pontos', e);
-    } finally {
-      setLoadingLista(false);
-    }
-  }
-
-  // 4) carregar roteiro do dia (tarefa fixa) para o utilizador
-  async function carregarRoteiroHoje() {
-    if (!usuarioId || !empresaId) return;
-
-    setLoadingRoteiro(true);
-    try {
-      const hoje = new Date();
-      const yyyy = hoje.getFullYear();
-      const mm = String(hoje.getMonth() + 1).padStart(2, '0');
-      const dd = String(hoje.getDate()).padStart(2, '0');
-      const todayStr = `${yyyy}-${mm}-${dd}`;
+      const todayStr = todayLocalStr();
 
       const { data, error } = await supa
         .from('ponto_roteiros')
         .select(
           `
+          id,
+          usuario_id,
+          empresa_id,
+          data_dia,
+          data_fim,
+          status,
+          observacoes,
           tarefa_id,
           tarefas_padrao ( nome ),
           local_id,
-          locais_permitidos ( nome ),
-          data_dia,
-          data_fim,
-          status
+          locais_permitidos ( nome, lat, lng, radius_m )
         `
         )
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
         .lte('data_dia', todayStr)
         .or(`data_fim.is.null,data_fim.gte.${todayStr}`)
-        .in('status', ['planeado', 'ativo'])
+        .in('status', ['planeado', 'em_andamento', 'executado', 'ativo'])
         .order('data_dia', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(50);
 
       if (error) throw error;
 
-      if (data?.tarefa_id) {
-        setRoteiroHoje({
-          tarefa_id: (data as any).tarefa_id,
-          tarefa_nome: (data as any).tarefas_padrao?.nome || '—',
-          local_id: (data as any).local_id ?? null,
-          local_nome: (data as any).locais_permitidos?.nome ?? null,
-        });
-      } else {
-        setRoteiroHoje(null);
-      }
+      const mapped: RoteiroHojeRow[] = (data || []).map((r: any) => ({
+        id: r.id,
+        data_dia: r.data_dia,
+        data_fim: r.data_fim,
+        status: r.status ?? null,
+        tarefa_id: r.tarefa_id,
+        tarefa_nome: r.tarefas_padrao?.nome ?? null,
+        local_id: r.local_id ?? null,
+        local_nome: r.locais_permitidos?.nome ?? null,
+        local_lat: r.locais_permitidos?.lat ?? null,
+        local_lng: r.locais_permitidos?.lng ?? null,
+        local_radius_m: r.locais_permitidos?.radius_m ?? null,
+        observacoes: r.observacoes ?? null,
+      }));
 
-      setTarefaConcluida(false);
+      // Ordenação “de produto”: pendentes primeiro, depois em andamento, executados por último
+      const score = (s: string | null) =>
+        s === 'planeado' ? 0 : s === 'em_andamento' ? 1 : s === 'executado' ? 9 : 5;
+
+      mapped.sort((a, b) => score(a.status) - score(b.status));
+
+      setRoteirosHoje(mapped);
     } catch (e: any) {
-      console.error('Erro ao carregar roteiro do dia', e);
-      setRoteiroHoje(null);
+      console.error('Erro ao carregar roteiros do dia', e);
     } finally {
-      setLoadingRoteiro(false);
+      setLoadingRoteiros(false);
     }
   }
 
   useEffect(() => {
-    if (usuarioId && empresaId) {
-      carregarUltimos();
-      carregarRoteiroHoje();
-    }
+    if (usuarioId && empresaId) carregarRoteirosHoje();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioId, empresaId]);
 
-  useEffect(() => {
-    setTarefaConcluida(false);
-  }, [tipo]);
-
-  // 5) geolocalização
+  // ---------- Geo ----------
   async function obterGeo(): Promise<GeoState | null> {
     if (!('geolocation' in navigator)) {
       setErr('Geolocalização não disponível neste dispositivo.');
@@ -368,7 +247,7 @@ export default function PontoPage() {
     });
   }
 
-  // 6) distância (haversine)
+  // haversine
   function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
     const toRad = (v: number) => (v * Math.PI) / 180;
@@ -376,88 +255,70 @@ export default function PontoPage() {
     const dLon = toRad(lon2 - lon1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
-  // 7) validação de raio (usa lat/lng/radius_m do DB)
-  function validarRaio(g: GeoState) {
+  function validarRaioPorRoteiro(g: GeoState, r: RoteiroHojeRow) {
     if (g.lat == null || g.lon == null) return { ok: true, motivo: 'Sem geo' };
 
-    if (!locais.length) {
-      return { ok: true, motivo: 'Sem locais configurados; ponto registado sem validação de raio.' };
-    }
+    // Se o roteiro tem local com lat/lng/raio, valida por ele (mais correto pro negócio)
+    if (r.local_lat != null && r.local_lng != null) {
+      const d = distanceMeters(g.lat, g.lon, Number(r.local_lat), Number(r.local_lng));
+      const raio = Number(r.local_radius_m ?? 0);
 
-    let melhor: { local: LocalPermitido | null; distancia: number } = {
-      local: null,
-      distancia: Infinity,
-    };
+      if (raio > 0 && d > raio) {
+        return {
+          ok: false,
+          motivo: `Fora da zona permitida. Distância ~${d.toFixed(1)}m (raio permitido ${raio}m).`,
+          dist: d,
+          raio,
+        };
+      }
 
-    locais.forEach((loc) => {
-      if (loc.lat == null || loc.lng == null) return;
-      const d = distanceMeters(g.lat as number, g.lon as number, Number(loc.lat), Number(loc.lng));
-      if (d < melhor.distancia) melhor = { local: loc, distancia: d };
-    });
-
-    if (!melhor.local) {
-      return { ok: true, motivo: 'Locais configurados sem lat/lng; ponto registado sem validação de raio.' };
-    }
-
-    const raio = Number(melhor.local.radius_m ?? 0);
-
-    if (raio > 0 && melhor.distancia > raio) {
       return {
-        ok: false,
-        motivo: `Fora da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio permitido ${raio}m).`,
+        ok: true,
+        motivo: `Dentro da zona permitida. Distância ~${d.toFixed(1)}m (raio ${raio}m).`,
+        dist: d,
+        raio,
       };
     }
 
-    return {
-      ok: true,
-      motivo: `Dentro da zona permitida. Distância ~${melhor.distancia.toFixed(1)}m (raio ${raio}m).`,
-      localId: melhor.local.id,
-      distancia: melhor.distancia,
-    };
+    // Sem coordenadas no local do roteiro: não bloqueia
+    return { ok: true, motivo: 'Local do roteiro sem lat/lng; ponto registado sem validação de raio.' };
   }
 
-  function validarSequencia(tipoAtual: TipoPonto): { ok: boolean; msg?: string } {
-    const last = ultimos[0]?.tipo ?? null;
-    const allowed = nextAllowedTipos(last);
-    if (!allowed.includes(tipoAtual)) {
-      const prox = allowed.map(labelTipo).join(' / ');
-      const lastLabel = labelTipo(last);
-      return {
-        ok: false,
-        msg: `Sequência de ponto inválida. Último registo: ${lastLabel}. Próximo permitido: ${prox}.`,
-      };
+  // ---------- Ação: Check-in / Check-out ----------
+  async function iniciarAcao(roteiro: RoteiroHojeRow, tipo: TipoPonto) {
+    setErr(null);
+    setMsg(null);
+    setPhotoPreview(null);
+    setRoteiroSelecionado(roteiro);
+    setAcaoTipo(tipo);
+
+    // Foto obrigatória só para entrada e saida (1 e 4 da atividade)
+    if (fileInputRef.current) fileInputRef.current.click();
+  }
+
+  async function baterPontoComFoto(file: File) {
+    if (!roteiroSelecionado) {
+      setErr('Selecione um roteiro.');
+      return;
     }
-    return { ok: true };
-  }
 
-  // 8) fluxo central de bater ponto (agora aceita foto)
-  async function baterPonto(photoFile?: File | null) {
-    if (!usuarioId || !empresaId) return;
     setBatendo(true);
     setErr(null);
     setMsg(null);
 
     try {
-      if (isDiaFinalizado()) {
-        setErr('Dia já finalizado. Aguarde a próxima tarefa.');
-        return;
-      }
-
-      const seq = validarSequencia(tipo);
-      if (!seq.ok) {
-        setErr(seq.msg || 'Sequência de ponto inválida.');
-        return;
-      }
-
       const g = await obterGeo();
       if (!g) return;
 
-      const raioCheck = validarRaio(g);
+      const raioCheck = validarRaioPorRoteiro(g, roteiroSelecionado);
       if (!raioCheck.ok) {
         setErr(
           `Não foi possível registar ponto: ${raioCheck.motivo} ` +
@@ -466,18 +327,8 @@ export default function PontoPage() {
         return;
       }
 
-      const exigeFoto =
-        tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco';
-
-      let fotoInfo: { bucket: string; path: string; publicUrl: string | null } | null = null;
-
-      if (exigeFoto) {
-        if (!photoFile) {
-          setErr('Foto obrigatória. Abra a câmara e tire a foto para continuar.');
-          return;
-        }
-        fotoInfo = await uploadFoto(photoFile, tipo);
-      }
+      // upload foto
+      const fotoInfo = await uploadFoto(file, roteiroSelecionado.id, acaoTipo);
 
       const meta: Record<string, any> = {
         origem: 'externo-web',
@@ -486,75 +337,33 @@ export default function PontoPage() {
         lon: g.lon,
         accuracy: g.accuracy,
         raio_validacao: raioCheck.motivo,
+        roteiro_id: roteiroSelecionado.id,
+        tarefa_id: roteiroSelecionado.tarefa_id,
+        tarefa_nome: roteiroSelecionado.tarefa_nome,
+        roteiro_local_id: roteiroSelecionado.local_id,
+        roteiro_local_nome: roteiroSelecionado.local_nome,
+        foto_bucket: fotoInfo.bucket,
+        foto_path: fotoInfo.path,
+        foto_capturada: true,
       };
-
-      if (fotoInfo) {
-        meta.foto_bucket = fotoInfo.bucket;
-        meta.foto_path = fotoInfo.path;
-        meta.foto_url = fotoInfo.publicUrl; // se bucket for público
-        meta.foto_capturada = true; // compat p/ auditoria
-      }
-
-      if (raioCheck.localId) {
-        meta.local_id = raioCheck.localId;
-        meta.dist_m = raioCheck.distancia;
-      }
-
-      if (tipo === 'entrada') meta.foto_checkin = true;
-      if (tipo === 'saida') meta.foto_checkout = true;
-      if (tipo === 'saida_almoco') meta.foto_saida_almoco = true;
-      if (tipo === 'retorno_almoco') meta.foto_retorno_almoco = true;
 
       const just = justificativa.trim();
       if (just) meta.justificativa = just;
 
-      // *** Regra: na SAÍDA a tarefa vem do roteiro (ou contingência) ***
-      if (tipo === 'saida') {
-        // Contingência: permite saída sem roteiro, mas exige justificativa
-        if (!roteiroHoje?.tarefa_id) {
-          if (!just) {
-            setErr('Sem roteiro atribuído para hoje. Para finalizar, informe uma justificativa.');
-            return;
-          }
-
-          meta.contingencia = true;
-          meta.motivo_contingencia = 'sem_roteiro';
-          meta.tarefa_concluida = null;
-        } else {
-          // Fluxo normal com roteiro fixo + confirmação
-          if (!tarefaConcluida) {
-            if (!just) {
-              setErr('Para finalizar sem concluir a tarefa, é obrigatória uma justificativa.');
-              return;
-            }
-            meta.tarefa_concluida = false;
-          } else {
-            meta.tarefa_concluida = true;
-          }
-
-          meta.tarefa_id = roteiroHoje.tarefa_id;
-          meta.tarefa_nome = roteiroHoje.tarefa_nome;
-
-          if (roteiroHoje.local_id) meta.roteiro_local_id = roteiroHoje.local_id;
-          if (roteiroHoje.local_nome) meta.roteiro_local_nome = roteiroHoje.local_nome;
-        }
-      }
-
-      // ✅ chama RPC sem passar usuario/empresa (evita RLS quebrar no mobile)
       const { error } = await supa.rpc('rpc_ponto_bater', {
-        p_tipo: tipo,
+        p_tipo: acaoTipo, // 'entrada' | 'saida'
         p_meta: meta,
+        p_roteiro_id: roteiroSelecionado.id,
       });
 
       if (error) throw error;
 
-      setMsg('Ponto registado com sucesso.');
-      setPhotoPreview(null);
+      setMsg(acaoTipo === 'entrada' ? 'Check-in registado com sucesso.' : 'Check-out registado com sucesso.');
       setJustificativa('');
-      setTarefaConcluida(false);
+      setPhotoPreview(null);
+      setRoteiroSelecionado(null);
 
-      await carregarUltimos();
-      await carregarRoteiroHoje();
+      await carregarRoteirosHoje();
     } catch (e: any) {
       console.error('Erro ao bater ponto', e);
       setErr(e?.message || 'Falha ao registar ponto.');
@@ -563,23 +372,6 @@ export default function PontoPage() {
     }
   }
 
-  // 9) handler do botão único
-  async function handleBaterClick() {
-    setErr(null);
-    setMsg(null);
-
-    const exigeFoto =
-      tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco';
-
-    if (exigeFoto) {
-      if (fileInputRef.current) fileInputRef.current.click();
-      return;
-    }
-
-    await baterPonto();
-  }
-
-  // 10) onChange do input de foto
   async function onPhotoChange(e: any) {
     const file = e.target.files?.[0] || null;
     e.target.value = '';
@@ -596,7 +388,7 @@ export default function PontoPage() {
     };
     reader.readAsDataURL(file);
 
-    await baterPonto(file);
+    await baterPontoComFoto(file);
   }
 
   if (loadingUser) {
@@ -616,13 +408,6 @@ export default function PontoPage() {
     );
   }
 
-  const ultimoTipo = ultimos[0]?.tipo ?? null;
-  const allowedTipos = nextAllowedTipos(ultimoTipo);
-
-  const hojeStr = todayLocalStr();
-  const lastCreatedDay = ultimos[0]?.created_at ? localDateStrFromIso(ultimos[0].created_at) : null;
-  const diaFinalizado = lastCreatedDay === hojeStr && ultimos[0]?.tipo === 'saida';
-
   return (
     <main
       style={{
@@ -632,15 +417,8 @@ export default function PontoPage() {
         margin: '0 auto',
       }}
     >
-      {/* HEADER (padrão do histórico) + logo + botão */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          marginBottom: 12,
-        }}
-      >
+      {/* HEADER */}
+      <header style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <img
           src="https://cfremxfgqehqnbqummti.supabase.co/storage/v1/object/public/images/app-novo.png"
           alt="CONFIANCE"
@@ -658,15 +436,8 @@ export default function PontoPage() {
           >
             Confiance
           </div>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 900,
-              color: '#0e3258',
-              lineHeight: 1.1,
-            }}
-          >
-            Marcar ponto
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>
+            Roteiros de hoje
           </div>
         </div>
 
@@ -690,294 +461,207 @@ export default function PontoPage() {
         </a>
       </header>
 
-      {/* Subheader (mensagem clara) */}
+      {/* Subheader */}
       <header style={{ marginBottom: 12 }}>
-        <p
-          style={{
-            margin: '4px 0 0 0',
-            fontSize: 13,
-            color: '#49546A',
-          }}
-        >
-          {nome
-            ? `Olá, ${nome}. Registe aqui a sua entrada/saídas com foto e localização.`
-            : 'Registe aqui a sua entrada/saídas com foto e localização.'}
+        <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#49546A' }}>
+          {nome ? `Olá, ${nome}. Faça check-in e check-out com foto e localização.` : 'Faça check-in e check-out com foto e localização.'}
         </p>
       </header>
 
-      {/* Status: validação de local */}
-      <section
-        className="card"
-        style={{
-          border: '1px solid #E9EEF7',
-          borderRadius: 16,
-          padding: 16,
-          background: '#fff',
-          boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
-          marginBottom: 12,
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#0e3258', marginBottom: 6 }}>
-          Validação de local
+      {/* Input foto escondido */}
+      <input
+        ref={fileInputRef}
+        id="foto-ponto-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onPhotoChange}
+        style={{ display: 'none' }}
+      />
+
+      {/* Lista de roteiros */}
+      <section className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <h2 className="h2" style={{ margin: 0 }}>
+            Atividades do dia
+          </h2>
+
+          <button
+            className="btn btn-ghost"
+            onClick={carregarRoteirosHoje}
+            disabled={loadingRoteiros || batendo}
+          >
+            {loadingRoteiros ? 'Atualizando…' : 'Atualizar'}
+          </button>
         </div>
 
-        {loadingLocais ? (
-          <p className="muted">A carregar configuração de locais…</p>
-        ) : locais.length ? (
-          <p className="muted">
-            Ativa. Existem {locais.length} local(is) configurado(s) e o ponto é validado por raio.
-          </p>
-        ) : (
-          <p className="muted">
-            Desativada. Ainda não existem locais configurados; o ponto será registado sem validação
-            de raio.
+        {loadingRoteiros && <p className="muted" style={{ marginTop: 10 }}>A carregar roteiros…</p>}
+
+        {!loadingRoteiros && !roteirosHoje.length && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            Nenhuma atividade atribuída para hoje.
           </p>
         )}
-      </section>
 
-      {/* Roteiro do dia */}
-      <section
-        className="card"
-        style={{
-          border: '1px solid #E9EEF7',
-          borderRadius: 16,
-          padding: 16,
-          background: '#fff',
-          boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 800, color: '#0e3258', marginBottom: 6 }}>
-          Roteiro de hoje
-        </div>
+        {!!roteirosHoje.length && (
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {roteirosHoje.map((r) => {
+              const st = r.status || 'planeado';
+              const podeEntrada = st === 'planeado';
+              const podeSaida = st === 'em_andamento';
+              const concluido = st === 'executado';
 
-        {diaFinalizado ? (
-          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
-            <p className="muted" style={{ margin: 0 }}>
-              <strong>Tarefa finalizada.</strong> Aguarde a próxima tarefa.
-            </p>
-          </div>
-        ) : loadingRoteiro ? (
-          <p className="muted">A carregar roteiro do dia…</p>
-        ) : roteiroHoje ? (
-          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
-            <div>
-              <strong>Tarefa:</strong> {roteiroHoje.tarefa_nome}
-            </div>
-            <div style={{ marginTop: 4 }}>
-              <strong>Local:</strong> {roteiroHoje.local_nome || '—'}
-            </div>
-            <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-              Na <strong>Saída</strong>, esta tarefa fica fixa e você confirma a conclusão.
-            </p>
-          </div>
-        ) : (
-          <div style={{ fontSize: 13, color: '#3F4A5F' }}>
-            <p className="muted" style={{ margin: 0 }}>
-              Ainda não existe roteiro atribuído para hoje.
-            </p>
-            <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-              Se precisar finalizar o dia mesmo assim, a <strong>Saída</strong> funcionará em modo{' '}
-              <strong>contingência</strong> com justificativa obrigatória.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* FORM PRINCIPAL */}
-      <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
-        <h2 className="h2" style={{ marginBottom: 12 }}>
-          Bater ponto
-        </h2>
-
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div>
-            <label className="muted">Próximo tipo de registo</label>
-            <select
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value as TipoPonto)}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
-            >
-              {allowedTipos.map((t) => (
-                <option key={t} value={t}>
-                  {labelTipo(t)}
-                </option>
-              ))}
-            </select>
-
-            {ultimoTipo && (
-              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Último registo: <strong>{labelTipo(ultimoTipo)}</strong>. Sequência: Entrada → Saída
-                almoço → Retorno almoço → Saída.
-              </p>
-            )}
-            {!ultimoTipo && (
-              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                Primeiro registo do dia: <strong>Entrada</strong>.
-              </p>
-            )}
-          </div>
-
-          {/* Tarefa FIXA (obrigatória na SAÍDA quando existe roteiro) */}
-          {tipo === 'saida' && (
-            <div>
-              <label className="muted">Encerramento do dia</label>
-
-              {loadingRoteiro && (
-                <p className="muted" style={{ fontSize: 12 }}>
-                  A carregar roteiro do dia…
-                </p>
-              )}
-
-              {!loadingRoteiro && roteiroHoje && (
-                <>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      padding: 10,
-                      border: '1px solid var(--border)',
-                      borderRadius: 10,
-                      background: '#fff',
-                      fontSize: 13,
-                    }}
-                  >
-                    <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
-                      Tarefa atribuída (fixa)
-                    </div>
-                    <strong>{roteiroHoje.tarefa_nome}</strong>
-                    {roteiroHoje.local_nome ? (
-                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                        Local: {roteiroHoje.local_nome}
+              return (
+                <article
+                  key={r.id}
+                  style={{
+                    border: '1px solid #E9EEF7',
+                    borderRadius: 14,
+                    padding: 14,
+                    background: '#fff',
+                    boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258' }}>
+                        {r.tarefa_nome || 'Tarefa'}
                       </div>
-                    ) : null}
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                        Local: {r.local_nome || '—'}
+                      </div>
+                      {r.observacoes ? (
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                          Obs.: {r.observacoes}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        background: '#EEF3FF',
+                        color: '#0e3258',
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        border: '1px solid #D7E3FF',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {statusLabel(st)}
+                    </span>
                   </div>
 
-                  <label
-                    style={{
-                      display: 'flex',
-                      gap: 10,
-                      alignItems: 'center',
-                      marginTop: 10,
-                      fontSize: 13,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={tarefaConcluida}
-                      onChange={(e) => setTarefaConcluida(e.target.checked)}
-                    />
-                    <span>Confirmo que concluí a tarefa atribuída.</span>
-                  </label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    <button
+                      className="btn btn-primary"
+                      disabled={!podeEntrada || batendo}
+                      onClick={() => iniciarAcao(r, 'entrada')}
+                    >
+                      {batendo && roteiroSelecionado?.id === r.id && acaoTipo === 'entrada'
+                        ? 'A registar…'
+                        : 'Check-in'}
+                    </button>
 
-                  {!tarefaConcluida && (
-                    <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                      Se não concluiu, escreva uma justificativa abaixo (obrigatória quando não
-                      concluído).
-                    </p>
-                  )}
-                </>
-              )}
+                    <button
+                      className="btn btn-ghost"
+                      style={{
+                        background: '#FFD24D',
+                        border: 'none',
+                        fontWeight: 700,
+                        color: '#0e3258',
+                      }}
+                      disabled={!podeSaida || batendo}
+                      onClick={() => iniciarAcao(r, 'saida')}
+                    >
+                      {batendo && roteiroSelecionado?.id === r.id && acaoTipo === 'saida'
+                        ? 'A registar…'
+                        : 'Check-out'}
+                    </button>
 
-              {!loadingRoteiro && !roteiroHoje && (
-                <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                  Sem roteiro para hoje. Para finalizar, será exigida justificativa (contingência).
-                </p>
-              )}
-            </div>
-          )}
+                    {concluido && (
+                      <span className="muted" style={{ fontSize: 12, alignSelf: 'center' }}>
+                        Atividade finalizada.
+                      </span>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-          {/* input de foto escondido */}
-          <input
-            ref={fileInputRef}
-            id="foto-ponto-input"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={onPhotoChange}
-            style={{ display: 'none' }}
-          />
+      {/* Preview e justificativa */}
+      <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
+        <h2 className="h2" style={{ marginBottom: 12 }}>
+          Confirmar registo
+        </h2>
 
-          {(tipo === 'entrada' || tipo === 'saida' || tipo === 'saida_almoco' || tipo === 'retorno_almoco') && (
-            <>
-              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                Ao clicar em <strong>Bater ponto agora</strong>, a câmara será aberta. Tire a foto
-                no local (sem usar galeria). Após confirmar a foto, o ponto será registado
-                automaticamente.
-              </p>
-              {photoPreview && (
-                <div style={{ marginTop: 4 }}>
-                  <img
-                    src={photoPreview}
-                    alt="Pré-visualização"
-                    style={{
-                      maxWidth: '100%',
-                      maxHeight: 240,
-                      borderRadius: 8,
-                      border: '1px solid var(--border)',
-                    }}
-                  />
-                </div>
-              )}
-            </>
-          )}
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+          Ao clicar em Check-in/Check-out, a câmara será aberta. Após confirmar a foto, o registo é efetuado automaticamente.
+        </p>
 
-          {/* Justificativa */}
-          <div>
-            <label className="muted">Justificativa (quando necessário)</label>
-            <textarea
-              value={justificativa}
-              onChange={(e) => setJustificativa(e.target.value)}
-              rows={3}
-              placeholder="Use quando não concluir a tarefa, estiver fora do local, ou precisar finalizar sem roteiro."
+        {photoPreview && (
+          <div style={{ marginTop: 10 }}>
+            <img
+              src={photoPreview}
+              alt="Pré-visualização"
               style={{
-                width: '100%',
-                padding: 10,
+                maxWidth: '100%',
+                maxHeight: 260,
                 borderRadius: 10,
                 border: '1px solid var(--border)',
-                resize: 'vertical',
               }}
             />
           </div>
+        )}
 
-          {gettingGeo && <p className="muted">A obter localização do dispositivo…</p>}
-
-          {err && <p style={{ color: 'crimson' }}>{err}</p>}
-          {msg && <p style={{ color: 'green' }}>{msg}</p>}
-
-          <button
-            className="btn btn-primary"
-            onClick={handleBaterClick}
-            disabled={batendo || !usuarioId || !empresaId || diaFinalizado}
-          >
-            {batendo ? 'A registar…' : 'Bater ponto agora'}
-          </button>
-
-          <a
-            href="/ponto/historico"
-            className="btn btn-ghost"
+        <div style={{ marginTop: 12 }}>
+          <label className="muted">Justificativa (quando necessário)</label>
+          <textarea
+            value={justificativa}
+            onChange={(e) => setJustificativa(e.target.value)}
+            rows={3}
+            placeholder="Use se necessário."
             style={{
-              textDecoration: 'none',
-              padding: '10px 12px',
+              width: '100%',
+              padding: 10,
               borderRadius: 10,
               border: '1px solid var(--border)',
-              background: '#fff',
-              color: '#0e3258',
-              fontWeight: 700,
-              fontSize: 13,
-              textAlign: 'center',
+              resize: 'vertical',
             }}
-          >
-            Ver histórico
-          </a>
-
-          {loadingLista && <p className="muted">A atualizar estado do dia…</p>}
+          />
         </div>
+
+        {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
+        {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
+        {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
+
+        <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
+          Validação de localização ativa (quando configurada no roteiro).
+        </p>
+
+        <a
+          href="/ponto/historico"
+          className="btn btn-ghost"
+          style={{
+            display: 'inline-block',
+            marginTop: 8,
+            textDecoration: 'none',
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: '#fff',
+            color: '#0e3258',
+            fontWeight: 700,
+            fontSize: 13,
+            textAlign: 'center',
+          }}
+        >
+          Ver histórico
+        </a>
       </section>
     </main>
   );
