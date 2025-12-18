@@ -148,7 +148,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
           {(isAdmin || isGestor) && (
             <a href="/adm/ponto" style={linkStyle}>
-              Ponto (ADM)
+              Registo de Ponto
             </a>
           )}
 
