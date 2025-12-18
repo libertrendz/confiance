@@ -154,7 +154,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
           {(isAdmin || isGestor) && (
             <a href="/adm/roteiros" style={linkStyle}>
-              Roteiros de trabalho
+              Roteiros e Tarefas
             </a>
           )}
 
@@ -170,7 +170,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 Clientes
               </a>
               <a href="/adm/orcamentos" style={linkStyle}>
-                Orçamentos &amp; Contratos
+                Orçamentos e Contratos
               </a>
               <a href="/adm/financeiro" style={linkStyle}>
                 Financeiro
