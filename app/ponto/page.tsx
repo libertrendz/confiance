@@ -816,7 +816,7 @@ export default function PontoPage() {
           {/* Step 1 */}
           <StepRow
             title="1) Check-in"
-            desc="Foto + validação de localização."
+            desc="Registo com foto do local."
             done={jornada.checkin || regras.st === 'em_andamento' || regras.st === 'executado'}
             actionLabel="Fazer check-in"
             actionKind="primary"
@@ -827,7 +827,7 @@ export default function PontoPage() {
           {/* Step 2 */}
           <StepRow
             title="2) Saída almoço"
-            desc="Sem foto, com validação de localização."
+            desc="Registo da saída para almoçar."
             done={jornada.almocoOut}
             actionLabel="Registrar saída almoço"
             actionKind="ghost"
@@ -838,7 +838,7 @@ export default function PontoPage() {
           {/* Step 3 */}
           <StepRow
             title="3) Retorno almoço"
-            desc="Sem foto, com validação de localização."
+            desc="Registo do retorno ao trabalho."
             done={jornada.almocoIn}
             actionLabel="Registrar retorno almoço"
             actionKind="ghost"
@@ -849,7 +849,7 @@ export default function PontoPage() {
           {/* Step 4 */}
           <StepRow
             title="4) Check-out"
-            desc="Foto + validação de localização + conclusão da tarefa."
+            desc="Registo com foto do local + conclusão de tarefa."
             done={jornada.checkout || regras.st === 'executado'}
             actionLabel={regras.bloqueioCheckoutPorAlmoco ? 'Retorne do almoço primeiro' : 'Fazer check-out'}
             actionKind="accent"
