@@ -408,7 +408,7 @@ export default function MenuPage() {
                     color: '#0e3258',
                   }}
                 >
-                  {diaFinalizado ? 'Dia finalizado' : 'Dia em aberto'}
+                  {diaFinalizado ? 'Atividade finalizada' : 'Atividade em aberto'}
                 </span>
               </div>
             )}
