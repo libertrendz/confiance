@@ -11,16 +11,28 @@ type RoteiroRow = {
   usuario_id: string;
   data_dia: string;
   data_fim: string | null;
+
+  // status do roteiro
   status: string | null;
+
   local_label: string | null;
   observacoes: string | null;
   tarefa_id: string;
   tarefa_nome: string | null;
   local_nome: string | null;
 
+  // auditoria / evidências (preferência: colunas no ponto_roteiros)
   foto_bucket: string | null;
   foto_checkin_path: string | null;
   foto_checkout_path: string | null;
+
+  // almoço do dia (se você guardar no roteiro, ótimo p/ auditoria)
+  almoco_saida_at: string | null;
+  almoco_retorno_at: string | null;
+
+  // conclusão/justificativa (ideal no checkout)
+  tarefa_concluida: boolean | null;
+  justificativa: string | null;
 };
 
 function statusLabel(s: string | null) {
@@ -33,6 +45,21 @@ function statusLabel(s: string | null) {
       return 'Executado';
     default:
       return s || '—';
+  }
+}
+
+function yesNoNA(v: boolean | null | undefined) {
+  if (v === true) return 'Sim';
+  if (v === false) return 'Não';
+  return '—';
+}
+
+function fmtDate(d: string | null) {
+  if (!d) return '—';
+  try {
+    return new Date(d).toLocaleString();
+  } catch {
+    return d;
   }
 }
 
@@ -92,7 +119,6 @@ export default function RoteirosPage() {
       if (profErr) throw profErr;
 
       const eid = prof?.empresa_id ?? null;
-
       if (!eid) throw new Error('Perfil sem empresa_id. Contacte o administrador do sistema.');
 
       setEmpresaId(eid);
@@ -163,9 +189,16 @@ export default function RoteirosPage() {
           local_label,
           observacoes,
           tarefa_id,
+
           foto_bucket,
           foto_checkin_path,
           foto_checkout_path,
+
+          almoco_saida_at,
+          almoco_retorno_at,
+          tarefa_concluida,
+          justificativa,
+
           tarefas_padrao ( nome ),
           locais_permitidos ( nome )
         `
@@ -191,6 +224,11 @@ export default function RoteirosPage() {
         foto_bucket: r.foto_bucket ?? 'ponto-fotos',
         foto_checkin_path: r.foto_checkin_path ?? null,
         foto_checkout_path: r.foto_checkout_path ?? null,
+
+        almoco_saida_at: r.almoco_saida_at ?? null,
+        almoco_retorno_at: r.almoco_retorno_at ?? null,
+        tarefa_concluida: typeof r.tarefa_concluida === 'boolean' ? r.tarefa_concluida : null,
+        justificativa: r.justificativa ?? null,
       }));
 
       setLista(mapped);
@@ -263,7 +301,6 @@ export default function RoteirosPage() {
 
   async function abrirFoto(bucket: string, path: string) {
     try {
-      // 10 min
       const { data, error } = await supa.storage.from(bucket).createSignedUrl(path, 60 * 10);
       if (error) throw error;
       const url = data?.signedUrl;
@@ -328,13 +365,13 @@ export default function RoteirosPage() {
         </div>
       </header>
 
-      {/* FORM NOVO ROTEIRO */}
+      {/* FORM */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
           Novo roteiro
         </h2>
         <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Defina colaborador, tarefa, período e local de trabalho. O status evolui automaticamente: Planeado → Em andamento → Executado.
+          Defina colaborador, tarefa, período e local. O status evolui automaticamente: Planeado → Em andamento → Executado.
         </p>
 
         <form
@@ -460,14 +497,24 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Data início</th>
                   <th style={{ padding: 8 }}>Data fim</th>
-                  <th style={{ padding: 8 }}>Status</th>
-                  <th style={{ padding: 8 }}>Fotos</th>
                   <th style={{ padding: 8 }}>Observações</th>
+                  <th style={{ padding: 8 }}>Status</th>
+
+                  <th style={{ padding: 8 }}>Check-in</th>
+                  <th style={{ padding: 8 }}>Saída almoço</th>
+                  <th style={{ padding: 8 }}>Retorno almoço</th>
+                  <th style={{ padding: 8 }}>Check-out</th>
+
+                  <th style={{ padding: 8 }}>Tarefa concluída?</th>
+                  <th style={{ padding: 8 }}>Justificativa</th>
                 </tr>
               </thead>
               <tbody>
                 {lista.map((r) => {
                   const bucket = r.foto_bucket || 'ponto-fotos';
+                  const checkinOk = !!r.foto_checkin_path;
+                  const checkoutOk = !!r.foto_checkout_path;
+
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
                       <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
@@ -475,6 +522,7 @@ export default function RoteirosPage() {
                       <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
+                      <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
 
                       <td style={{ padding: 8 }}>
                         <span
@@ -494,27 +542,66 @@ export default function RoteirosPage() {
                       </td>
 
                       <td style={{ padding: 8 }}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <span style={{ fontWeight: 900, color: checkinOk ? '#0e3258' : '#7a8699' }}>
+                            {checkinOk ? '✓' : '⏳'}
+                          </span>
                           <button
                             className="btn btn-ghost"
                             type="button"
                             disabled={!r.foto_checkin_path}
                             onClick={() => r.foto_checkin_path && abrirFoto(bucket, r.foto_checkin_path)}
                           >
-                            Ver check-in
+                            Ver foto
                           </button>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: 8 }}>
+                        <span style={{ fontWeight: 900, color: r.almoco_saida_at ? '#0e3258' : '#7a8699' }}>
+                          {r.almoco_saida_at ? '✓' : '⏳'}
+                        </span>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          {r.almoco_saida_at ? fmtDate(r.almoco_saida_at) : ''}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: 8 }}>
+                        <span style={{ fontWeight: 900, color: r.almoco_retorno_at ? '#0e3258' : '#7a8699' }}>
+                          {r.almoco_retorno_at ? '✓' : '⏳'}
+                        </span>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          {r.almoco_retorno_at ? fmtDate(r.almoco_retorno_at) : ''}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <span style={{ fontWeight: 900, color: checkoutOk ? '#0e3258' : '#7a8699' }}>
+                            {checkoutOk ? '✓' : '⏳'}
+                          </span>
                           <button
                             className="btn btn-ghost"
                             type="button"
                             disabled={!r.foto_checkout_path}
                             onClick={() => r.foto_checkout_path && abrirFoto(bucket, r.foto_checkout_path)}
                           >
-                            Ver check-out
+                            Ver foto
                           </button>
                         </div>
                       </td>
 
-                      <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
+                      <td style={{ padding: 8 }}>
+                        {r.status === 'executado' ? yesNoNA(r.tarefa_concluida) : '—'}
+                      </td>
+
+                      <td style={{ padding: 8, maxWidth: 320 }}>
+                        {r.status === 'executado'
+                          ? r.tarefa_concluida === false
+                            ? r.justificativa || '—'
+                            : 'N/A'
+                          : '—'}
+                      </td>
                     </tr>
                   );
                 })}
@@ -526,6 +613,12 @@ export default function RoteirosPage() {
         {loading && (
           <p className="muted" style={{ marginTop: 8 }}>
             A carregar roteiros…
+          </p>
+        )}
+
+        {!!err && (
+          <p style={{ color: 'crimson', marginTop: 10 }}>
+            {err}
           </p>
         )}
       </section>
