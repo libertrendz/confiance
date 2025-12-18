@@ -11,26 +11,21 @@ type RoteiroRow = {
   usuario_id: string;
   data_dia: string;
   data_fim: string | null;
-
-  // status do roteiro
   status: string | null;
-
   local_label: string | null;
   observacoes: string | null;
   tarefa_id: string;
   tarefa_nome: string | null;
+  local_id: string | null;
   local_nome: string | null;
 
-  // auditoria / evidências (preferência: colunas no ponto_roteiros)
   foto_bucket: string | null;
   foto_checkin_path: string | null;
   foto_checkout_path: string | null;
 
-  // almoço do dia (se você guardar no roteiro, ótimo p/ auditoria)
   almoco_saida_at: string | null;
   almoco_retorno_at: string | null;
 
-  // conclusão/justificativa (ideal no checkout)
   tarefa_concluida: boolean | null;
   justificativa: string | null;
 };
@@ -45,21 +40,6 @@ function statusLabel(s: string | null) {
       return 'Executado';
     default:
       return s || '—';
-  }
-}
-
-function yesNoNA(v: boolean | null | undefined) {
-  if (v === true) return 'Sim';
-  if (v === false) return 'Não';
-  return '—';
-}
-
-function fmtDate(d: string | null) {
-  if (!d) return '—';
-  try {
-    return new Date(d).toLocaleString();
-  } catch {
-    return d;
   }
 }
 
@@ -83,6 +63,8 @@ export default function RoteirosPage() {
   }, [colabOpts]);
 
   const [salvando, setSalvando] = useState(false);
+
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<{
     usuario_id: string;
     tarefa_id: string;
@@ -98,6 +80,31 @@ export default function RoteirosPage() {
     data_fim: '',
     observacoes: '',
   });
+
+  function resetForm() {
+    setEditId(null);
+    setForm({
+      usuario_id: '',
+      tarefa_id: '',
+      local_id: '',
+      data_dia: '',
+      data_fim: '',
+      observacoes: '',
+    });
+  }
+
+  function preencherParaEditar(r: RoteiroRow) {
+    setEditId(r.id);
+    setForm({
+      usuario_id: r.usuario_id,
+      tarefa_id: r.tarefa_id,
+      local_id: r.local_id || '',
+      data_dia: r.data_dia || '',
+      data_fim: r.data_fim || '',
+      observacoes: r.observacoes || '',
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   async function carregarEmpresaDoAdmin() {
     setLoadingEmpresa(true);
@@ -189,6 +196,7 @@ export default function RoteirosPage() {
           local_label,
           observacoes,
           tarefa_id,
+          local_id,
 
           foto_bucket,
           foto_checkin_path,
@@ -205,7 +213,7 @@ export default function RoteirosPage() {
         )
         .eq('empresa_id', eid)
         .order('data_dia', { ascending: false })
-        .limit(200);
+        .limit(300);
 
       if (error) throw error;
 
@@ -219,6 +227,7 @@ export default function RoteirosPage() {
         observacoes: r.observacoes,
         tarefa_id: r.tarefa_id,
         tarefa_nome: r.tarefas_padrao?.nome ?? null,
+        local_id: r.local_id ?? null,
         local_nome: r.locais_permitidos?.nome ?? null,
 
         foto_bucket: r.foto_bucket ?? 'ponto-fotos',
@@ -227,6 +236,7 @@ export default function RoteirosPage() {
 
         almoco_saida_at: r.almoco_saida_at ?? null,
         almoco_retorno_at: r.almoco_retorno_at ?? null,
+
         tarefa_concluida: typeof r.tarefa_concluida === 'boolean' ? r.tarefa_concluida : null,
         justificativa: r.justificativa ?? null,
       }));
@@ -241,7 +251,7 @@ export default function RoteirosPage() {
     }
   }
 
-  async function criarRoteiro(e: React.FormEvent) {
+  async function criarOuEditarRoteiro(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
 
@@ -263,31 +273,53 @@ export default function RoteirosPage() {
         tarefa_id: form.tarefa_id,
         local_id: form.local_id,
         data_dia: form.data_dia,
-        status: 'planeado',
         observacoes: form.observacoes || null,
       };
 
       if (form.data_fim) payload.data_fim = form.data_fim;
 
-      const { error } = await supa.from('ponto_roteiros').insert(payload);
-      if (error) throw error;
+      if (editId) {
+        const { error } = await supa
+          .from('ponto_roteiros')
+          .update(payload)
+          .eq('id', editId)
+          .eq('empresa_id', empresaId);
 
-      setForm({
-        usuario_id: '',
-        tarefa_id: '',
-        local_id: '',
-        data_dia: '',
-        data_fim: '',
-        observacoes: '',
-      });
+        if (error) throw error;
+        alert('Roteiro atualizado com sucesso.');
+      } else {
+        payload.status = 'planeado';
+        const { error } = await supa.from('ponto_roteiros').insert(payload);
+        if (error) throw error;
+        alert('Roteiro criado com sucesso.');
+      }
 
+      resetForm();
       await loadLista(empresaId);
-      alert('Roteiro criado com sucesso.');
     } catch (e: any) {
-      console.error('Erro ao criar roteiro', e);
-      setErr(e?.message || 'Falha ao criar roteiro.');
+      console.error('Erro ao salvar roteiro', e);
+      setErr(e?.message || 'Falha ao salvar roteiro.');
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function excluirRoteiro(id: string) {
+    if (!empresaId) return;
+    const ok = window.confirm('Tem certeza que deseja excluir este roteiro?');
+    if (!ok) return;
+
+    setErr(null);
+    try {
+      const { error } = await supa.from('ponto_roteiros').delete().eq('id', id).eq('empresa_id', empresaId);
+      if (error) throw error;
+
+      if (editId === id) resetForm();
+      await loadLista(empresaId);
+      alert('Roteiro excluído.');
+    } catch (e: any) {
+      console.error('Erro ao excluir roteiro', e);
+      setErr(e?.message || 'Falha ao excluir roteiro.');
     }
   }
 
@@ -333,6 +365,7 @@ export default function RoteirosPage() {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 16,
+          gap: 12,
         }}
       >
         <div>
@@ -353,7 +386,7 @@ export default function RoteirosPage() {
               background: '#FFD24D',
               color: '#0e3258',
               border: 'none',
-              fontWeight: 500,
+              fontWeight: 700,
             }}
           >
             Locais permitidos →
@@ -365,17 +398,17 @@ export default function RoteirosPage() {
         </div>
       </header>
 
-      {/* FORM */}
+      {/* FORM NOVO/EDITAR ROTEIRO */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
-          Novo roteiro
+          {editId ? 'Editar roteiro' : 'Novo roteiro'}
         </h2>
         <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Defina colaborador, tarefa, período e local. O status evolui automaticamente: Planeado → Em andamento → Executado.
+          Status evolui automaticamente: Planeado → Em andamento → Executado.
         </p>
 
         <form
-          onSubmit={criarRoteiro}
+          onSubmit={criarOuEditarRoteiro}
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -471,9 +504,14 @@ export default function RoteirosPage() {
             </p>
           )}
 
-          <div style={{ gridColumn: '1 / -1', textAlign: 'right', marginTop: 4 }}>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            {editId && (
+              <button type="button" className="btn btn-ghost" onClick={resetForm}>
+                Cancelar
+              </button>
+            )}
             <button className="btn btn-primary" type="submit" disabled={salvando || !empresaId || loadingEmpresa}>
-              {salvando ? 'A criar…' : 'Criar roteiro'}
+              {salvando ? 'A salvar…' : editId ? 'Salvar alterações' : 'Criar roteiro'}
             </button>
           </div>
         </form>
@@ -497,23 +535,31 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Data início</th>
                   <th style={{ padding: 8 }}>Data fim</th>
-                  <th style={{ padding: 8 }}>Observações</th>
                   <th style={{ padding: 8 }}>Status</th>
 
-                  <th style={{ padding: 8 }}>Check-in</th>
-                  <th style={{ padding: 8 }}>Saída almoço</th>
-                  <th style={{ padding: 8 }}>Retorno almoço</th>
-                  <th style={{ padding: 8 }}>Check-out</th>
+                  <th style={{ padding: 8, textAlign: 'center' }}>Check-in</th>
+                  <th style={{ padding: 8, textAlign: 'center' }}>Saída almoço</th>
+                  <th style={{ padding: 8, textAlign: 'center' }}>Retorno almoço</th>
+                  <th style={{ padding: 8, textAlign: 'center' }}>Check-out</th>
 
-                  <th style={{ padding: 8 }}>Tarefa concluída?</th>
+                  <th style={{ padding: 8 }}>Concluída?</th>
                   <th style={{ padding: 8 }}>Justificativa</th>
+                  <th style={{ padding: 8 }}>Observações</th>
+                  <th style={{ padding: 8 }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {lista.map((r) => {
                   const bucket = r.foto_bucket || 'ponto-fotos';
-                  const checkinOk = !!r.foto_checkin_path;
-                  const checkoutOk = !!r.foto_checkout_path;
+
+                  const temCheckin = !!r.foto_checkin_path;
+                  const temCheckout = !!r.foto_checkout_path;
+
+                  const almocoSaidaOk = !!r.almoco_saida_at;
+                  const almocoRetornoOk = !!r.almoco_retorno_at;
+
+                  const concl =
+                    r.tarefa_concluida === true ? 'Sim' : r.tarefa_concluida === false ? 'Não' : '—';
 
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
@@ -522,7 +568,6 @@ export default function RoteirosPage() {
                       <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
-                      <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
 
                       <td style={{ padding: 8 }}>
                         <span
@@ -541,66 +586,55 @@ export default function RoteirosPage() {
                         </span>
                       </td>
 
+                      {/* Check-in */}
+                      <td style={{ padding: 8, textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={!temCheckin}
+                          onClick={() => r.foto_checkin_path && abrirFoto(bucket, r.foto_checkin_path)}
+                          style={photoBtnStyle(temCheckin)}
+                        >
+                          Ver foto
+                        </button>
+                      </td>
+
+                      {/* Saída almoço */}
+                      <td style={{ padding: 8, textAlign: 'center' }}>
+                        <span style={centerIconStyle}>{almocoSaidaOk ? '✅' : '⏳'}</span>
+                      </td>
+
+                      {/* Retorno almoço */}
+                      <td style={{ padding: 8, textAlign: 'center' }}>
+                        <span style={centerIconStyle}>{almocoRetornoOk ? '✅' : '⏳'}</span>
+                      </td>
+
+                      {/* Check-out */}
+                      <td style={{ padding: 8, textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={!temCheckout}
+                          onClick={() => r.foto_checkout_path && abrirFoto(bucket, r.foto_checkout_path)}
+                          style={photoBtnStyle(temCheckout)}
+                        >
+                          Ver foto
+                        </button>
+                      </td>
+
+                      <td style={{ padding: 8 }}>{concl}</td>
+                      <td style={{ padding: 8, maxWidth: 240 }}>{r.justificativa || '—'}</td>
+                      <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
+
                       <td style={{ padding: 8 }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <span style={{ fontWeight: 900, color: checkinOk ? '#0e3258' : '#7a8699' }}>
-                            {checkinOk ? '✓' : '⏳'}
-                          </span>
-                          <button
-                            className="btn btn-ghost"
-                            type="button"
-                            disabled={!r.foto_checkin_path}
-                            onClick={() => r.foto_checkin_path && abrirFoto(bucket, r.foto_checkin_path)}
-                          >
-                            Ver foto
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button className="btn btn-ghost" type="button" onClick={() => preencherParaEditar(r)}>
+                            Editar
+                          </button>
+                          <button className="btn btn-ghost" type="button" onClick={() => excluirRoteiro(r.id)}>
+                            Excluir
                           </button>
                         </div>
-                      </td>
-
-                      <td style={{ padding: 8 }}>
-                        <span style={{ fontWeight: 900, color: r.almoco_saida_at ? '#0e3258' : '#7a8699' }}>
-                          {r.almoco_saida_at ? '✓' : '⏳'}
-                        </span>
-                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                          {r.almoco_saida_at ? fmtDate(r.almoco_saida_at) : ''}
-                        </div>
-                      </td>
-
-                      <td style={{ padding: 8 }}>
-                        <span style={{ fontWeight: 900, color: r.almoco_retorno_at ? '#0e3258' : '#7a8699' }}>
-                          {r.almoco_retorno_at ? '✓' : '⏳'}
-                        </span>
-                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                          {r.almoco_retorno_at ? fmtDate(r.almoco_retorno_at) : ''}
-                        </div>
-                      </td>
-
-                      <td style={{ padding: 8 }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <span style={{ fontWeight: 900, color: checkoutOk ? '#0e3258' : '#7a8699' }}>
-                            {checkoutOk ? '✓' : '⏳'}
-                          </span>
-                          <button
-                            className="btn btn-ghost"
-                            type="button"
-                            disabled={!r.foto_checkout_path}
-                            onClick={() => r.foto_checkout_path && abrirFoto(bucket, r.foto_checkout_path)}
-                          >
-                            Ver foto
-                          </button>
-                        </div>
-                      </td>
-
-                      <td style={{ padding: 8 }}>
-                        {r.status === 'executado' ? yesNoNA(r.tarefa_concluida) : '—'}
-                      </td>
-
-                      <td style={{ padding: 8, maxWidth: 320 }}>
-                        {r.status === 'executado'
-                          ? r.tarefa_concluida === false
-                            ? r.justificativa || '—'
-                            : 'N/A'
-                          : '—'}
                       </td>
                     </tr>
                   );
@@ -613,12 +647,6 @@ export default function RoteirosPage() {
         {loading && (
           <p className="muted" style={{ marginTop: 8 }}>
             A carregar roteiros…
-          </p>
-        )}
-
-        {!!err && (
-          <p style={{ color: 'crimson', marginTop: 10 }}>
-            {err}
           </p>
         )}
       </section>
@@ -638,3 +666,37 @@ const selectStyle: React.CSSProperties = {
   ...inputStyle,
   appearance: 'auto',
 };
+
+const centerIconStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  borderRadius: 999,
+  border: '1px solid #E9EEF7',
+  background: '#fff',
+};
+
+function photoBtnStyle(enabled: boolean): React.CSSProperties {
+  if (!enabled) {
+    return {
+      padding: '8px 10px',
+      borderRadius: 10,
+      border: '1px solid var(--border)',
+      background: '#fff',
+      opacity: 0.5,
+      cursor: 'not-allowed',
+      fontWeight: 800,
+    };
+  }
+  return {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: '1px solid #BDECCB',
+    background: '#E9FBEF', // verde suave
+    color: '#0e3258',
+    fontWeight: 900,
+    cursor: 'pointer',
+  };
+}
