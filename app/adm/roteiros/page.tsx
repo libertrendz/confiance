@@ -11,13 +11,30 @@ type RoteiroRow = {
   usuario_id: string;
   data_dia: string;
   data_fim: string | null;
-  status: string;
+  status: string | null;
   local_label: string | null;
   observacoes: string | null;
   tarefa_id: string;
   tarefa_nome: string | null;
   local_nome: string | null;
+
+  foto_bucket: string | null;
+  foto_checkin_path: string | null;
+  foto_checkout_path: string | null;
 };
+
+function statusLabel(s: string | null) {
+  switch (s) {
+    case 'planeado':
+      return 'Planeado';
+    case 'em_andamento':
+      return 'Em andamento';
+    case 'executado':
+      return 'Executado';
+    default:
+      return s || '—';
+  }
+}
 
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
@@ -76,9 +93,7 @@ export default function RoteirosPage() {
 
       const eid = prof?.empresa_id ?? null;
 
-      if (!eid) {
-        throw new Error('Perfil sem empresa_id. Contacte o administrador do sistema.');
-      }
+      if (!eid) throw new Error('Perfil sem empresa_id. Contacte o administrador do sistema.');
 
       setEmpresaId(eid);
     } catch (e: any) {
@@ -93,7 +108,6 @@ export default function RoteirosPage() {
   async function loadOptions(eid: string) {
     setErr(null);
     try {
-      // 1) Colaboradores (view definitiva)
       const { data: colabs, error: colabErr } = await supa
         .from('v_adm_colaboradores')
         .select('user_id, nome_exibicao, papel')
@@ -109,7 +123,6 @@ export default function RoteirosPage() {
         }))
       );
 
-      // 2) Tarefas padrão
       const { data: tarefas, error: tarefaErr } = await supa
         .from('tarefas_padrao')
         .select('id, nome')
@@ -119,7 +132,6 @@ export default function RoteirosPage() {
       if (tarefaErr) throw tarefaErr;
       setTarefaOpts((tarefas || []) as SelectOption[]);
 
-      // 3) Locais permitidos (por empresa + ativos)
       const { data: locais, error: localErr } = await supa
         .from('locais_permitidos')
         .select('id, nome')
@@ -151,6 +163,9 @@ export default function RoteirosPage() {
           local_label,
           observacoes,
           tarefa_id,
+          foto_bucket,
+          foto_checkin_path,
+          foto_checkout_path,
           tarefas_padrao ( nome ),
           locais_permitidos ( nome )
         `
@@ -166,12 +181,16 @@ export default function RoteirosPage() {
         usuario_id: r.usuario_id,
         data_dia: r.data_dia,
         data_fim: r.data_fim,
-        status: r.status,
+        status: r.status ?? null,
         local_label: r.local_label,
         observacoes: r.observacoes,
         tarefa_id: r.tarefa_id,
         tarefa_nome: r.tarefas_padrao?.nome ?? null,
         local_nome: r.locais_permitidos?.nome ?? null,
+
+        foto_bucket: r.foto_bucket ?? 'ponto-fotos',
+        foto_checkin_path: r.foto_checkin_path ?? null,
+        foto_checkout_path: r.foto_checkout_path ?? null,
       }));
 
       setLista(mapped);
@@ -201,7 +220,7 @@ export default function RoteirosPage() {
     setSalvando(true);
     try {
       const payload: any = {
-        empresa_id: empresaId, // ESSENCIAL p/ RLS
+        empresa_id: empresaId,
         usuario_id: form.usuario_id,
         tarefa_id: form.tarefa_id,
         local_id: form.local_id,
@@ -242,6 +261,19 @@ export default function RoteirosPage() {
     await Promise.all([loadOptions(empresaId), loadLista(empresaId)]);
   }
 
+  async function abrirFoto(bucket: string, path: string) {
+    try {
+      // 10 min
+      const { data, error } = await supa.storage.from(bucket).createSignedUrl(path, 60 * 10);
+      if (error) throw error;
+      const url = data?.signedUrl;
+      if (!url) throw new Error('Não foi possível gerar URL.');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      alert(e?.message || 'Falha ao abrir a foto.');
+    }
+  }
+
   useEffect(() => {
     (async () => {
       await carregarEmpresaDoAdmin();
@@ -271,22 +303,17 @@ export default function RoteirosPage() {
             Roteiros de trabalho
           </h1>
           <div className="muted" style={{ fontSize: 12 }}>
-            {loadingEmpresa
-              ? 'A carregar empresa…'
-              : empresaId
-              ? `Empresa: ${empresaId.slice(0, 8)}…`
-              : 'Empresa não carregada'}
+            {loadingEmpresa ? 'A carregar empresa…' : empresaId ? `Empresa: ${empresaId.slice(0, 8)}…` : 'Empresa não carregada'}
           </div>
         </div>
 
-        {/* ✅ Header actions: Locais (accent) + Recarregar (ghost) */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <a
             href="/adm/locais"
             className="btn btn-ghost"
             style={{
               textDecoration: 'none',
-              background: '#FFD24D', // accent igual ao menu externo
+              background: '#FFD24D',
               color: '#0e3258',
               border: 'none',
               fontWeight: 500,
@@ -307,8 +334,7 @@ export default function RoteirosPage() {
           Novo roteiro
         </h2>
         <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Defina colaborador, tarefa, período e local de trabalho. Estes dados serão usados no cálculo de presença
-          (geo/raio) e para associações de tarefas do dia.
+          Defina colaborador, tarefa, período e local de trabalho. O status evolui automaticamente: Planeado → Em andamento → Executado.
         </p>
 
         <form
@@ -319,7 +345,6 @@ export default function RoteirosPage() {
             gap: 12,
           }}
         >
-          {/* Colaborador */}
           <div>
             <label className="muted">Colaborador</label>
             <select
@@ -337,7 +362,6 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* Tarefa */}
           <div>
             <label className="muted">Tarefa</label>
             <select
@@ -355,7 +379,6 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* Local */}
           <div>
             <label className="muted">Local de trabalho</label>
             <select
@@ -373,7 +396,6 @@ export default function RoteirosPage() {
             </select>
           </div>
 
-          {/* Data início */}
           <div>
             <label className="muted">Data início</label>
             <input
@@ -385,7 +407,6 @@ export default function RoteirosPage() {
             />
           </div>
 
-          {/* Data fim */}
           <div>
             <label className="muted">Data fim (opcional)</label>
             <input
@@ -397,7 +418,6 @@ export default function RoteirosPage() {
             />
           </div>
 
-          {/* Observações */}
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="muted">Observações (opcional)</label>
             <textarea
@@ -422,7 +442,7 @@ export default function RoteirosPage() {
         </form>
       </section>
 
-      {/* LISTA DE ROTEIROS */}
+      {/* LISTA */}
       <section className="card">
         <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
           Roteiros existentes
@@ -441,21 +461,63 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Data início</th>
                   <th style={{ padding: 8 }}>Data fim</th>
                   <th style={{ padding: 8 }}>Status</th>
+                  <th style={{ padding: 8 }}>Fotos</th>
                   <th style={{ padding: 8 }}>Observações</th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((r) => (
-                  <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
-                    <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
-                    <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
-                    <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
-                    <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
-                    <td style={{ padding: 8 }}>{r.status || '—'}</td>
-                    <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
-                  </tr>
-                ))}
+                {lista.map((r) => {
+                  const bucket = r.foto_bucket || 'ponto-fotos';
+                  return (
+                    <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
+                      <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
+                      <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
+                      <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
+                      <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
+
+                      <td style={{ padding: 8 }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: '#EEF3FF',
+                            color: '#0e3258',
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            border: '1px solid #D7E3FF',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {statusLabel(r.status)}
+                        </span>
+                      </td>
+
+                      <td style={{ padding: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-ghost"
+                            type="button"
+                            disabled={!r.foto_checkin_path}
+                            onClick={() => r.foto_checkin_path && abrirFoto(bucket, r.foto_checkin_path)}
+                          >
+                            Ver check-in
+                          </button>
+                          <button
+                            className="btn btn-ghost"
+                            type="button"
+                            disabled={!r.foto_checkout_path}
+                            onClick={() => r.foto_checkout_path && abrirFoto(bucket, r.foto_checkout_path)}
+                          >
+                            Ver check-out
+                          </button>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
