@@ -123,7 +123,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <span
             style={{
               fontWeight: 900,
-              fontSize: 26,
+              fontSize: 20,
               letterSpacing: 1,
               textTransform: 'uppercase',
               whiteSpace: 'nowrap',
@@ -195,7 +195,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         >
           <div
             style={{
-              fontSize: 12,
+              fontSize: 14,
               opacity: 0.85,
               marginBottom: 8,
               overflow: 'hidden',
