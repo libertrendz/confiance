@@ -43,6 +43,8 @@ function statusLabel(s: string | null) {
   }
 }
 
+const NOVA_TAREFA_VALUE = '__nova_tarefa__';
+
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
@@ -81,6 +83,10 @@ export default function RoteirosPage() {
     observacoes: '',
   });
 
+  // criação inline de tarefa nova
+  const [novaTarefaNome, setNovaTarefaNome] = useState('');
+  const [criandoTarefa, setCriandoTarefa] = useState(false);
+
   function resetForm() {
     setEditId(null);
     setForm({
@@ -91,6 +97,7 @@ export default function RoteirosPage() {
       data_fim: '',
       observacoes: '',
     });
+    setNovaTarefaNome('');
   }
 
   function preencherParaEditar(r: RoteiroRow) {
@@ -103,6 +110,7 @@ export default function RoteirosPage() {
       data_fim: r.data_fim || '',
       observacoes: r.observacoes || '',
     });
+    setNovaTarefaNome('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -251,6 +259,29 @@ export default function RoteirosPage() {
     }
   }
 
+  async function criarTarefaPadrao(nome: string): Promise<string> {
+    const clean = nome.trim();
+    if (!clean) throw new Error('Informe o nome da tarefa.');
+
+    setCriandoTarefa(true);
+    try {
+      const { data, error } = await supa
+        .from('tarefas_padrao')
+        .insert({ nome: clean, ativo: true })
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw error;
+      const id = (data as any)?.id as string | undefined;
+      if (!id) throw new Error('Não foi possível obter o ID da tarefa criada.');
+
+      await loadOptions(empresaId!);
+      return id;
+    } finally {
+      setCriandoTarefa(false);
+    }
+  }
+
   async function criarOuEditarRoteiro(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
@@ -260,8 +291,31 @@ export default function RoteirosPage() {
       return;
     }
 
-    if (!form.usuario_id || !form.tarefa_id || !form.local_id || !form.data_dia) {
-      setErr('Preencha colaborador, tarefa, local e data início.');
+    if (!form.usuario_id || !form.local_id || !form.data_dia) {
+      setErr('Preencha colaborador, local e data início.');
+      return;
+    }
+
+    // tarefa: ou selecionada, ou criada no momento
+    let tarefaIdFinal = form.tarefa_id;
+
+    try {
+      if (tarefaIdFinal === NOVA_TAREFA_VALUE) {
+        const nomeNova = novaTarefaNome.trim();
+        if (!nomeNova) {
+          setErr('Informe o nome da nova tarefa.');
+          return;
+        }
+        tarefaIdFinal = await criarTarefaPadrao(nomeNova);
+      }
+    } catch (e2: any) {
+      console.error('Erro ao criar tarefa', e2);
+      setErr(e2?.message || 'Falha ao criar tarefa. Verifique permissões.');
+      return;
+    }
+
+    if (!tarefaIdFinal || tarefaIdFinal === NOVA_TAREFA_VALUE) {
+      setErr('Selecione uma tarefa (ou crie uma nova).');
       return;
     }
 
@@ -270,7 +324,7 @@ export default function RoteirosPage() {
       const payload: any = {
         empresa_id: empresaId,
         usuario_id: form.usuario_id,
-        tarefa_id: form.tarefa_id,
+        tarefa_id: tarefaIdFinal,
         local_id: form.local_id,
         data_dia: form.data_dia,
         observacoes: form.observacoes || null,
@@ -372,7 +426,7 @@ export default function RoteirosPage() {
           <h1 className="h1" style={{ marginBottom: 4 }}>
             Roteiros de trabalho
           </h1>
-          <div className="muted" style={{ fontSize: 10 }}>
+          <div className="muted" style={{ fontSize: 12 }}>
             {loadingEmpresa ? 'A carregar empresa…' : empresaId ? `Empresa: ${empresaId.slice(0, 8)}…` : 'Empresa não carregada'}
           </div>
         </div>
@@ -386,7 +440,7 @@ export default function RoteirosPage() {
               background: '#FFD24D',
               color: '#0e3258',
               border: 'none',
-              fontWeight: 500,
+              fontWeight: 700,
             }}
           >
             Locais permitidos →
@@ -403,9 +457,6 @@ export default function RoteirosPage() {
         <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
           {editId ? 'Editar roteiro' : 'Novo roteiro'}
         </h2>
-        <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
-          Status evolui automaticamente: Planeado → Em andamento → Executado.
-        </p>
 
         <form
           onSubmit={criarOuEditarRoteiro}
@@ -436,17 +487,53 @@ export default function RoteirosPage() {
             <label className="muted">Tarefa</label>
             <select
               value={form.tarefa_id}
-              onChange={(e) => setForm((f) => ({ ...f, tarefa_id: e.target.value }))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({ ...f, tarefa_id: v }));
+                if (v !== NOVA_TAREFA_VALUE) setNovaTarefaNome('');
+              }}
               style={selectStyle}
               disabled={!empresaId || loadingEmpresa}
             >
               <option value="">Selecione…</option>
+              <option value={NOVA_TAREFA_VALUE}>+ Nova tarefa…</option>
               {tarefaOpts.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nome}
                 </option>
               ))}
             </select>
+
+            {form.tarefa_id === NOVA_TAREFA_VALUE && (
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  value={novaTarefaNome}
+                  onChange={(e) => setNovaTarefaNome(e.target.value)}
+                  placeholder="Nome da nova tarefa"
+                  style={{ ...inputStyle, flex: 1 }}
+                  disabled={criandoTarefa}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={async () => {
+                    try {
+                      setErr(null);
+                      if (!empresaId) return;
+                      const id = await criarTarefaPadrao(novaTarefaNome);
+                      setForm((f) => ({ ...f, tarefa_id: id }));
+                      setNovaTarefaNome('');
+                    } catch (e3: any) {
+                      setErr(e3?.message || 'Falha ao criar tarefa.');
+                    }
+                  }}
+                  disabled={criandoTarefa}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {criandoTarefa ? 'Criando…' : 'Criar'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
@@ -601,12 +688,12 @@ export default function RoteirosPage() {
 
                       {/* Saída almoço */}
                       <td style={{ padding: 8, textAlign: 'center' }}>
-                        <span style={centerIconStyle}>{almocoSaidaOk ? '✅' : '⏳'}</span>
+                        <span style={centerIconStyle}>{almocoSaidaOk ? '✅' : '🕒'}</span>
                       </td>
 
                       {/* Retorno almoço */}
                       <td style={{ padding: 8, textAlign: 'center' }}>
-                        <span style={centerIconStyle}>{almocoRetornoOk ? '✅' : '⏳'}</span>
+                        <span style={centerIconStyle}>{almocoRetornoOk ? '✅' : '🕒'}</span>
                       </td>
 
                       {/* Check-out */}
@@ -681,22 +768,24 @@ const centerIconStyle: React.CSSProperties = {
 function photoBtnStyle(enabled: boolean): React.CSSProperties {
   if (!enabled) {
     return {
-      padding: '8px 10px',
+      padding: '6px 8px',
       borderRadius: 10,
       border: '1px solid var(--border)',
       background: '#fff',
       opacity: 0.5,
       cursor: 'not-allowed',
-      fontWeight: 800,
+      fontWeight: 600,
+      fontSize: 12,
     };
   }
   return {
-    padding: '8px 10px',
+    padding: '6px 8px',
     borderRadius: 10,
     border: '1px solid #BDECCB',
-    background: '#E9FBEF', // verde suave
+    background: '#E9FBEF',
     color: '#0e3258',
-    fontWeight: 900,
+    fontWeight: 700,
+    fontSize: 12,
     cursor: 'pointer',
   };
 }
