@@ -2,21 +2,17 @@
 'use client';
 
 import React, { useEffect, useMemo, useState, type ReactNode, type CSSProperties } from 'react';
-import { usePathname } from 'next/navigation';
 import getBrowserSupabase from '@/lib/supa';
+import { usePathname } from 'next/navigation';
 
 type Papel = 'admin' | 'gestor' | 'externo';
 
 type NavItem = {
-  label: string;
   href: string;
-  show: (ctx: { isAdmin: boolean; isGestor: boolean }) => boolean;
-  badge?: 'EM BREVE';
-};
-
-type NavSection = {
-  title: string;
-  items: NavItem[];
+  label: string;
+  visible: boolean;
+  disabled?: boolean;
+  hint?: string; // ex: "Em breve"
 };
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -99,98 +95,75 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isAdmin = papel === 'admin';
   const isGestor = papel === 'gestor';
 
-  const ctx = { isAdmin, isGestor };
-
-  const sections: NavSection[] = [
+  const navItems: NavItem[] = [
     {
-      title: 'Operação',
-      items: [
-        {
-          label: 'Dashboard',
-          href: '/adm/dashboard',
-          show: ({ isAdmin, isGestor }) => isAdmin || isGestor,
-        },
-        {
-          label: 'Utilizadores',
-          href: '/adm/utilizadores',
-          show: ({ isAdmin, isGestor }) => isAdmin || isGestor,
-        },
-        {
-          label: 'Colaboradores',
-          href: '/adm/colaboradores',
-          show: ({ isAdmin }) => isAdmin,
-          badge: 'EM BREVE',
-        },
-        {
-          label: 'Roteiros e Tarefas',
-          href: '/adm/roteiros',
-          show: ({ isAdmin, isGestor }) => isAdmin || isGestor,
-        },
-        {
-          label: 'Registos de Ponto',
-          href: '/adm/ponto',
-          show: ({ isAdmin, isGestor }) => isAdmin || isGestor,
-        },
-        {
-          label: 'Fornecedores',
-          href: '/adm/fornecedores',
-          show: ({ isAdmin, isGestor }) => isAdmin || isGestor,
-        },
-      ],
+      href: '/adm/dashboard',
+      label: 'Dashboard',
+      visible: isAdmin || isGestor,
     },
     {
-      title: 'Comercial',
-      items: [
-        {
-          label: 'Clientes',
-          href: '/adm/clientes',
-          show: ({ isAdmin }) => isAdmin,
-          badge: 'EM BREVE',
-        },
-        {
-          label: 'Orçamentos e Contratos',
-          href: '/adm/orcamentos',
-          show: ({ isAdmin }) => isAdmin,
-          badge: 'EM BREVE',
-        },
-      ],
+      href: '/adm/utilizadores',
+      label: 'Utilizadores',
+      visible: isAdmin || isGestor,
     },
     {
-      title: 'Gestão',
-      items: [
-        {
-          label: 'Financeiro',
-          href: '/adm/financeiro',
-          show: ({ isAdmin }) => isAdmin,
-          badge: 'EM BREVE',
-        },
-        {
-          label: 'Gestão de Ativos',
-          href: '/adm/ativos',
-          show: ({ isAdmin }) => isAdmin,
-          badge: 'EM BREVE',
-        },
-      ],
+      href: '/adm/colaboradores',
+      label: 'Colaboradores',
+      visible: isAdmin,
+      disabled: true,
+      hint: 'Em breve',
     },
     {
-      title: 'Sistema',
-      items: [
-        {
-          label: 'Configurações',
-          href: '/adm/configuracoes',
-          show: ({ isAdmin }) => isAdmin,
-          badge: 'EM BREVE',
-        },
-      ],
+      href: '/adm/roteiros',
+      label: 'Roteiros e Tarefas',
+      visible: isAdmin || isGestor,
     },
-  ];
-
-  const isActive = (href: string) => {
-    if (!pathname) return false;
-    if (pathname === href) return true;
-    // mantém ativo quando estiver “dentro” da secção
-    return pathname.startsWith(href + '/');
-  };
+    {
+      href: '/adm/ponto',
+      label: 'Registos de Ponto',
+      visible: isAdmin || isGestor,
+    },
+    {
+      href: '/adm/clientes',
+      label: 'Clientes',
+      visible: isAdmin,
+      disabled: true,
+      hint: 'Em breve',
+    },
+    {
+      href: '/adm/orcamentos',
+      label: 'Orçamentos e Contratos',
+      visible: isAdmin,
+      disabled: true,
+      hint: 'Em breve',
+    },
+    {
+      href: '/adm/fornecedores',
+      label: 'Fornecedores',
+      visible: isAdmin || isGestor,
+    },
+    {
+      href: '/adm/financeiro',
+      label: 'Financeiro',
+      visible: isAdmin,
+      disabled: true,
+      hint: 'Em breve',
+    },
+    {
+      href: '/adm/ativos',
+      label: 'Gestão de Ativos',
+      visible: isAdmin,
+      disabled: true,
+      hint: 'Em breve',
+    },
+    {
+      href: '/adm/configuracoes',
+      label: 'Configurações',
+      visible: isAdmin,
+      disabled: true,
+      hint: 'Em breve',
+    },
+  ].filter((i) => i.visible);
 
   return (
     <div
@@ -214,136 +187,112 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           gap: 10,
         }}
       >
+        {/* Logo */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 10,
+            paddingBottom: 12,
             marginBottom: 6,
+            borderBottom: '1px solid rgba(255,255,255,.12)',
           }}
         >
           <img
             src="/logo-confiance.png"
             alt="CONFIANCE"
-            style={{ height: 60, width: 'auto', display: 'block' }}
+            style={{ height: 56, width: 'auto', display: 'block' }}
           />
           <span
             style={{
               fontWeight: 900,
-              fontSize: 20,
+              fontSize: 18,
               letterSpacing: 1,
               textTransform: 'uppercase',
               whiteSpace: 'nowrap',
+              lineHeight: 1,
             }}
           >
             CONFIANCE
           </span>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {sections.map((sec) => {
-            const visibleItems = sec.items.filter((it) => it.show(ctx));
-            if (!visibleItems.length) return null;
+        {/* Menu (Plano A: lista única, limpa) */}
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {navItems.map((item) => {
+            const isActive =
+              pathname === item.href ||
+              (item.href !== '/adm/dashboard' && pathname?.startsWith(item.href + '/')) ||
+              (item.href === '/adm/dashboard' && pathname === '/adm/dashboard');
+
+            const disabled = item.disabled === true;
 
             return (
-              <div key={sec.title}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    opacity: 0.7,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.9,
-                    margin: '8px 10px 6px',
-                  }}
-                >
-                  {sec.title}
-                </div>
+              <a
+                key={item.href}
+                href={disabled ? undefined : item.href}
+                aria-disabled={disabled}
+                onClick={(e) => {
+                  if (disabled) e.preventDefault();
+                }}
+                style={{
+                  ...linkBaseStyle,
+                  ...(isActive ? linkActiveStyle : null),
+                  ...(disabled ? linkDisabledStyle : null),
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontWeight: isActive ? 800 : 600,
+                    }}
+                  >
+                    {item.label}
+                  </span>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {visibleItems.map((it) => {
-                    const active = isActive(it.href);
-                    return (
-                      <a
-                        key={it.href}
-                        href={it.href}
-                        style={navLinkStyle({ active, soon: it.badge === 'EM BREVE' })}
-                        aria-current={active ? 'page' : undefined}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span
-                            style={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {it.label}
-                          </span>
-
-                          {it.badge === 'EM BREVE' && (
-                            <span
-                              style={{
-                                marginLeft: 'auto',
-                                fontSize: 10,
-                                fontWeight: 900,
-                                letterSpacing: 0.6,
-                                padding: '3px 8px',
-                                borderRadius: 999,
-                                border: '1px solid rgba(255,255,255,.22)',
-                                background: 'rgba(255,255,255,.10)',
-                                opacity: 0.85,
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              EM BREVE
-                            </span>
-                          )}
-                        </span>
-                      </a>
-                    );
-                  })}
-                </div>
-              </div>
+                  {item.hint ? (
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        fontSize: 11,
+                        opacity: 0.65,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {item.hint}
+                    </span>
+                  ) : null}
+                </span>
+              </a>
             );
           })}
         </nav>
 
         <div style={{ flex: 1 }} />
 
+        {/* Footer */}
         <div
           style={{
             borderTop: '1px solid rgba(255,255,255,.15)',
             paddingTop: 10,
           }}
         >
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 900,
-                padding: '4px 8px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,.22)',
-                background: 'rgba(255,255,255,.10)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {(papel || '—').toUpperCase()}
-            </span>
-
-            <div
-              style={{
-                fontSize: 12,
-                opacity: 0.85,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                minWidth: 0,
-              }}
-              title={email ?? undefined}
-            >
-              {email ?? '—'}
-            </div>
+          <div
+            style={{
+              fontSize: 12,
+              opacity: 0.85,
+              marginBottom: 8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={email ?? undefined}
+          >
+            {email ?? '—'}
           </div>
 
           <button
@@ -355,7 +304,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               color: '#071c34',
               borderRadius: 10,
               border: 'none',
-              fontWeight: 700,
+              fontWeight: 800,
               cursor: 'pointer',
               marginBottom: 6,
             }}
@@ -382,16 +331,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function navLinkStyle({ active, soon }: { active: boolean; soon: boolean }): CSSProperties {
-  return {
-    padding: '10px 10px',
-    borderRadius: 12,
-    color: '#fff',
-    textDecoration: 'none',
-    opacity: soon ? 0.9 : 0.96,
-    fontSize: 13,
-    background: active ? 'rgba(255,255,255,.12)' : 'transparent',
-    border: active ? '1px solid rgba(255,255,255,.18)' : '1px solid transparent',
-    boxShadow: active ? 'inset 0 0 0 1px rgba(0,0,0,.06)' : undefined,
-  };
-}
+const linkBaseStyle: CSSProperties = {
+  padding: '10px 10px',
+  borderRadius: 10,
+  color: '#fff',
+  textDecoration: 'none',
+  opacity: 0.92,
+  fontSize: 13,
+  border: '1px solid transparent',
+  background: 'transparent',
+};
+
+const linkActiveStyle: CSSProperties = {
+  background: 'rgba(255,255,255,0.08)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  opacity: 1,
+};
+
+const linkDisabledStyle: CSSProperties = {
+  opacity: 0.45,
+  cursor: 'not-allowed',
+};
