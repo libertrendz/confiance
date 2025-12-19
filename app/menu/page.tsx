@@ -169,7 +169,7 @@ export default function MenuPage() {
         .eq('usuario_id', usuarioId)
         .lte('data_dia', t)
         .or(`data_fim.is.null,data_fim.gte.${t}`)
-        .in('status', ['planeado', 'ativo'])
+        .in('status', ['planeado', 'ativo', 'em_andamento'])
         .order('data_dia', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -234,7 +234,7 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* Header: Logo + CONFIANCE + Área do colaborador */}
+      {/* Header: Logo + CONFIANCE + Área do colaborador (NÃO MEXER) */}
       <header
         style={{
           display: 'flex',
@@ -274,7 +274,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Cabeçalho: role + nome + sair */}
+      {/* Cabeçalho: role + nome + sair (NÃO MEXER) */}
       <header
         className="topbar"
         style={{
@@ -337,7 +337,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Cards */}
+      {/* Conteúdo: 3 blocos (Registo de Hoje / Histórico / Meus Recibos) */}
       <section
         className="grid"
         style={{
@@ -347,81 +347,97 @@ export default function MenuPage() {
           marginTop: 16,
         }}
       >
-        {/* HUB: Roteiro de hoje */}
+        {/* 1) Registo de Hoje (card principal) */}
         <article
           className="card"
           style={{
             border: '1px solid #E9EEF7',
-            borderRadius: 16,
-            padding: 16,
+            borderRadius: 18,
+            padding: 20,
             background: '#fff',
             boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            minHeight: 160,
+            minHeight: 180,
             gridColumn: '1 / -1',
           }}
         >
-          <div>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 18,
-                fontWeight: 800,
-                color: '#0e3258',
-              }}
-            >
-              Roteiro de hoje
-            </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0 }}>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: '#0e3258',
+                }}
+              >
+                Registo de Hoje
+              </h3>
 
-            {loadingRoteiro ? (
               <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                A carregar…
+                Acompanhe a atividade atribuída e faça a marcação de ponto.
               </p>
-            ) : roteiroHoje ? (
-              <>
-                <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                  <strong>Tarefa:</strong> {roteiroHoje.tarefa_nome || '—'}
+
+              {loadingRoteiro ? (
+                <p style={{ margin: '10px 0 0 0', color: '#49546A', fontSize: 13 }}>A carregar…</p>
+              ) : roteiroHoje ? (
+                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                      Tarefa
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0e3258' }}>
+                      {roteiroHoje.tarefa_nome || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                      Local
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0e3258' }}>
+                      {roteiroHoje.local_nome || '—'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ margin: '10px 0 0 0', color: '#49546A', fontSize: 13 }}>
+                  Ainda não existe roteiro atribuído para hoje.
                 </p>
-                <p style={{ margin: '6px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                  <strong>Local:</strong> {roteiroHoje.local_nome || '—'}
-                </p>
-              </>
-            ) : (
-              <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                Ainda não existe roteiro atribuído para hoje.
-              </p>
-            )}
+              )}
+            </div>
 
             {!loadingRoteiro && (
-              <div style={{ marginTop: 10 }}>
-                <span
-                  style={{
-                    display: 'inline-block',
-                    fontSize: 12,
-                    fontWeight: 800,
-                    padding: '6px 10px',
-                    borderRadius: 999,
-                    border: '1px solid #D7E3FF',
-                    background: diaFinalizado ? '#EEF3FF' : '#FFF7D6',
-                    color: '#0e3258',
-                  }}
-                >
-                  {diaFinalizado ? 'Atividade finalizada' : 'Atividade em aberto'}
-                </span>
-              </div>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #D7E3FF',
+                  background: diaFinalizado ? '#EEF3FF' : '#FFF7D6',
+                  color: '#0e3258',
+                  whiteSpace: 'nowrap',
+                }}
+                title={diaFinalizado ? 'Atividade finalizada' : 'Atividade em aberto'}
+              >
+                {diaFinalizado ? '✓ Atividade finalizada' : '⏳ Atividade em aberto'}
+              </span>
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
             <a
               href="/ponto"
               style={{
                 textDecoration: 'none',
                 fontSize: 13,
-                padding: '8px 12px',
-                borderRadius: 10,
+                padding: '10px 14px',
+                borderRadius: 12,
                 border: 'none',
                 background: '#0e3258',
                 color: '#fff',
@@ -436,8 +452,8 @@ export default function MenuPage() {
               style={{
                 textDecoration: 'none',
                 fontSize: 13,
-                padding: '8px 12px',
-                borderRadius: 10,
+                padding: '10px 14px',
+                borderRadius: 12,
                 border: '1px solid #D7E3FF',
                 background: '#FFD24D',
                 color: '#0e3258',
@@ -449,7 +465,14 @@ export default function MenuPage() {
           </div>
         </article>
 
-        {/* Meus Recibos */}
+        {/* 2) Histórico de Registos (1 botão só) */}
+        <Card
+          title="Histórico de Registos"
+          desc="Consulte aqui os seus registos de ponto."
+          actions={[{ href: '/ponto/historico', label: 'Abrir histórico', kind: 'accent' }]}
+        />
+
+        {/* 3) Meus Recibos */}
         <Card
           title="Meus Recibos"
           desc="Consulte aqui seus Recibos de Vencimento."
@@ -476,22 +499,22 @@ function Card({
       className="card"
       style={{
         border: '1px solid #E9EEF7',
-        borderRadius: 16,
-        padding: 16,
+        borderRadius: 18,
+        padding: 18,
         background: '#fff',
         boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        minHeight: 140,
+        minHeight: 150,
       }}
     >
       <div>
         <h3
           style={{
             margin: 0,
-            fontSize: 18,
-            fontWeight: 800,
+            fontSize: 16,
+            fontWeight: 900,
             color: '#0e3258',
           }}
         >
@@ -501,11 +524,10 @@ function Card({
       </div>
 
       {!!actions.length && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
           {actions.map((a) => {
             const isDisabled = a.disabled === true;
-            const bg =
-              a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff';
+            const bg = a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff';
             const border = a.kind === 'primary' ? 'none' : '1px solid #D7E3FF';
             const color = a.kind === 'primary' ? '#fff' : '#0e3258';
 
@@ -520,8 +542,8 @@ function Card({
                 style={{
                   textDecoration: 'none',
                   fontSize: 13,
-                  padding: '8px 12px',
-                  borderRadius: 10,
+                  padding: '10px 12px',
+                  borderRadius: 12,
                   border,
                   background: bg,
                   color,
