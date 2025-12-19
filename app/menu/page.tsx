@@ -377,7 +377,7 @@ export default function MenuPage() {
               </h3>
 
               <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                Acompanhe a atividade atribuída e faça a marcação de ponto.
+                Acompanhe a(s) atividade(s) atribuída(s) e faça a marcação de ponto.
               </p>
 
               {loadingRoteiro ? (
@@ -444,25 +444,25 @@ export default function MenuPage() {
                 fontWeight: 700,
               }}
             >
-              Marcar ponto
+              Verificar agora
             </a>
 
-            <a
-              href="/ponto/historico"
-              style={{
-                textDecoration: 'none',
-                fontSize: 13,
-                padding: '10px 14px',
-                borderRadius: 12,
-                border: '1px solid #D7E3FF',
-                background: '#FFD24D',
-                color: '#0e3258',
-                fontWeight: 800,
-              }}
-            >
-              Ver histórico
-            </a>
-          </div>
+///            <a
+///              href="/ponto/historico"
+///              style={{
+///               textDecoration: 'none',
+///                fontSize: 13,
+///                padding: '10px 14px',
+///                borderRadius: 12,
+///                border: '1px solid #D7E3FF',
+///                background: '#FFD24D',
+///                color: '#0e3258',
+///                fontWeight: 800,
+///              }}
+///            >
+///              Ver histórico
+///            </a>
+///          </div>
         </article>
 
         {/* 2) Histórico de Registos (1 botão só) */}
