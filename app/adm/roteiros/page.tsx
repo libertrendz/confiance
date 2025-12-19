@@ -215,6 +215,8 @@ export default function RoteirosPage() {
           observacoes,
           tarefa_id,
           local_id,
+          created_at,
+          updated_at,
           tarefas_padrao ( nome ),
           locais_permitidos ( nome ),
 
@@ -228,6 +230,9 @@ export default function RoteirosPage() {
         `
         )
         .eq('empresa_id', eid)
+        // ✅ ordem definitiva: mais recentemente atualizado primeiro (resolve “roteiro novo não sobe”)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .order('data_dia', { ascending: false })
         .limit(250);
 
@@ -306,7 +311,6 @@ export default function RoteirosPage() {
     }
 
     try {
-      // tabela tarefas_padrao normalmente é global. Se o seu RLS exigir empresa_id, ajuste aqui.
       const { data, error } = await supa
         .from('tarefas_padrao')
         .insert({ nome, ativo: true })
@@ -318,7 +322,6 @@ export default function RoteirosPage() {
       const newId = (data as any)?.id as string | undefined;
       if (!newId) throw new Error('Não foi possível obter o id da nova tarefa.');
 
-      // atualiza options
       await loadOptions(empresaId as string);
       return newId;
     } catch (e: any) {
@@ -400,7 +403,12 @@ export default function RoteirosPage() {
 
     setErr(null);
     try {
-      const { error } = await supa.from('ponto_roteiros').delete().eq('id', id).eq('empresa_id', empresaId);
+      const { error } = await supa
+        .from('ponto_roteiros')
+        .delete()
+        .eq('id', id)
+        .eq('empresa_id', empresaId);
+
       if (error) throw error;
 
       if (editId === id) resetForm();
@@ -460,7 +468,11 @@ export default function RoteirosPage() {
             Roteiros de trabalho
           </h1>
           <div className="muted" style={{ fontSize: 12 }}>
-            {loadingEmpresa ? 'A carregar empresa…' : empresaId ? `Empresa: ${empresaId.slice(0, 8)}…` : 'Empresa não carregada'}
+            {loadingEmpresa
+              ? 'A carregar empresa…'
+              : empresaId
+              ? `Empresa: ${empresaId.slice(0, 8)}…`
+              : 'Empresa não carregada'}
           </div>
         </div>
 
@@ -671,9 +683,7 @@ export default function RoteirosPage() {
 
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: 8 }}>
-                        {colabNomePorId[r.usuario_id] ?? r.usuario_id}
-                      </td>
+                      <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
                       <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
                       <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
