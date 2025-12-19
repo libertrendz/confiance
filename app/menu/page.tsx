@@ -447,22 +447,22 @@ export default function MenuPage() {
               Verificar agora
             </a>
 
-///            <a
-///              href="/ponto/historico"
-///              style={{
-///               textDecoration: 'none',
-///                fontSize: 13,
-///                padding: '10px 14px',
-///                borderRadius: 12,
-///                border: '1px solid #D7E3FF',
-///                background: '#FFD24D',
-///                color: '#0e3258',
-///                fontWeight: 800,
-///              }}
-///            >
-///              Ver histórico
-///            </a>
-///          </div>
+            <a
+              href="/ponto/historico"
+              style={{
+               textDecoration: 'none',
+                fontSize: 13,
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1px solid #D7E3FF',
+                background: '#FFD24D',
+                color: '#0e3258',
+                fontWeight: 800,
+              }}
+            >
+              Ver histórico
+            </a>
+          </div>
         </article>
 
         {/* 2) Histórico de Registos (1 botão só) */}
