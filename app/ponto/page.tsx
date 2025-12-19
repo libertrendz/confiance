@@ -432,6 +432,13 @@ export default function PontoPage() {
     };
   }, [roteiroSelecionado, jornada]);
 
+  // ✅ Negócio/UI: “Registos de hoje” só aparece quando existe tarefa ativa
+  const temAtividadeAtiva = useMemo(() => {
+    if (!roteiroSelecionado) return false;
+    const st = roteiroSelecionado.status || 'planeado';
+    return st !== 'executado';
+  }, [roteiroSelecionado]);
+
   // ---------- Ações ----------
   function resetAcaoUI() {
     setPendingFotoFile(null);
@@ -610,10 +617,13 @@ export default function PontoPage() {
 
   const selectedStatus = roteiroSelecionado?.status || 'planeado';
 
-  // ✅ Confirmar registo só quando realmente há algo pendente
+  // ✅ Confirmar registo só quando realmente há algo pendente e existe atividade ativa
   const mostrarConfirmacao =
-    (acaoTipo === 'entrada' && !!photoPreview) ||
-    (acaoTipo === 'saida' && !jornada.checkout && (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo));
+    temAtividadeAtiva &&
+    ((acaoTipo === 'entrada' && !!photoPreview) ||
+      (acaoTipo === 'saida' &&
+        !jornada.checkout &&
+        (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo)));
 
   return (
     <main
@@ -686,7 +696,7 @@ export default function PontoPage() {
         style={{ display: 'none' }}
       />
 
-      {/* Seletor de atividade (sem duplicar o fluxo) */}
+      {/* Seletor de atividade */}
       <section
         className="card"
         style={{
@@ -797,73 +807,75 @@ export default function PontoPage() {
         </div>
       </section>
 
-      {/* Jornada (começo / meio / fim) */}
-      <section
-        className="card"
-        style={{
-          border: '1px solid #E9EEF7',
-          borderRadius: 16,
-          padding: 16,
-          background: '#fff',
-          boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
-          marginBottom: 12,
-          maxWidth: 680,
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 10 }}>
-          Registos de hoje
-        </div>
+      {/* ✅ Registos de hoje só aparece quando existir atividade ativa */}
+      {temAtividadeAtiva && (
+        <section
+          className="card"
+          style={{
+            border: '1px solid #E9EEF7',
+            borderRadius: 16,
+            padding: 16,
+            background: '#fff',
+            boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
+            marginBottom: 12,
+            maxWidth: 680,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 10 }}>
+            Registos de hoje
+          </div>
 
-        <div style={{ display: 'grid', gap: 10 }}>
-          <StepRow
-            title="1) Check-in"
-            desc=""
-            done={jornada.checkin || regras.st === 'em_andamento' || regras.st === 'executado'}
-            actionLabel="Fazer check-in"
-            actionKind="primary"
-            disabled={!regras.podeCheckin || batendo}
-            onClick={() => iniciarAcao('entrada')}
-          />
+          <div style={{ display: 'grid', gap: 10 }}>
+            <StepRow
+              title="1) Check-in"
+              desc=""
+              done={jornada.checkin || regras.st === 'em_andamento' || regras.st === 'executado'}
+              actionLabel="Fazer check-in"
+              actionKind="primary"
+              disabled={!regras.podeCheckin || batendo}
+              onClick={() => iniciarAcao('entrada')}
+            />
 
-          <StepRow
-            title="2) Saída almoço"
-            desc=""
-            done={jornada.almocoOut}
-            actionLabel="Registrar saída almoço"
-            actionKind="ghost"
-            disabled={!regras.podeAlmocoOut || batendo}
-            onClick={() => iniciarAcao('saida_almoco')}
-          />
+            <StepRow
+              title="2) Saída almoço"
+              desc=""
+              done={jornada.almocoOut}
+              actionLabel="Registrar saída almoço"
+              actionKind="ghost"
+              disabled={!regras.podeAlmocoOut || batendo}
+              onClick={() => iniciarAcao('saida_almoco')}
+            />
 
-          <StepRow
-            title="3) Retorno almoço"
-            desc=""
-            done={jornada.almocoIn}
-            actionLabel="Registrar retorno almoço"
-            actionKind="ghost"
-            disabled={!regras.podeAlmocoIn || batendo}
-            onClick={() => iniciarAcao('retorno_almoco')}
-          />
+            <StepRow
+              title="3) Retorno almoço"
+              desc=""
+              done={jornada.almocoIn}
+              actionLabel="Registrar retorno almoço"
+              actionKind="ghost"
+              disabled={!regras.podeAlmocoIn || batendo}
+              onClick={() => iniciarAcao('retorno_almoco')}
+            />
 
-          <StepRow
-            title="4) Check-out"
-            desc=""
-            done={jornada.checkout || regras.st === 'executado'}
-            actionLabel="Fazer check-out"
-            actionKind="accent"
-            disabled={!regras.podeCheckout || batendo}
-            onClick={() => iniciarAcao('saida')}
-          />
-        </div>
+            <StepRow
+              title="4) Check-out"
+              desc=""
+              done={jornada.checkout || regras.st === 'executado'}
+              actionLabel="Fazer check-out"
+              actionKind="accent"
+              disabled={!regras.podeCheckout || batendo}
+              onClick={() => iniciarAcao('saida')}
+            />
+          </div>
 
-        {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
-        {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
-        {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
+          {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
+          {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
+          {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
 
-        <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
-          A validação de localização é aplicada conforme o local configurado na atividade.
-        </p>
-      </section>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+            A validação de localização é aplicada conforme o local configurado na atividade.
+          </p>
+        </section>
+      )}
 
       {/* Confirmação do check-out (apenas quando necessário) */}
       {mostrarConfirmacao && (
