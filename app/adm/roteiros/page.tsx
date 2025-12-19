@@ -16,7 +16,6 @@ type RoteiroRow = {
   observacoes: string | null;
   tarefa_id: string;
   tarefa_nome: string | null;
-  local_id: string | null;
   local_nome: string | null;
 
   foto_bucket: string | null;
@@ -28,6 +27,8 @@ type RoteiroRow = {
 
   tarefa_concluida: boolean | null;
   justificativa: string | null;
+
+  local_id: string | null;
 };
 
 function statusLabel(s: string | null) {
@@ -43,7 +44,41 @@ function statusLabel(s: string | null) {
   }
 }
 
-const NOVA_TAREFA_VALUE = '__nova_tarefa__';
+function SmallPill({ text }: { text: string }) {
+  return (
+    <span
+      style={{
+        fontSize: 12,
+        fontWeight: 700,
+        background: '#EEF3FF',
+        color: '#0e3258',
+        padding: '6px 10px',
+        borderRadius: 999,
+        border: '1px solid #D7E3FF',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+function CellClock({ done }: { done: boolean }) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        fontSize: 16,
+      }}
+      title={done ? 'OK' : 'Pendente'}
+    >
+      {done ? '✓' : '🕒'}
+    </div>
+  );
+}
 
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
@@ -66,7 +101,13 @@ export default function RoteirosPage() {
 
   const [salvando, setSalvando] = useState(false);
 
+  // edição
   const [editId, setEditId] = useState<string | null>(null);
+
+  // “tarefa nova” (opção A)
+  const [criandoTarefa, setCriandoTarefa] = useState(false);
+  const [novaTarefaNome, setNovaTarefaNome] = useState('');
+
   const [form, setForm] = useState<{
     usuario_id: string;
     tarefa_id: string;
@@ -82,37 +123,6 @@ export default function RoteirosPage() {
     data_fim: '',
     observacoes: '',
   });
-
-  // criação inline de tarefa nova
-  const [novaTarefaNome, setNovaTarefaNome] = useState('');
-  const [criandoTarefa, setCriandoTarefa] = useState(false);
-
-  function resetForm() {
-    setEditId(null);
-    setForm({
-      usuario_id: '',
-      tarefa_id: '',
-      local_id: '',
-      data_dia: '',
-      data_fim: '',
-      observacoes: '',
-    });
-    setNovaTarefaNome('');
-  }
-
-  function preencherParaEditar(r: RoteiroRow) {
-    setEditId(r.id);
-    setForm({
-      usuario_id: r.usuario_id,
-      tarefa_id: r.tarefa_id,
-      local_id: r.local_id || '',
-      data_dia: r.data_dia || '',
-      data_fim: r.data_fim || '',
-      observacoes: r.observacoes || '',
-    });
-    setNovaTarefaNome('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
 
   async function carregarEmpresaDoAdmin() {
     setLoadingEmpresa(true);
@@ -205,23 +215,21 @@ export default function RoteirosPage() {
           observacoes,
           tarefa_id,
           local_id,
+          tarefas_padrao ( nome ),
+          locais_permitidos ( nome ),
 
           foto_bucket,
           foto_checkin_path,
           foto_checkout_path,
-
           almoco_saida_at,
           almoco_retorno_at,
           tarefa_concluida,
-          justificativa,
-
-          tarefas_padrao ( nome ),
-          locais_permitidos ( nome )
+          justificativa
         `
         )
         .eq('empresa_id', eid)
         .order('data_dia', { ascending: false })
-        .limit(300);
+        .limit(250);
 
       if (error) throw error;
 
@@ -235,7 +243,6 @@ export default function RoteirosPage() {
         observacoes: r.observacoes,
         tarefa_id: r.tarefa_id,
         tarefa_nome: r.tarefas_padrao?.nome ?? null,
-        local_id: r.local_id ?? null,
         local_nome: r.locais_permitidos?.nome ?? null,
 
         foto_bucket: r.foto_bucket ?? 'ponto-fotos',
@@ -247,6 +254,8 @@ export default function RoteirosPage() {
 
         tarefa_concluida: typeof r.tarefa_concluida === 'boolean' ? r.tarefa_concluida : null,
         justificativa: r.justificativa ?? null,
+
+        local_id: r.local_id ?? null,
       }));
 
       setLista(mapped);
@@ -259,30 +268,66 @@ export default function RoteirosPage() {
     }
   }
 
-  async function criarTarefaPadrao(nome: string): Promise<string> {
-    const clean = nome.trim();
-    if (!clean) throw new Error('Informe o nome da tarefa.');
+  function resetForm() {
+    setEditId(null);
+    setCriandoTarefa(false);
+    setNovaTarefaNome('');
+    setForm({
+      usuario_id: '',
+      tarefa_id: '',
+      local_id: '',
+      data_dia: '',
+      data_fim: '',
+      observacoes: '',
+    });
+  }
 
-    setCriandoTarefa(true);
+  function preencherParaEditar(r: RoteiroRow) {
+    setEditId(r.id);
+    setCriandoTarefa(false);
+    setNovaTarefaNome('');
+    setForm({
+      usuario_id: r.usuario_id,
+      tarefa_id: r.tarefa_id || '',
+      local_id: r.local_id || '',
+      data_dia: r.data_dia || '',
+      data_fim: r.data_fim || '',
+      observacoes: r.observacoes || '',
+    });
+  }
+
+  async function criarTarefaPadraoSeNecessario(): Promise<string | null> {
+    if (!criandoTarefa) return null;
+
+    const nome = novaTarefaNome.trim();
+    if (!nome) {
+      setErr('Informe o nome da nova tarefa.');
+      return null;
+    }
+
     try {
+      // tabela tarefas_padrao normalmente é global. Se o seu RLS exigir empresa_id, ajuste aqui.
       const { data, error } = await supa
         .from('tarefas_padrao')
-        .insert({ nome: clean, ativo: true })
+        .insert({ nome, ativo: true })
         .select('id')
         .maybeSingle();
 
       if (error) throw error;
-      const id = (data as any)?.id as string | undefined;
-      if (!id) throw new Error('Não foi possível obter o ID da tarefa criada.');
 
-      await loadOptions(empresaId!);
-      return id;
-    } finally {
-      setCriandoTarefa(false);
+      const newId = (data as any)?.id as string | undefined;
+      if (!newId) throw new Error('Não foi possível obter o id da nova tarefa.');
+
+      // atualiza options
+      await loadOptions(empresaId as string);
+      return newId;
+    } catch (e: any) {
+      setErr(e?.message || 'Falha ao criar tarefa.');
+      return null;
     }
   }
 
-  async function criarOuEditarRoteiro(e: React.FormEvent) {
+  async function salvarRoteiro(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
 
@@ -296,31 +341,21 @@ export default function RoteirosPage() {
       return;
     }
 
-    // tarefa: ou selecionada, ou criada no momento
-    let tarefaIdFinal = form.tarefa_id;
-
-    try {
-      if (tarefaIdFinal === NOVA_TAREFA_VALUE) {
-        const nomeNova = novaTarefaNome.trim();
-        if (!nomeNova) {
-          setErr('Informe o nome da nova tarefa.');
-          return;
-        }
-        tarefaIdFinal = await criarTarefaPadrao(nomeNova);
-      }
-    } catch (e2: any) {
-      console.error('Erro ao criar tarefa', e2);
-      setErr(e2?.message || 'Falha ao criar tarefa. Verifique permissões.');
-      return;
-    }
-
-    if (!tarefaIdFinal || tarefaIdFinal === NOVA_TAREFA_VALUE) {
-      setErr('Selecione uma tarefa (ou crie uma nova).');
-      return;
-    }
-
     setSalvando(true);
     try {
+      let tarefaIdFinal = form.tarefa_id;
+
+      if (criandoTarefa) {
+        const newId = await criarTarefaPadraoSeNecessario();
+        if (!newId) return;
+        tarefaIdFinal = newId;
+      }
+
+      if (!tarefaIdFinal) {
+        setErr('Selecione uma tarefa (ou crie uma nova).');
+        return;
+      }
+
       const payload: any = {
         empresa_id: empresaId,
         usuario_id: form.usuario_id,
@@ -340,7 +375,7 @@ export default function RoteirosPage() {
           .eq('empresa_id', empresaId);
 
         if (error) throw error;
-        alert('Roteiro atualizado com sucesso.');
+        alert('Roteiro atualizado.');
       } else {
         payload.status = 'planeado';
         const { error } = await supa.from('ponto_roteiros').insert(payload);
@@ -370,9 +405,7 @@ export default function RoteirosPage() {
 
       if (editId === id) resetForm();
       await loadLista(empresaId);
-      alert('Roteiro excluído.');
     } catch (e: any) {
-      console.error('Erro ao excluir roteiro', e);
       setErr(e?.message || 'Falha ao excluir roteiro.');
     }
   }
@@ -440,7 +473,7 @@ export default function RoteirosPage() {
               background: '#FFD24D',
               color: '#0e3258',
               border: 'none',
-              fontWeight: 700,
+              fontWeight: 500,
             }}
           >
             Locais permitidos →
@@ -452,14 +485,18 @@ export default function RoteirosPage() {
         </div>
       </header>
 
-      {/* FORM NOVO/EDITAR ROTEIRO */}
+      {/* FORM */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2" style={{ marginTop: 0, marginBottom: 8 }}>
           {editId ? 'Editar roteiro' : 'Novo roteiro'}
         </h2>
 
+        <p className="muted" style={{ marginTop: 0, marginBottom: 16 }}>
+          O status evolui automaticamente: Planeado → Em andamento → Executado.
+        </p>
+
         <form
-          onSubmit={criarOuEditarRoteiro}
+          onSubmit={salvarRoteiro}
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -486,52 +523,42 @@ export default function RoteirosPage() {
           <div>
             <label className="muted">Tarefa</label>
             <select
-              value={form.tarefa_id}
+              value={criandoTarefa ? '__outra__' : form.tarefa_id}
               onChange={(e) => {
                 const v = e.target.value;
-                setForm((f) => ({ ...f, tarefa_id: v }));
-                if (v !== NOVA_TAREFA_VALUE) setNovaTarefaNome('');
+                if (v === '__outra__') {
+                  setCriandoTarefa(true);
+                  setForm((f) => ({ ...f, tarefa_id: '' }));
+                } else {
+                  setCriandoTarefa(false);
+                  setNovaTarefaNome('');
+                  setForm((f) => ({ ...f, tarefa_id: v }));
+                }
               }}
               style={selectStyle}
               disabled={!empresaId || loadingEmpresa}
             >
               <option value="">Selecione…</option>
-              <option value={NOVA_TAREFA_VALUE}>+ Nova tarefa…</option>
               {tarefaOpts.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nome}
                 </option>
               ))}
+              <option value="__outra__">Outra…</option>
             </select>
 
-            {form.tarefa_id === NOVA_TAREFA_VALUE && (
-              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+            {criandoTarefa && (
+              <div style={{ marginTop: 8 }}>
                 <input
                   value={novaTarefaNome}
                   onChange={(e) => setNovaTarefaNome(e.target.value)}
+                  style={inputStyle}
                   placeholder="Nome da nova tarefa"
-                  style={{ ...inputStyle, flex: 1 }}
-                  disabled={criandoTarefa}
+                  disabled={!empresaId || loadingEmpresa}
                 />
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={async () => {
-                    try {
-                      setErr(null);
-                      if (!empresaId) return;
-                      const id = await criarTarefaPadrao(novaTarefaNome);
-                      setForm((f) => ({ ...f, tarefa_id: id }));
-                      setNovaTarefaNome('');
-                    } catch (e3: any) {
-                      setErr(e3?.message || 'Falha ao criar tarefa.');
-                    }
-                  }}
-                  disabled={criandoTarefa}
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  {criandoTarefa ? 'Criando…' : 'Criar'}
-                </button>
+                <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                  A tarefa será criada e usada neste roteiro.
+                </p>
               </div>
             )}
           </div>
@@ -591,7 +618,7 @@ export default function RoteirosPage() {
             </p>
           )}
 
-          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             {editId && (
               <button type="button" className="btn btn-ghost" onClick={resetForm}>
                 Cancelar
@@ -622,16 +649,14 @@ export default function RoteirosPage() {
                   <th style={{ padding: 8 }}>Local</th>
                   <th style={{ padding: 8 }}>Data início</th>
                   <th style={{ padding: 8 }}>Data fim</th>
+                  <th style={{ padding: 8 }}>Observações</th>
                   <th style={{ padding: 8 }}>Status</th>
-
                   <th style={{ padding: 8, textAlign: 'center' }}>Check-in</th>
                   <th style={{ padding: 8, textAlign: 'center' }}>Saída almoço</th>
                   <th style={{ padding: 8, textAlign: 'center' }}>Retorno almoço</th>
                   <th style={{ padding: 8, textAlign: 'center' }}>Check-out</th>
-
-                  <th style={{ padding: 8 }}>Concluída?</th>
+                  <th style={{ padding: 8 }}>Tarefa concluída?</th>
                   <th style={{ padding: 8 }}>Justificativa</th>
-                  <th style={{ padding: 8 }}>Observações</th>
                   <th style={{ padding: 8 }}>Ações</th>
                 </tr>
               </thead>
@@ -639,79 +664,82 @@ export default function RoteirosPage() {
                 {lista.map((r) => {
                   const bucket = r.foto_bucket || 'ponto-fotos';
 
-                  const temCheckin = !!r.foto_checkin_path;
-                  const temCheckout = !!r.foto_checkout_path;
-
-                  const almocoSaidaOk = !!r.almoco_saida_at;
-                  const almocoRetornoOk = !!r.almoco_retorno_at;
-
-                  const concl =
-                    r.tarefa_concluida === true ? 'Sim' : r.tarefa_concluida === false ? 'Não' : '—';
+                  const hasIn = !!r.foto_checkin_path;
+                  const hasOut = !!r.foto_checkout_path;
+                  const hasAlmocoOut = !!r.almoco_saida_at;
+                  const hasAlmocoIn = !!r.almoco_retorno_at;
 
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
+                      <td style={{ padding: 8 }}>
+                        {colabNomePorId[r.usuario_id] ?? r.usuario_id}
+                      </td>
                       <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
                       <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
                       <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
+                      <td style={{ padding: 8, maxWidth: 240 }}>{r.observacoes || '—'}</td>
 
                       <td style={{ padding: 8 }}>
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            background: '#EEF3FF',
-                            color: '#0e3258',
-                            padding: '6px 10px',
-                            borderRadius: 999,
-                            border: '1px solid #D7E3FF',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {statusLabel(r.status)}
-                        </span>
+                        <SmallPill text={statusLabel(r.status)} />
                       </td>
 
-                      {/* Check-in */}
                       <td style={{ padding: 8, textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          disabled={!temCheckin}
-                          onClick={() => r.foto_checkin_path && abrirFoto(bucket, r.foto_checkin_path)}
-                          style={photoBtnStyle(temCheckin)}
-                        >
-                          Ver foto
-                        </button>
+                        {hasIn ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => abrirFoto(bucket, r.foto_checkin_path as string)}
+                            style={{
+                              padding: '6px 10px',
+                              fontWeight: 600,
+                              fontSize: 12,
+                              background: '#ECFDF3',
+                              border: '1px solid #A6F4C5',
+                              color: '#067647',
+                            }}
+                          >
+                            Ver foto
+                          </button>
+                        ) : (
+                          <CellClock done={false} />
+                        )}
                       </td>
 
-                      {/* Saída almoço */}
                       <td style={{ padding: 8, textAlign: 'center' }}>
-                        <span style={centerIconStyle}>{almocoSaidaOk ? '✅' : '🕒'}</span>
+                        <CellClock done={hasAlmocoOut} />
                       </td>
 
-                      {/* Retorno almoço */}
                       <td style={{ padding: 8, textAlign: 'center' }}>
-                        <span style={centerIconStyle}>{almocoRetornoOk ? '✅' : '🕒'}</span>
+                        <CellClock done={hasAlmocoIn} />
                       </td>
 
-                      {/* Check-out */}
                       <td style={{ padding: 8, textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          disabled={!temCheckout}
-                          onClick={() => r.foto_checkout_path && abrirFoto(bucket, r.foto_checkout_path)}
-                          style={photoBtnStyle(temCheckout)}
-                        >
-                          Ver foto
-                        </button>
+                        {hasOut ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => abrirFoto(bucket, r.foto_checkout_path as string)}
+                            style={{
+                              padding: '6px 10px',
+                              fontWeight: 600,
+                              fontSize: 12,
+                              background: '#ECFDF3',
+                              border: '1px solid #A6F4C5',
+                              color: '#067647',
+                            }}
+                          >
+                            Ver foto
+                          </button>
+                        ) : (
+                          <CellClock done={false} />
+                        )}
                       </td>
 
-                      <td style={{ padding: 8 }}>{concl}</td>
-                      <td style={{ padding: 8, maxWidth: 240 }}>{r.justificativa || '—'}</td>
-                      <td style={{ padding: 8, maxWidth: 260 }}>{r.observacoes || '—'}</td>
+                      <td style={{ padding: 8 }}>
+                        {r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Sim' : 'Não'}
+                      </td>
+                      <td style={{ padding: 8, maxWidth: 260 }}>{r.justificativa || '—'}</td>
 
                       <td style={{ padding: 8 }}>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -731,11 +759,7 @@ export default function RoteirosPage() {
           </div>
         )}
 
-        {loading && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            A carregar roteiros…
-          </p>
-        )}
+        {loading && <p className="muted" style={{ marginTop: 8 }}>A carregar roteiros…</p>}
       </section>
     </main>
   );
@@ -753,39 +777,3 @@ const selectStyle: React.CSSProperties = {
   ...inputStyle,
   appearance: 'auto',
 };
-
-const centerIconStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 28,
-  height: 28,
-  borderRadius: 999,
-  border: '1px solid #E9EEF7',
-  background: '#fff',
-};
-
-function photoBtnStyle(enabled: boolean): React.CSSProperties {
-  if (!enabled) {
-    return {
-      padding: '6px 8px',
-      borderRadius: 10,
-      border: '1px solid var(--border)',
-      background: '#fff',
-      opacity: 0.5,
-      cursor: 'not-allowed',
-      fontWeight: 600,
-      fontSize: 12,
-    };
-  }
-  return {
-    padding: '6px 8px',
-    borderRadius: 10,
-    border: '1px solid #BDECCB',
-    background: '#E9FBEF',
-    color: '#0e3258',
-    fontWeight: 700,
-    fontSize: 12,
-    cursor: 'pointer',
-  };
-}
