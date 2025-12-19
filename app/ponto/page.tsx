@@ -610,6 +610,11 @@ export default function PontoPage() {
 
   const selectedStatus = roteiroSelecionado?.status || 'planeado';
 
+  // ✅ Confirmar registo só quando realmente há algo pendente
+  const mostrarConfirmacao =
+    (acaoTipo === 'entrada' && !!photoPreview) ||
+    (acaoTipo === 'saida' && !jornada.checkout && (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo));
+
   return (
     <main
       style={{
@@ -666,9 +671,7 @@ export default function PontoPage() {
       {/* Subheader */}
       <header style={{ marginBottom: 14 }}>
         <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#49546A' }}>
-          {nome
-            ? `Olá, ${nome}. Registe a sua jornada com foto e localização.`
-            : 'Registe a sua jornada com foto e localização.'}
+          {nome ? `Olá, ${nome}. Registe a sua jornada com foto e localização.` : 'Registe a sua jornada com foto e localização.'}
         </p>
       </header>
 
@@ -811,12 +814,10 @@ export default function PontoPage() {
           Registos de hoje
         </div>
 
-        {/* Linha de passos */}
         <div style={{ display: 'grid', gap: 10 }}>
-          {/* Step 1 */}
           <StepRow
             title="1) Check-in"
-            desc="Registo com foto do local."
+            desc=""
             done={jornada.checkin || regras.st === 'em_andamento' || regras.st === 'executado'}
             actionLabel="Fazer check-in"
             actionKind="primary"
@@ -824,10 +825,9 @@ export default function PontoPage() {
             onClick={() => iniciarAcao('entrada')}
           />
 
-          {/* Step 2 */}
           <StepRow
             title="2) Saída almoço"
-            desc="Registo da saída para almoçar."
+            desc=""
             done={jornada.almocoOut}
             actionLabel="Registrar saída almoço"
             actionKind="ghost"
@@ -835,10 +835,9 @@ export default function PontoPage() {
             onClick={() => iniciarAcao('saida_almoco')}
           />
 
-          {/* Step 3 */}
           <StepRow
             title="3) Retorno almoço"
-            desc="Registo do retorno ao trabalho."
+            desc=""
             done={jornada.almocoIn}
             actionLabel="Registrar retorno almoço"
             actionKind="ghost"
@@ -846,23 +845,16 @@ export default function PontoPage() {
             onClick={() => iniciarAcao('retorno_almoco')}
           />
 
-          {/* Step 4 */}
           <StepRow
             title="4) Check-out"
-            desc="Registo com foto do local + conclusão de tarefa."
+            desc=""
             done={jornada.checkout || regras.st === 'executado'}
-            actionLabel={regras.bloqueioCheckoutPorAlmoco ? 'Retorne do almoço primeiro' : 'Fazer check-out'}
+            actionLabel="Fazer check-out"
             actionKind="accent"
             disabled={!regras.podeCheckout || batendo}
             onClick={() => iniciarAcao('saida')}
           />
         </div>
-
-        {regras.bloqueioCheckoutPorAlmoco && (
-          <p style={{ color: '#8a4b00', marginTop: 10, fontSize: 12 }}>
-            Você já registrou a <strong>Saída almoço</strong>. Para finalizar o dia, registre o <strong>Retorno almoço</strong>.
-          </p>
-        )}
 
         {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
         {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
@@ -874,7 +866,7 @@ export default function PontoPage() {
       </section>
 
       {/* Confirmação do check-out (apenas quando necessário) */}
-      {(acaoTipo === 'saida' || (acaoTipo === 'entrada' && photoPreview)) && (
+      {mostrarConfirmacao && (
         <section className="card" style={{ marginBottom: 16, maxWidth: 680 }}>
           <h2 className="h2" style={{ marginBottom: 12 }}>
             Confirmar registo
@@ -900,7 +892,7 @@ export default function PontoPage() {
             </div>
           )}
 
-          {acaoTipo === 'saida' && (
+          {acaoTipo === 'saida' && !jornada.checkout && (
             <>
               <div style={{ marginTop: 12 }}>
                 <label className="muted">Conclusão da tarefa</label>
@@ -950,7 +942,12 @@ export default function PontoPage() {
               <button
                 className="btn btn-primary"
                 style={{ marginTop: 12 }}
-                disabled={batendo || !pendingFotoFile || tarefaConcluida === null || (tarefaConcluida === false && !justificativa.trim())}
+                disabled={
+                  batendo ||
+                  !pendingFotoFile ||
+                  tarefaConcluida === null ||
+                  (tarefaConcluida === false && !justificativa.trim())
+                }
                 onClick={async () => {
                   if (!pendingFotoFile) return;
                   await baterPonto('saida', pendingFotoFile);
@@ -1053,7 +1050,8 @@ function StepRow({
   disabled: boolean;
   onClick: () => void;
 }) {
-  const badge = done ? '✓' : '⏳';
+  const badge = done ? '✓' : '🕒';
+
   return (
     <div
       style={{
@@ -1074,8 +1072,8 @@ function StepRow({
           borderRadius: 999,
           display: 'grid',
           placeItems: 'center',
-          background: done ? '#E8FFF1' : '#EEF3FF',
-          border: done ? '1px solid #BDE6C8' : '1px solid #D7E3FF',
+          background: done ? '#E8FFF1' : '#FFF7E6',
+          border: done ? '1px solid #BDE6C8' : '1px solid #FFD08A',
           color: '#0e3258',
           fontWeight: 900,
         }}
@@ -1086,9 +1084,11 @@ function StepRow({
 
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258' }}>{title}</div>
-        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-          {desc}
-        </div>
+        {desc ? (
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            {desc}
+          </div>
+        ) : null}
       </div>
 
       <button
