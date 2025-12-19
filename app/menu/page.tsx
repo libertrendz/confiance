@@ -151,7 +151,6 @@ export default function MenuPage() {
     try {
       const t = todayStr();
 
-      // 1) Roteiro do dia
       const { data: r, error: rErr } = await supa
         .from('ponto_roteiros')
         .select(
@@ -186,7 +185,6 @@ export default function MenuPage() {
         setRoteiroHoje(null);
       }
 
-      // 2) Último ponto do dia (pra saber se o dia já foi finalizado)
       const { data: p, error: pErr } = await supa
         .from('ponto_registro')
         .select('tipo, created_at')
@@ -234,7 +232,7 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* Header: Logo + CONFIANCE + Área do colaborador (NÃO MEXER) */}
+      {/* Header: (NÃO MEXER) */}
       <header
         style={{
           display: 'flex',
@@ -274,7 +272,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Cabeçalho: role + nome + sair (NÃO MEXER) */}
+      {/* Topbar (NÃO MEXER) */}
       <header
         className="topbar"
         style={{
@@ -337,7 +335,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Conteúdo: 3 blocos (Registo de Hoje / Histórico / Meus Recibos) */}
+      {/* Conteúdo: 3 blocos */}
       <section
         className="grid"
         style={{
@@ -347,7 +345,7 @@ export default function MenuPage() {
           marginTop: 16,
         }}
       >
-        {/* 1) Registo de Hoje (card principal) */}
+        {/* 1) Registo de Hoje */}
         <article
           className="card"
           style={{
@@ -377,7 +375,7 @@ export default function MenuPage() {
               </h3>
 
               <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                Acompanhe a(s) atividade(s) atribuída(s) e faça a marcação de ponto.
+                Acompanhe a atividade atribuída e faça a marcação de ponto.
               </p>
 
               {loadingRoteiro ? (
@@ -401,11 +399,7 @@ export default function MenuPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <p style={{ margin: '10px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                  Ainda não existe roteiro atribuído para hoje.
-                </p>
-              )}
+              ) : null}
             </div>
 
             {!loadingRoteiro && (
@@ -446,33 +440,17 @@ export default function MenuPage() {
             >
               Verificar agora
             </a>
-
-            <a
-              href="/ponto/historico"
-              style={{
-               textDecoration: 'none',
-                fontSize: 13,
-                padding: '10px 14px',
-                borderRadius: 12,
-                border: '1px solid #D7E3FF',
-                background: '#FFD24D',
-                color: '#0e3258',
-                fontWeight: 800,
-              }}
-            >
-              Ver histórico
-            </a>
           </div>
         </article>
 
-        {/* 2) Histórico de Registos (1 botão só) */}
+        {/* 2) Histórico */}
         <Card
           title="Histórico de Registos"
           desc="Consulte aqui os seus registos de ponto."
           actions={[{ href: '/ponto/historico', label: 'Abrir histórico', kind: 'accent' }]}
         />
 
-        {/* 3) Meus Recibos */}
+        {/* 3) Recibos */}
         <Card
           title="Meus Recibos"
           desc="Consulte aqui seus Recibos de Vencimento."
