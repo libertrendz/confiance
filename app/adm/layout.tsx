@@ -96,73 +96,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isGestor = papel === 'gestor';
 
   const navItems: NavItem[] = [
-    {
-      href: '/adm/dashboard',
-      label: 'Dashboard',
-      visible: isAdmin || isGestor,
-    },
-    {
-      href: '/adm/utilizadores',
-      label: 'Utilizadores',
-      visible: isAdmin || isGestor,
-    },
-    {
-      href: '/adm/colaboradores',
-      label: 'Colaboradores',
-      visible: isAdmin,
-      disabled: true,
-      hint: 'Em breve',
-    },
-    {
-      href: '/adm/roteiros',
-      label: 'Roteiros e Tarefas',
-      visible: isAdmin || isGestor,
-    },
-    {
-      href: '/adm/ponto',
-      label: 'Registos de Ponto',
-      visible: isAdmin || isGestor,
-    },
-    {
-      href: '/adm/clientes',
-      label: 'Clientes',
-      visible: isAdmin,
-      disabled: true,
-      hint: 'Em breve',
-    },
-    {
-      href: '/adm/orcamentos',
-      label: 'Orçamentos e Contratos',
-      visible: isAdmin,
-      disabled: true,
-      hint: 'Em breve',
-    },
-    {
-      href: '/adm/fornecedores',
-      label: 'Fornecedores',
-      visible: isAdmin || isGestor,
-    },
-    {
-      href: '/adm/financeiro',
-      label: 'Financeiro',
-      visible: isAdmin,
-      disabled: true,
-      hint: 'Em breve',
-    },
-    {
-      href: '/adm/ativos',
-      label: 'Gestão de Ativos',
-      visible: isAdmin,
-      disabled: true,
-      hint: 'Em breve',
-    },
-    {
-      href: '/adm/configuracoes',
-      label: 'Configurações',
-      visible: isAdmin,
-      disabled: true,
-      hint: 'Em breve',
-    },
+    { href: '/adm/dashboard', label: 'Dashboard', visible: isAdmin || isGestor },
+    { href: '/adm/utilizadores', label: 'Utilizadores', visible: isAdmin || isGestor },
+    { href: '/adm/colaboradores', label: 'Colaboradores', visible: isAdmin, disabled: true, hint: 'Em breve' },
+    { href: '/adm/roteiros', label: 'Roteiros e Tarefas', visible: isAdmin || isGestor },
+    { href: '/adm/ponto', label: 'Registos de Ponto', visible: isAdmin || isGestor },
+    { href: '/adm/clientes', label: 'Clientes', visible: isAdmin, disabled: true, hint: 'Em breve' },
+    { href: '/adm/orcamentos', label: 'Orçamentos e Contratos', visible: isAdmin, disabled: true, hint: 'Em breve' },
+    { href: '/adm/fornecedores', label: 'Fornecedores', visible: isAdmin || isGestor },
+    { href: '/adm/financeiro', label: 'Financeiro', visible: isAdmin, disabled: true, hint: 'Em breve' },
+    { href: '/adm/ativos', label: 'Gestão de Ativos', visible: isAdmin, disabled: true, hint: 'Em breve' },
+    { href: '/adm/configuracoes', label: 'Configurações', visible: isAdmin, disabled: true, hint: 'Em breve' },
   ].filter((i) => i.visible);
 
   return (
@@ -198,11 +142,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             borderBottom: '1px solid rgba(255,255,255,.12)',
           }}
         >
-          <img
-            src="/app-novo.png"
-            alt="CONFIANCE"
-            style={{ height: 56, width: 'auto', display: 'block' }}
-          />
+          <img src="/app-novo.png" alt="CONFIANCE" style={{ height: 56, width: 'auto', display: 'block' }} />
           <span
             style={{
               fontWeight: 900,
@@ -306,22 +246,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               border: 'none',
               fontWeight: 800,
               cursor: 'pointer',
-              marginBottom: 6,
+              marginBottom: 10,
             }}
           >
             Sair
           </button>
 
-          <div
-            style={{
-              fontSize: 10,
-              opacity: 0.7,
-              textTransform: 'uppercase',
-              letterSpacing: 0.8,
-              lineHeight: 1.2,
-            }}
-          >
-            Powered by <strong>LIBERTRENDZ®</strong>
+          {/* NOVO: PNG powered by (substitui o texto antigo) */}
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2 }}>
+            <img
+              src="/powered-by-libertrendz.png"
+              alt="Powered by Libertrendz"
+              style={{
+                height: 16,
+                width: 'auto',
+                display: 'block',
+                opacity: 0.85,
+              }}
+            />
           </div>
         </div>
       </aside>
