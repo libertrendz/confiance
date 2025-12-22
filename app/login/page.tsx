@@ -165,7 +165,7 @@ export default function LoginPage() {
               src="/powered-by-libertrendz.png"
               alt="Powered by Libertrendz"
               style={{
-                height: 36,
+                height: 50,
                 width: 'auto',
                 display: 'block',
                 opacity: 0.85,
