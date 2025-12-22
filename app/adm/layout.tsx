@@ -199,7 +199,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           }}
         >
           <img
-            src="/app-novo.png"
+            src="/logo-confiance.png"
             alt="CONFIANCE"
             style={{ height: 56, width: 'auto', display: 'block' }}
           />
