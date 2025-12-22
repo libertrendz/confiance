@@ -35,7 +35,6 @@ export default function LoginPage() {
 
         if (valid) {
           setRedirecting(true);
-          // redireciono já para o menu
           window.location.replace('/menu');
           return;
         }
@@ -49,7 +48,9 @@ export default function LoginPage() {
         }
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [supa]);
 
   async function pedirMagicLink(e: React.FormEvent) {
@@ -58,7 +59,6 @@ export default function LoginPage() {
     setMsg(null);
     setErr(null);
     try {
-      // pode ser /auth/confirm?next=/menu ou /auth/callback?next=/menu (ambos suportados)
       const redirect = `${window.location.origin}/auth/callback?next=/menu`;
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
@@ -83,15 +83,40 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
+    <main
+      style={{
+        padding: 24,
+        fontFamily: 'system-ui',
+        maxWidth: 420,
+        margin: '0 auto',
+      }}
+    >
+      {/* Logo novo centralizado acima */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10, marginBottom: 14 }}>
+        <img
+          src="/app-novo.png"
+          alt="CONFIANCE"
+          style={{
+            height: 56,
+            width: 'auto',
+            display: 'block',
+          }}
+        />
+      </div>
 
-      {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
+      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 12, color: '#0e3258', textAlign: 'center' }}>
+        Entrar
+      </h1>
+
+      {!checked && <p style={{ color: '#666', textAlign: 'center' }}>A verificar sessão…</p>}
 
       {checked && (
         <>
-          <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
-            <label htmlFor="email">Email</label>
+          <form onSubmit={pedirMagicLink} style={{ marginTop: 10 }}>
+            <label htmlFor="email" style={{ fontWeight: 700, color: '#0e3258' }}>
+              Email
+            </label>
+
             <input
               id="email"
               type="email"
@@ -104,13 +129,14 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               style={{
                 width: '100%',
-                padding: 10,
-                marginTop: 6,
+                padding: 12,
+                marginTop: 8,
                 marginBottom: 12,
-                border: '1px solid #ccc',
-                borderRadius: 8,
+                border: '1px solid var(--border, #ccc)',
+                borderRadius: 10,
               }}
             />
+
             <button
               type="submit"
               disabled={sending || !email.trim()}
@@ -120,6 +146,9 @@ export default function LoginPage() {
                 borderRadius: 10,
                 border: 'none',
                 cursor: 'pointer',
+                background: '#0e3258',
+                color: '#fff',
+                fontWeight: 800,
                 opacity: sending || !email.trim() ? 0.6 : 1,
               }}
             >
@@ -129,6 +158,20 @@ export default function LoginPage() {
 
           {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
+
+          {/* Powered by (PNG) abaixo dos campos */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+            <img
+              src="/powered-by-libertrendz.png"
+              alt="Powered by Libertrendz"
+              style={{
+                height: 18,
+                width: 'auto',
+                display: 'block',
+                opacity: 0.85,
+              }}
+            />
+          </div>
         </>
       )}
     </main>
