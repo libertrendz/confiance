@@ -129,7 +129,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           color: '#fff',
           padding: 16,
           gap: 10,
-          overflow: 'hidden',
+
+          // ✅ CRÍTICO: permite rolar o menu lateral quando o viewport é menor (zoom, barras, etc.)
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
         }}
       >
         {/* Logo */}
@@ -141,7 +144,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             paddingBottom: 12,
             marginBottom: 6,
             borderBottom: '1px solid rgba(255,255,255,.12)',
-            flex: '0 0 auto',
           }}
         >
           <img src="/app-novo.png" alt="CONFIANCE" style={{ height: 56, width: 'auto', display: 'block' }} />
@@ -221,7 +223,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           style={{
             borderTop: '1px solid rgba(255,255,255,.15)',
             paddingTop: 10,
-            flex: '0 0 auto',
           }}
         >
           <div
@@ -255,15 +256,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             Sair
           </button>
 
-          {/* PNG powered by (responsivo e consistente entre telas) */}
-          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2 }}>
+          {/* ✅ PNG (fundo transparente) - maior e responsivo */}
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 6 }}>
             <img
               src="/powered_by_libertrendzt.png"
               alt="Powered by Libertrendz"
               style={{
                 display: 'block',
                 width: '100%',
-                maxWidth: 210,
+                maxWidth: 220,   // fica “visível”, sem virar minúsculo
                 height: 'auto',
                 maxHeight: 46,
                 objectFit: 'contain',
