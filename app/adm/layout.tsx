@@ -258,7 +258,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               src="/powered-by-libertrendz2.png"
               alt="Powered by Libertrendz"
               style={{
-                height: 50,
+                height: 40,
                 width: 'auto',
                 display: 'block',
                 opacity: 0.85,
