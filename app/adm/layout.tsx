@@ -255,10 +255,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           {/* NOVO: PNG powered by (substitui o texto antigo) */}
           <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2 }}>
             <img
-              src="/powered-by-libertrendz.png"
+              src="/powered-by-libertrendz2.png"
               alt="Powered by Libertrendz"
               style={{
-                height: 30,
+                height: 50,
                 width: 'auto',
                 display: 'block',
                 opacity: 0.85,
