@@ -58,7 +58,19 @@ export async function GET(req: NextRequest) {
   const next = sanitizeNext(url.searchParams.get('next'));
 
   try {
-    // 1) MAGIC LINK / INVITE (OTP) — priorizar sempre que existir
+    // 1) Fluxo PKCE/OAuth: ?code=...
+    const code = url.searchParams.get('code') || url.searchParams.get('verification_code');
+
+    if (code) {
+      const { error } = await supa.auth.exchangeCodeForSession(code);
+      if (error) {
+        const err = encodeURIComponent(error.message || 'code_exchange_failed');
+        return NextResponse.redirect(new URL(`/login?err=${err}&flow=code`, url.origin));
+      }
+      return NextResponse.redirect(new URL(next, url.origin));
+    }
+
+    // 2) Fluxo OTP antigo: token_hash + type
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
@@ -81,18 +93,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // 2) PKCE/OAuth “code=...” — só tentar se NÃO veio token_hash
-    const code = url.searchParams.get('code') || url.searchParams.get('verification_code');
-    if (code) {
-      const { error } = await supa.auth.exchangeCodeForSession(code);
-      if (error) {
-        const err = encodeURIComponent(error.message || 'code_exchange_failed');
-        return NextResponse.redirect(new URL(`/login?err=${err}&flow=code`, url.origin));
-      }
-      return NextResponse.redirect(new URL(next, url.origin));
-    }
-
-    // 3) Sessão já existe?
+    // 3) Já existe sessão?
     const { data } = await supa.auth.getSession();
     if (data.session) {
       return NextResponse.redirect(new URL(next, url.origin));
