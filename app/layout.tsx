@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <SwRegister />
         <AuthGate />
-        <IdleLogout minutes={10} />
+        <IdleLogout minutes={60} />
         {children}
       </body>
     </html>
