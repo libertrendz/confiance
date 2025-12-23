@@ -118,8 +118,6 @@ export default function LoginPage() {
         <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280' }}>
           CONFIANCE
         </div>
-        <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258' }}>Entrar</div>
-      </div>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, textAlign: 'center', color: '#0e3258' }}>
         Entrar
       </h1>
