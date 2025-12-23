@@ -9,20 +9,22 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     setErr(null);
-    setMsg(null);
     try {
       if (!id) throw new Error('ID em falta');
+
       const res = await fetch(`/api/admin/fornecedores/get?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
       const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) throw new Error(`Resposta inválida do servidor (${res.status})`);
+      if (!ct.includes('application/json')) {
+        throw new Error(`Resposta inválida do servidor (${res.status})`);
+      }
       const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Falha ao carregar');
-      setForm(j);
+      if (!res.ok || !j?.ok) throw new Error(j?.error || 'Falha ao carregar');
+
+      setForm(j.row);
     } catch (e: any) {
       setErr(e?.message || 'Falha ao carregar');
       setForm(null);
@@ -47,20 +49,26 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
     e.preventDefault();
     setSaving(true);
     setErr(null);
-    setMsg(null);
-
     try {
       const res = await fetch('/api/admin/fornecedores/update', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...form, id }),
       });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j?.error || 'Falha ao guardar');
 
-      // recarrega do servidor para o form refletir o que ficou no DB
-      await load();
-      setMsg('Guardado.');
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        throw new Error(`Resposta inválida do servidor (${res.status})`);
+      }
+
+      const j = await res.json();
+      if (!res.ok || !j?.ok) throw new Error(j?.error || 'Falha ao guardar');
+
+      // Mantém consistência: atualiza o form com o row retornado
+      if (j.row) setForm(j.row);
+
+      alert('Guardado.');
+      window.location.replace('/adm/fornecedores');
     } catch (e: any) {
       setErr(e?.message || 'Falha ao guardar');
     } finally {
@@ -193,16 +201,12 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
           />
         </div>
 
-        {err && <p style={{ color: 'crimson', margin: 0 }}>{err}</p>}
-        {msg && <p style={{ color: 'green', margin: 0 }}>{msg}</p>}
-
+        {err && <p style={{ color: 'crimson' }}>{err}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-primary" disabled={saving} type="submit">
             {saving ? 'A guardar…' : 'Guardar'}
           </button>
-          <a className="btn btn-ghost" href="/adm/fornecedores">
-            Voltar
-          </a>
+          <a className="btn btn-ghost" href="/adm/fornecedores">Cancelar</a>
         </div>
       </form>
     </main>
