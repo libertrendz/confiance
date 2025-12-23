@@ -2,15 +2,24 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import getBrowserSupabase from '@/lib/supa';
 
 type Props = {
-  minutes?: number;     // compat
-  timeoutMs?: number;   // opcional
+  minutes?: number;
+  timeoutMs?: number;
 };
 
-export default function IdleLogout({ minutes = 30, timeoutMs }: Props) {
+export default function IdleLogout({ minutes = 10, timeoutMs }: Props) {
   const supa = useMemo(() => getBrowserSupabase(), []);
+  const pathname = usePathname();
+
+  // NÃO derruba sessão no ADM nem durante auth/login
+  const disabled =
+    pathname === '/login' ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/adm');
+
   const lastActivityRef = useRef<number>(Date.now());
   const intervalRef = useRef<number | null>(null);
   const signingOutRef = useRef(false);
@@ -35,12 +44,11 @@ export default function IdleLogout({ minutes = 30, timeoutMs }: Props) {
   }
 
   useEffect(() => {
+    if (disabled) return;
+
     markActivity();
 
     const onActivity = () => markActivity();
-    const onVisibility = () => {
-      if (!document.hidden) markActivity();
-    };
 
     const winEvents: Array<keyof WindowEventMap> = [
       'mousemove',
@@ -58,15 +66,17 @@ export default function IdleLogout({ minutes = 30, timeoutMs }: Props) {
       'focus',
     ];
 
+    const onVisibility = () => {
+      if (!document.hidden) markActivity();
+    };
+
     winEvents.forEach((ev) => window.addEventListener(ev, onActivity, { passive: true }));
-    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', onVisibility, { passive: true } as any);
 
     if (intervalRef.current) window.clearInterval(intervalRef.current);
     intervalRef.current = window.setInterval(() => {
       const idleFor = Date.now() - lastActivityRef.current;
-      if (idleFor >= effectiveTimeoutMs) {
-        doLogout();
-      }
+      if (idleFor >= effectiveTimeoutMs) doLogout();
     }, 5000);
 
     return () => {
@@ -79,7 +89,7 @@ export default function IdleLogout({ minutes = 30, timeoutMs }: Props) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveTimeoutMs]);
+  }, [disabled, effectiveTimeoutMs]);
 
   return null;
 }
