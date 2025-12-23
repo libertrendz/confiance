@@ -1,4 +1,4 @@
-// public/sw.js — SW minimalista (auth-safe) — NÃO cacheia navegação/HTML
+// public/sw.js — SW minimalista (auth-safe + sem cache de /api)
 const CACHE = 'confiance-static-v9';
 
 const CORE = [
@@ -10,6 +10,8 @@ const CORE = [
   '/icons/icon-512.png',
   '/icons/maskable-192.png',
   '/icons/maskable-512.png',
+  '/app-novo.png',
+  '/powered_by_libertrendzt.png',
 ];
 
 self.addEventListener('install', (e) => {
@@ -34,18 +36,42 @@ function isSameOrigin(url) {
   }
 }
 
+function isAuthPath(pathname) {
+  return pathname === '/login' || pathname.startsWith('/auth/');
+}
+
+function isApiPath(pathname) {
+  return pathname.startsWith('/api/');
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+
   if (!isSameOrigin(req.url)) return;
 
-  // IMPORTANTE: navegação (HTML) SEMPRE network-only (evita “tela antiga” e mistura de sessão)
-  if (req.mode === 'navigate') {
+  // NUNCA cachear API (senão lista/edição fica “presa”)
+  if (isApiPath(url.pathname)) {
     e.respondWith(fetch(req));
     return;
   }
 
-  // Assets: cache-first com preenchimento
+  // Navegação (HTML) — SEM cache (evita “página fantasma” / sessão cruzada)
+  if (req.mode === 'navigate') {
+    // Auth: sempre rede
+    if (isAuthPath(url.pathname)) {
+      e.respondWith(fetch(req));
+      return;
+    }
+
+    // App: sempre rede (sem fallback pra HTML cache)
+    e.respondWith(fetch(req));
+    return;
+  }
+
+  // Assets estáticos: cache-first
   e.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
