@@ -1,10 +1,10 @@
+// app/adm/fornecedores/[id]/edit/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 
 export default function FornecedorEditPage({ params }: { params: { id: string } }) {
   const id = params?.id;
-
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,20 +17,11 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
     setMsg(null);
     try {
       if (!id) throw new Error('ID em falta');
-
-      const res = await fetch(`/api/admin/fornecedores/get?id=${encodeURIComponent(id)}`, {
-        cache: 'no-store',
-        headers: { 'cache-control': 'no-store' },
-      });
-
+      const res = await fetch(`/api/admin/fornecedores/get?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
       const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) {
-        throw new Error(`Resposta inválida do servidor (${res.status})`);
-      }
-
+      if (!ct.includes('application/json')) throw new Error(`Resposta inválida do servidor (${res.status})`);
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Falha ao carregar');
-
       setForm(j);
     } catch (e: any) {
       setErr(e?.message || 'Falha ao carregar');
@@ -42,8 +33,13 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
 
   useEffect(() => {
     let alive = true;
-    (async () => { if (alive) await load(); })();
-    return () => { alive = false; };
+    (async () => {
+      if (!alive) return;
+      await load();
+    })();
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -56,16 +52,15 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
     try {
       const res = await fetch('/api/admin/fornecedores/update', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...form, id }),
       });
-
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || 'Falha ao guardar');
 
-      setMsg('Guardado.');
-      // recarrega do servidor para garantir que o form reflete o DB
+      // recarrega do servidor para o form refletir o que ficou no DB
       await load();
+      setMsg('Guardado.');
     } catch (e: any) {
       setErr(e?.message || 'Falha ao guardar');
     } finally {
@@ -179,7 +174,8 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
             </select>
           </div>
           <div>
-            <label className="muted">Ativo</label><br />
+            <label className="muted">Ativo</label>
+            <br />
             <input
               type="checkbox"
               checked={!!form.ativo}
@@ -204,10 +200,9 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
           <button className="btn btn-primary" disabled={saving} type="submit">
             {saving ? 'A guardar…' : 'Guardar'}
           </button>
-          <a className="btn btn-ghost" href="/adm/fornecedores">Voltar</a>
-          <button className="btn btn-ghost" type="button" onClick={load} disabled={saving}>
-            Recarregar
-          </button>
+          <a className="btn btn-ghost" href="/adm/fornecedores">
+            Voltar
+          </a>
         </div>
       </form>
     </main>
