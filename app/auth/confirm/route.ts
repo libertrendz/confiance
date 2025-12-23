@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   const next = sanitizeNext(url.searchParams.get('next'));
 
   try {
-    // Fluxo token_hash (invite/magiclink “clássico”)
+    // 1) MAGIC LINK / INVITE (OTP) — priorizar sempre que existir
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
@@ -81,14 +81,24 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Se veio PKCE code aqui, manda pro callback page (client-side)
-    const code = url.searchParams.get('code');
+    // 2) PKCE/OAuth “code=...” — só tentar se NÃO veio token_hash
+    const code = url.searchParams.get('code') || url.searchParams.get('verification_code');
     if (code) {
-      const cb = `/auth/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`;
-      return NextResponse.redirect(new URL(cb, url.origin));
+      const { error } = await supa.auth.exchangeCodeForSession(code);
+      if (error) {
+        const err = encodeURIComponent(error.message || 'code_exchange_failed');
+        return NextResponse.redirect(new URL(`/login?err=${err}&flow=code`, url.origin));
+      }
+      return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // Sem nada útil: volta com causa explícita
+    // 3) Sessão já existe?
+    const { data } = await supa.auth.getSession();
+    if (data.session) {
+      return NextResponse.redirect(new URL(next, url.origin));
+    }
+
+    // 4) Nada útil
     return NextResponse.redirect(new URL('/login?err=missing_code_or_token', url.origin));
   } catch (e: any) {
     const err = encodeURIComponent(e?.message || 'unknown_error');
