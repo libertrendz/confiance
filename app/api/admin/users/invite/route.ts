@@ -27,8 +27,8 @@ export async function POST(req: Request) {
     }
 
     const supa = getServiceSupabase();
-    const redirectTo = `${new URL(req.url).origin}/auth/confirm?next=/menu`;
-
+    const redirectTo = `${new URL(req.url).origin}/auth/callback?next=/menu`;
+    
     // 1) Envia convite; se já existir, segue o baile
     const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
       redirectTo,
