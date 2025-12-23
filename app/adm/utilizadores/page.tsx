@@ -19,7 +19,7 @@ type Row = {
 };
 
 export default function UtilizadoresAdmPage() {
-  useMemo(() => getBrowserSupabase(), []);
+  useMemo(() => getBrowserSupabase(), []); // mantém padrão do projeto
   const [list, setList] = useState<Row[] | null>(null);
   const [loadingList, setLoadingList] = useState(false);
 
@@ -36,7 +36,8 @@ export default function UtilizadoresAdmPage() {
     setLoadingList(true);
     setErr(null);
     try {
-      const res = await fetch('/api/admin/users/list', { cache: 'no-store' });
+      const url = `/api/admin/users/list?t=${Date.now()}`; // cache-buster (SW/PWA)
+      const res = await fetch(url, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Falha ao listar');
       setList(data);
@@ -74,8 +75,8 @@ export default function UtilizadoresAdmPage() {
   async function doDelete(user_id: string) {
     if (!confirm('Eliminar utilizador?')) return;
 
-    // ✅ remove já do ecrã (otimista)
-    setList((prev) => (prev ? prev.filter((u) => u.user_id !== user_id) : prev));
+    // otimista: remove da UI já
+    setList((prev) => (prev ? prev.filter((x) => x.user_id !== user_id) : prev));
 
     try {
       const res = await fetch('/api/admin/users/delete', {
@@ -85,13 +86,10 @@ export default function UtilizadoresAdmPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Falha ao eliminar');
-
-      // ✅ recarrega para garantir consistência com a view
       await load();
     } catch (e: any) {
       alert(e?.message || 'Falha ao eliminar');
-      // se falhou, recarrega para re-sincronizar
-      await load();
+      await load(); // re-sync se falhar
     }
   }
 
@@ -103,10 +101,12 @@ export default function UtilizadoresAdmPage() {
     <main style={{ padding: 18 }}>
       <h1 className="h1" style={{ marginBottom: 12 }}>Utilizadores</h1>
 
-      {/* ADICIONAR */}
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 className="h2">Adicionar utilizador</h2>
-        <form onSubmit={addUser} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 160px auto' }}>
+        <form
+          onSubmit={addUser}
+          style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 160px auto' }}
+        >
           <div>
             <label className="muted">Email</label>
             <input
@@ -131,7 +131,13 @@ export default function UtilizadoresAdmPage() {
             <select
               value={invite.papel}
               onChange={(e) => setInvite((i) => ({ ...i, papel: e.target.value as Papel }))}
-              style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: '10px', background: '#fff' }}
+              style={{
+                width: '100%',
+                padding: 10,
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                background: '#fff',
+              }}
             >
               <option value="externo">Externo</option>
               <option value="gestor">Gestor</option>
@@ -149,7 +155,6 @@ export default function UtilizadoresAdmPage() {
         {msg && <p style={{ color: 'green', marginTop: 8 }}>{msg}</p>}
       </section>
 
-      {/* LISTA */}
       <section className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h2 className="h2">Lista</h2>
@@ -178,12 +183,19 @@ export default function UtilizadoresAdmPage() {
                     <td style={{ padding: '8px' }}>{r.nome_exibicao || r.nome || '—'}</td>
                     <td style={{ padding: '8px' }}>{r.email || '—'}</td>
                     <td style={{ padding: '8px', textTransform: 'capitalize' }}>{r.papel || '—'}</td>
-                    <td style={{ padding: '8px' }}>{r.last_sign_in_at ? new Date(r.last_sign_in_at).toLocaleString() : '—'}</td>
+                    <td style={{ padding: '8px' }}>
+                      {r.last_sign_in_at ? new Date(r.last_sign_in_at).toLocaleString() : '—'}
+                    </td>
                     <td style={{ padding: '8px', textAlign: 'right' }}>
                       <a href={`/adm/utilizadores/${r.user_id}/edit`} className="btn btn-ghost" aria-label="Editar">
                         Editar
                       </a>
-                      <button onClick={() => doDelete(r.user_id)} className="btn btn-ghost" style={{ marginLeft: 6 }} aria-label="Eliminar">
+                      <button
+                        onClick={() => doDelete(r.user_id)}
+                        className="btn btn-ghost"
+                        style={{ marginLeft: 6 }}
+                        aria-label="Eliminar"
+                      >
                         Eliminar
                       </button>
                     </td>
