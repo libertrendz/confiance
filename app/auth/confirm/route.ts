@@ -8,7 +8,6 @@ export const dynamic = 'force-dynamic';
 function sanitizeNext(nextRaw: string | null): string {
   if (!nextRaw) return '/menu';
   try {
-    // Só aceita caminhos relativos internos
     const url = new URL(nextRaw, 'http://x');
     const p = url.pathname + (url.search || '');
     return p.startsWith('/') ? p : '/menu';
@@ -24,9 +23,7 @@ function getServerSupabase() {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anon) {
-    throw new Error(
-      'Faltam envs: NEXT_PUBLIC_SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY'
-    );
+    throw new Error('Faltam envs: NEXT_PUBLIC_SUPABASE_URL e/ou NEXT_PUBLIC_SUPABASE_ANON_KEY');
   }
 
   return createServerClient(url, anon, {
@@ -35,7 +32,6 @@ function getServerSupabase() {
         return cookieStore.get(name)?.value;
       },
       set(name: string, value: string, options: any) {
-        // garante cookies http-only coerentes
         cookieStore.set(name, value, {
           httpOnly: true,
           sameSite: 'lax',
@@ -62,22 +58,7 @@ export async function GET(req: NextRequest) {
   const next = sanitizeNext(url.searchParams.get('next'));
 
   try {
-    // 1) Fluxo PKCE / OAuth moderno: ?code=...
-    const code =
-      url.searchParams.get('code') ||
-      url.searchParams.get('verification_code'); // variação em alguns provedores
-
-    if (code) {
-      const { error } = await supa.auth.exchangeCodeForSession(code);
-      if (error) {
-        const err = encodeURIComponent(error.message || 'code_exchange_failed');
-        return NextResponse.redirect(new URL(`/login?err=${err}&flow=code`, url.origin));
-      }
-      // sucesso: cookies http-only gravados
-      return NextResponse.redirect(new URL(next, url.origin));
-    }
-
-    // 2) Fluxo Magic Link "antigo": token_hash + type
+    // Magic link / invite: token_hash + type (mais estável pro teu fluxo)
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
@@ -97,16 +78,22 @@ export async function GET(req: NextRequest) {
         const err = encodeURIComponent(error.message || 'otp_verify_failed');
         return NextResponse.redirect(new URL(`/login?err=${err}&flow=otp`, url.origin));
       }
+
+      // Pós-login: externo -> /menu ; admin/gestor -> /adm/dashboard (mesmo que venha next=/menu)
+      const { data: u } = await supa.auth.getUser();
+      const papel = (u.user?.user_metadata as any)?.app_role || (u.user?.user_metadata as any)?.papel || null;
+
+      if (papel === 'admin' || papel === 'gestor') {
+        return NextResponse.redirect(new URL('/adm/dashboard', url.origin));
+      }
+
       return NextResponse.redirect(new URL(next, url.origin));
     }
 
-    // 3) Sem code/token: já existe sessão nos cookies?
+    // Se chegou aqui sem token, tenta ver se já há sessão
     const { data } = await supa.auth.getSession();
-    if (data.session) {
-      return NextResponse.redirect(new URL(next, url.origin));
-    }
+    if (data.session) return NextResponse.redirect(new URL(next, url.origin));
 
-    // 4) Sem nada útil: volta com causa explícita
     return NextResponse.redirect(new URL('/login?err=missing_code_or_token', url.origin));
   } catch (e: any) {
     const err = encodeURIComponent(e?.message || 'unknown_error');
