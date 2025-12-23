@@ -21,12 +21,7 @@ export async function POST(req: Request) {
       cod_postal: body.cod_postal ?? null,
       observacoes: body.observacoes ?? null,
       // forma_pagamento: enum textual com duas opções aceites pelas CHECKs
-      forma_pagamento: (() => {
-        const v = String(body.forma_pagamento || '').trim().toUpperCase();
-        if (v.includes('VISTA')) return 'A VISTA';
-        if (v.includes('PARCEL')) return 'PARCELADO';
-        return null;
-      })(),
+            forma_pagamento: (() => {
       updated_at: new Date().toISOString(),
     };
 
