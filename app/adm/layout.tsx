@@ -96,7 +96,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const isGestor = papel === 'gestor';
 
   const navItems: NavItem[] = [
-    { href: '/adm/dashboard', label: 'Dashboard', visible: isAdmin || isGestor },
+    { href: '/adm/dashboard', label: 'Início', visible: isAdmin || isGestor },
     { href: '/adm/utilizadores', label: 'Utilizadores', visible: isAdmin || isGestor },
     { href: '/adm/colaboradores', label: 'Colaboradores', visible: isAdmin, disabled: true, hint: 'Em breve' },
     { href: '/adm/roteiros', label: 'Roteiros e Tarefas', visible: isAdmin || isGestor },
