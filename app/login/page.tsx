@@ -38,6 +38,7 @@ export default function LoginPage() {
           return;
         }
       } catch {
+        // ignora
       } finally {
         if (alive) {
           setChecked(true);
@@ -56,7 +57,6 @@ export default function LoginPage() {
     setSending(true);
     setMsg(null);
     setErr(null);
-
     try {
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
       const { error } = await supa.auth.signInWithOtp({
@@ -76,7 +76,7 @@ export default function LoginPage() {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrando…</h1>
-        <p>Redirecionando.</p>
+        <p>Redirecionando para o menu.</p>
       </main>
     );
   }
