@@ -17,7 +17,7 @@ function sanitizeNext(nextRaw: string | null): string {
 
 export default function AuthConfirmPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
-  const [msg, setMsg] = useState('A confirmar…');
+  const [msg, setMsg] = useState('A confirmar acesso…');
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,9 +28,7 @@ export default function AuthConfirmPage() {
         const url = new URL(window.location.href);
         const next = sanitizeNext(url.searchParams.get('next'));
 
-        const code =
-          url.searchParams.get('code') ||
-          url.searchParams.get('verification_code');
+        const code = url.searchParams.get('code') || url.searchParams.get('verification_code');
 
         const token_hash =
           url.searchParams.get('token_hash') ||
@@ -45,52 +43,40 @@ export default function AuthConfirmPage() {
           | 'email_change'
           | null;
 
-        // 1) Fluxo PKCE/code -> precisa rodar no browser (tem code_verifier)
+        // 1) PKCE/code flow (mais comum no Supabase recente)
         if (code) {
-          setMsg('A finalizar sessão…');
           const { error } = await supa.auth.exchangeCodeForSession(code);
           if (error) throw error;
+
+          if (!alive) return;
+          window.location.replace(next);
+          return;
         }
-        // 2) Fluxo token_hash/type (OTP antigo)
-        else if (token_hash && type) {
-          setMsg('A verificar acesso…');
+
+        // 2) token_hash flow (alguns convites/links)
+        if (token_hash && type) {
           const { error } = await supa.auth.verifyOtp({ type, token_hash });
           if (error) throw error;
-        } else {
-          // 3) Já existe sessão?
-          const { data } = await supa.auth.getSession();
-          if (!data.session) {
-            throw new Error('missing_code_or_token');
-          }
+
+          if (!alive) return;
+          window.location.replace(next);
+          return;
         }
 
-        // 4) Redireciona por papel (regra de negócio)
-        const { data: ud } = await supa.auth.getUser();
-        const uid = ud.user?.id ?? null;
-
-        if (uid) {
-          const { data: prof } = await supa
-            .from('profiles')
-            .select('papel')
-            .eq('user_id', uid)
-            .maybeSingle();
-
-          const papel = (prof as any)?.papel as string | undefined;
-          if (papel === 'admin' || papel === 'gestor') {
-            window.location.replace('/adm/dashboard');
-            return;
-          }
+        // 3) fallback: se já existe sessão, segue
+        const { data } = await supa.auth.getSession();
+        if (data.session) {
+          window.location.replace(next);
+          return;
         }
 
-        window.location.replace(next);
+        throw new Error('missing_code_or_token');
       } catch (e: any) {
-        console.error('auth/confirm error', e);
+        console.error('AuthConfirm error', e);
         if (!alive) return;
-        setErr(e?.message || 'Falha ao confirmar acesso.');
-        setMsg('Não foi possível confirmar.');
-        // volta pro login com erro
-        const safe = encodeURIComponent(e?.message || 'auth_confirm_failed');
-        window.location.replace(`/login?err=${safe}`);
+        const emsg = e?.message || 'Falha ao confirmar acesso.';
+        setErr(emsg);
+        setMsg('Não foi possível confirmar o acesso.');
       }
     })();
 
@@ -101,9 +87,30 @@ export default function AuthConfirmPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Entrando…</h1>
-      <p style={{ color: '#49546A' }}>{msg}</p>
-      {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
+      <h1 style={{ fontSize: 20, fontWeight: 800, marginBottom: 10, color: '#0e3258' }}>
+        Confirmando…
+      </h1>
+
+      <p style={{ color: '#49546A', marginTop: 0 }}>{msg}</p>
+
+      {err && (
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: '1px solid #FFD7D7', background: '#FFF5F5' }}>
+          <div style={{ fontWeight: 800, color: 'crimson', marginBottom: 6 }}>Erro</div>
+          <div style={{ color: '#7a1f1f' }}>{err}</div>
+          <a
+            href="/login"
+            style={{
+              display: 'inline-block',
+              marginTop: 10,
+              textDecoration: 'none',
+              fontWeight: 800,
+              color: '#0e3258',
+            }}
+          >
+            Voltar ao login
+          </a>
+        </div>
+      )}
     </main>
   );
 }
