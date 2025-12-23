@@ -30,6 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <SwRegister />
         <AuthGate />
+        {/* 60 minutos para não prejudicar operação */}
         <IdleLogout minutes={60} />
         {children}
       </body>
