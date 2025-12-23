@@ -1,4 +1,4 @@
-// public/sw.js — SW minimalista (auth-safe, sem cache de HTML/API)
+// public/sw.js — SW minimalista (auth-safe) — NÃO cacheia navegação/HTML
 const CACHE = 'confiance-static-v9';
 
 const CORE = [
@@ -34,42 +34,18 @@ function isSameOrigin(url) {
   }
 }
 
-function isApiPath(pathname) {
-  return pathname.startsWith('/api/');
-}
-
-function isAuthPath(pathname) {
-  return pathname === '/login' || pathname.startsWith('/auth/');
-}
-
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
-
-  const url = new URL(req.url);
-
-  // só same-origin
   if (!isSameOrigin(req.url)) return;
 
-  // NUNCA cachear API
-  if (isApiPath(url.pathname)) {
-    e.respondWith(fetch(req));
-    return;
-  }
-
-  // NUNCA cachear páginas de auth
-  if (req.mode === 'navigate' && isAuthPath(url.pathname)) {
-    e.respondWith(fetch(req));
-    return;
-  }
-
-  // Navegação (HTML): network-only (evita “desktop abrir página do mobile”)
+  // IMPORTANTE: navegação (HTML) SEMPRE network-only (evita “tela antiga” e mistura de sessão)
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req));
     return;
   }
 
-  // Assets: cache-first
+  // Assets: cache-first com preenchimento
   e.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
