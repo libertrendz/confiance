@@ -70,7 +70,7 @@ export default function DashboardAdm() {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: AZUL }}>Dashboard</h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: AZUL }}>Início</h1>
         <p style={{ margin: 0, color: '#64728a', fontSize: 13 }}>
           Bem-vindo. Use os atalhos abaixo para navegar pelos módulos.
         </p>
