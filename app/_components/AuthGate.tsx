@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import getBrowserSupabase from '@/lib/supa';
 
-const PUBLIC_PREFIXES = ['/login', '/auth/callback', '/logout', '/auth/signout'];
+const PUBLIC_PREFIXES = ['/login', '/auth/confirm', '/logout', '/auth/signout'];
 
 export default function AuthGate() {
   const supa = useMemo(() => getBrowserSupabase(), []);
