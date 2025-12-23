@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [checked, setChecked] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
 
+  // checa sessão na chegada e redireciona direto se existir
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -57,13 +58,19 @@ export default function LoginPage() {
     setSending(true);
     setMsg(null);
     setErr(null);
+
     try {
-      const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
+      // IMPORTANTE:
+      // - PKCE moderno cai em /auth/callback (page client-side)
+      const redirect = `${window.location.origin}/auth/callback?next=/menu`;
+
       const { error } = await supa.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: redirect },
       });
+
       if (error) throw error;
+
       setMsg('Email enviado. Se abrir dentro do app de email, use “Abrir no navegador”.');
     } catch (e: any) {
       setErr(e?.message ?? 'Falha ao enviar o email. Tente novamente.');
@@ -75,22 +82,53 @@ export default function LoginPage() {
   if (redirecting) {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrando…</h1>
-        <p>Redirecionando para o menu.</p>
+        <p style={{ color: '#666' }}>Entrando…</p>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
+    <main
+      style={{
+        padding: 24,
+        fontFamily: 'system-ui',
+        maxWidth: 420,
+        margin: '0 auto',
+        minHeight: '100vh',
+        display: 'grid',
+        alignContent: 'start',
+        gap: 14,
+      }}
+    >
+      {/* Logo CONFIANCE */}
+      <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
+        <img
+          src="/app-novo.png"
+          alt="CONFIANCE"
+          style={{
+            height: 54,
+            width: 'auto',
+            display: 'block',
+          }}
+        />
+      </div>
 
-      {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
+      <div style={{ textAlign: 'center', marginTop: 2 }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280' }}>
+          CONFIANCE
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258' }}>Entrar</div>
+      </div>
+
+      {!checked && <p style={{ color: '#666', margin: 0 }}>A verificar sessão…</p>}
 
       {checked && (
         <>
-          <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
-            <label htmlFor="email">Email</label>
+          <form onSubmit={pedirMagicLink} style={{ marginTop: 6 }}>
+            <label htmlFor="email" style={{ fontSize: 13, color: '#0e3258', fontWeight: 700 }}>
+              Email
+            </label>
+
             <input
               id="email"
               type="email"
@@ -106,10 +144,12 @@ export default function LoginPage() {
                 padding: 10,
                 marginTop: 6,
                 marginBottom: 12,
-                border: '1px solid #ccc',
-                borderRadius: 8,
+                border: '1px solid #d7e3ff',
+                borderRadius: 10,
+                background: '#fff',
               }}
             />
+
             <button
               type="submit"
               disabled={sending || !email.trim()}
@@ -119,6 +159,9 @@ export default function LoginPage() {
                 borderRadius: 10,
                 border: 'none',
                 cursor: 'pointer',
+                fontWeight: 800,
+                background: '#0e3258',
+                color: '#fff',
                 opacity: sending || !email.trim() ? 0.6 : 1,
               }}
             >
@@ -128,6 +171,20 @@ export default function LoginPage() {
 
           {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
+
+          {/* Powered by (NÃO some) */}
+          <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
+            <img
+              src="/powered_by_libertrendzt.png"
+              alt="Powered by Libertrendz"
+              style={{
+                width: 'min(260px, 70vw)',
+                height: 'auto',
+                display: 'block',
+                opacity: 0.9,
+              }}
+            />
+          </div>
         </>
       )}
     </main>
