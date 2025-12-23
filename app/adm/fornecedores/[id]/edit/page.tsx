@@ -22,7 +22,16 @@ export default function FornecedorEditPage({ params }: { params: { id: string } 
         }
         const j = await res.json();
         if (!res.ok) throw new Error(j?.error || 'Falha ao carregar');
-        if (alive) setForm(j);
+       if (alive) {
+  const fpRaw = String((j as any)?.forma_pagamento ?? '').trim().toUpperCase();
+  const fp = fpRaw.replace(/_/g, ' ');
+  const normalized =
+    fp.includes('VISTA') ? 'A VISTA' :
+    fp.includes('PARCEL') ? 'PARCELADO' :
+    '';
+
+  setForm({ ...j, forma_pagamento: normalized || null });
+}
       } catch (e:any) {
         setErr(e?.message || 'Falha ao carregar');
       } finally {
