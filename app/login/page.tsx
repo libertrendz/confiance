@@ -6,8 +6,6 @@ import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
-type Papel = 'admin' | 'gestor' | 'externo';
-
 function getErrFromUrl() {
   try {
     const u = new URL(window.location.href);
@@ -17,14 +15,11 @@ function getErrFromUrl() {
   }
 }
 
-function normalizeRole(v: any): Papel {
-  const s = String(v || '').toLowerCase().trim();
-  if (s === 'admin' || s === 'gestor' || s === 'externo') return s as Papel;
-  return 'externo';
-}
+type Papel = 'admin' | 'gestor' | 'externo';
 
 export default function LoginPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
+
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -32,61 +27,60 @@ export default function LoginPage() {
   const [checked, setChecked] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
 
-  async function redirectByRole(userId: string) {
-    // prioridade: profiles.papel; fallback: user_metadata.app_role
-    let role: Papel = 'externo';
-
-    try {
-      const { data: prof } = await supa
-        .from('profiles')
-        .select('papel')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (prof?.papel) role = normalizeRole(prof.papel);
-    } catch {
-      // ignora, cai no fallback
-    }
-
-    if (role === 'admin' || role === 'gestor') {
-      window.location.replace('/adm/dashboard');
-      return;
-    }
-    window.location.replace('/menu');
-  }
-
-  // checa sessão na chegada e redireciona direto se existir
+  // Checa sessão e redireciona:
+  // - externo -> /menu
+  // - admin/gestor -> /adm/dashboard
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
         const { data } = await supa.auth.getSession();
-        const uid = data.session?.user?.id || null;
+        const session = data.session;
+        const user = session?.user;
 
         if (!alive) return;
 
-        if (uid) {
+        if (user?.id) {
           setRedirecting(true);
-          await redirectByRole(uid);
+
+          // 1) tenta role pelo metadata
+          const meta = (user.user_metadata || {}) as Record<string, any>;
+          let papel: Papel = (meta.app_role as Papel) || (meta.papel as Papel) || 'externo';
+
+          // 2) se possível, confirma role no profiles (fonte mais confiável)
+          try {
+            const { data: prof } = await supa
+              .from('profiles')
+              .select('papel')
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+            const dbRole = (prof?.papel as Papel | undefined) || null;
+            if (dbRole && ['admin', 'gestor', 'externo'].includes(dbRole)) {
+              papel = dbRole;
+            }
+          } catch {
+            // ignora — segue com metadata
+          }
+
+          window.location.replace(papel === 'admin' || papel === 'gestor' ? '/adm/dashboard' : '/menu');
           return;
         }
       } catch {
         // ignora
       } finally {
-        if (!alive) return;
-        setChecked(true);
-
-        // só mostra erro se NÃO estiver redirecionando
-        const urlErr = typeof window !== 'undefined' ? getErrFromUrl() : null;
-        if (urlErr) setErr(urlErr);
+        if (alive) {
+          setChecked(true);
+          const urlErr = typeof window !== 'undefined' ? getErrFromUrl() : null;
+          if (urlErr) setErr(urlErr);
+        }
       }
     })();
 
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supa]);
 
   async function pedirMagicLink(e: React.FormEvent) {
@@ -96,7 +90,8 @@ export default function LoginPage() {
     setErr(null);
 
     try {
-      // Mantém confirm como handler único
+      // Fluxo simples e estável: volta SEMPRE para /auth/confirm
+      // (lá você trata token_hash/type e redireciona pro next)
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
 
       const { error } = await supa.auth.signInWithOtp({
@@ -117,8 +112,7 @@ export default function LoginPage() {
   if (redirecting) {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12, color: '#0e3258' }}>Entrando…</h1>
-        <p style={{ color: '#49546A' }}>Redirecionando…</p>
+        <p style={{ color: '#666' }}>Entrando…</p>
       </main>
     );
   }
@@ -126,24 +120,18 @@ export default function LoginPage() {
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
       {/* Logo + CONFIANCE */}
-      <div style={{ display: 'grid', justifyItems: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'grid', justifyItems: 'center', gap: 10, marginBottom: 14 }}>
         <img
           src="/app-novo.png"
           alt="CONFIANCE"
-          style={{
-            height: 54,
-            width: 'auto',
-            display: 'block',
-            marginBottom: 6,
-          }}
+          style={{ height: 72, width: 'auto', display: 'block' }}
         />
         <div
           style={{
-            fontSize: 12,
-            textTransform: 'uppercase',
+            fontWeight: 900,
             letterSpacing: 1,
             color: '#6b7280',
-            fontWeight: 800,
+            textTransform: 'uppercase',
           }}
         >
           CONFIANCE
@@ -157,9 +145,10 @@ export default function LoginPage() {
       {checked && (
         <>
           <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
-            <label htmlFor="email" style={{ fontSize: 13, color: '#49546A', fontWeight: 700 }}>
+            <label htmlFor="email" style={{ fontWeight: 700, color: '#374151' }}>
               Email
             </label>
+
             <input
               id="email"
               type="email"
@@ -172,11 +161,12 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               style={{
                 width: '100%',
-                padding: 10,
-                marginTop: 6,
+                padding: 12,
+                marginTop: 8,
                 marginBottom: 12,
-                border: '1px solid var(--border, #d1d5db)',
-                borderRadius: 10,
+                border: '1px solid #d1d5db',
+                borderRadius: 12,
+                outline: 'none',
               }}
             />
 
@@ -186,7 +176,7 @@ export default function LoginPage() {
               style={{
                 width: '100%',
                 padding: 12,
-                borderRadius: 10,
+                borderRadius: 12,
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 800,
@@ -202,7 +192,7 @@ export default function LoginPage() {
           {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
 
-          {/* Powered by (NÃO some) */}
+          {/* Powered by (não some) */}
           <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
             <img
               src="/powered-by-libertrendz.png"
@@ -211,7 +201,7 @@ export default function LoginPage() {
                 width: 'min(320px, 78vw)',
                 height: 'auto',
                 display: 'block',
-                opacity: 0.92,
+                opacity: 0.9,
               }}
             />
           </div>
