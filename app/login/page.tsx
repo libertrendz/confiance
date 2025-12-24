@@ -21,8 +21,7 @@ function shouldHideErr(e: string) {
     msg.includes('missing_code_or_token') ||
     msg.includes('both auth code and code verifier') ||
     msg.includes('code verifier') ||
-    msg.includes('invalid request') ||
-    msg.includes('link_invalido_ou_aberto_em_outro_dispositivo')
+    msg.includes('invalid request')
   );
 }
 
@@ -46,6 +45,23 @@ export default function LoginPage() {
 
         if (valid) {
           setRedirecting(true);
+
+          // tenta mandar admin/gestor pro dashboard (sem mexer em AuthGate)
+          try {
+            const uid = data.session!.user.id;
+            const { data: prof } = await supa
+              .from('profiles')
+              .select('papel')
+              .eq('user_id', uid)
+              .maybeSingle();
+
+            const papel = (prof as any)?.papel as string | undefined;
+            if (papel === 'admin' || papel === 'gestor') {
+              window.location.replace('/adm/dashboard');
+              return;
+            }
+          } catch {}
+
           window.location.replace('/menu');
           return;
         }
@@ -70,7 +86,7 @@ export default function LoginPage() {
     setMsg(null);
     setErr(null);
     try {
-      // ✅ sempre aponta para /auth/confirm (route)
+      // ✅ aponta para /auth/confirm (PAGE)
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
 
       const { error } = await supa.auth.signInWithOtp({
@@ -91,26 +107,37 @@ export default function LoginPage() {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrando…</h1>
-        <p>Redirecionando para o menu.</p>
+        <p>Redirecionando…</p>
       </main>
     );
   }
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-      {/* ✅ UI fixa do topo: Logo + CONFIANCE (não mexer) */}
+      {/* ✅ Logo + texto CONFIANCE (não mexe no resto) */}
       <div style={{ display: 'grid', justifyItems: 'center', marginBottom: 14 }}>
         <img
           src="/app-novo.png"
           alt="CONFIANCE"
-          style={{ height: 44, width: 'auto', display: 'block' }}
+          style={{ height: 64, width: 'auto', display: 'block' }}
         />
-        <div style={{ marginTop: 6, fontSize: 12, letterSpacing: 1, fontWeight: 900, color: '#0e3258' }}>
+        <div
+          style={{
+            marginTop: 6,
+            fontWeight: 900,
+            letterSpacing: 1,
+            color: '#0e3258',
+            textTransform: 'uppercase',
+            fontSize: 16,
+            lineHeight: 1,
+          }}
+        >
           CONFIANCE
         </div>
       </div>
 
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
+      {/* ✅ mantém título, só ajusta tamanho pra 24 como você pediu */}
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
       {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
 
@@ -156,7 +183,7 @@ export default function LoginPage() {
           {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
 
-          {/* ✅ UI fixa do rodapé: Powered (não mexer) */}
+          {/* ✅ Powered by (não some) */}
           <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
             <img
               src="/powered-by-libertrendz.png"
@@ -173,4 +200,4 @@ export default function LoginPage() {
       )}
     </main>
   );
-  }
+}
