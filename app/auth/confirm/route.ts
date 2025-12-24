@@ -56,11 +56,10 @@ export async function GET(req: NextRequest) {
   const supa = getServerSupabase();
   const url = new URL(req.url);
 
-  // next vem do teu redirectTo: /auth/confirm?next=/menu (ou /adm/dashboard)
   const next = sanitizeNext(url.searchParams.get('next'));
 
   try {
-    // ✅ Fluxo compatível multi-dispositivo: token_hash + type
+    // ✅ Fluxo compatível (multi-dispositivo): token_hash + type
     const token_hash =
       url.searchParams.get('token_hash') ||
       url.searchParams.get('token') ||
@@ -74,46 +73,44 @@ export async function GET(req: NextRequest) {
       | 'email_change'
       | null;
 
-    if (token_hash && type) {
-      const { error } = await supa.auth.verifyOtp({ type, token_hash });
-      if (error) {
-        const err = encodeURIComponent(error.message || 'otp_verify_failed');
-        return NextResponse.redirect(new URL(`/login?err=${err}`, url.origin));
-      }
+    // Se veio um link antigo/estranho sem os params corretos:
+    // NÃO joga erro feio na UI — só manda pro login.
+    if (!token_hash || !type) {
+      return NextResponse.redirect(new URL('/login', url.origin));
+    }
 
-      // Tenta decidir destino por papel (se der), senão cai no "next"
-      try {
-        const { data: u } = await supa.auth.getUser();
-        const uid = u.user?.id;
-        if (uid) {
-          const { data: prof } = await supa
-            .from('profiles')
-            .select('papel')
-            .eq('user_id', uid)
-            .maybeSingle();
+    const { error } = await supa.auth.verifyOtp({ type, token_hash });
+    if (error) {
+      // Também não polui UI com erro técnico
+      return NextResponse.redirect(new URL('/login', url.origin));
+    }
 
-          const papel = (prof as any)?.papel as string | undefined;
-          if (papel === 'admin' || papel === 'gestor') {
-            return NextResponse.redirect(new URL('/adm/dashboard', url.origin));
-          }
-          return NextResponse.redirect(new URL('/menu', url.origin));
+    // Decide destino por papel (admin/gestor => dashboard; externo => menu).
+    try {
+      const { data: u } = await supa.auth.getUser();
+      const uid = u.user?.id;
+
+      if (uid) {
+        const { data: prof } = await supa
+          .from('profiles')
+          .select('papel')
+          .eq('user_id', uid)
+          .maybeSingle();
+
+        const papel = (prof as any)?.papel as string | undefined;
+        if (papel === 'admin' || papel === 'gestor') {
+          return NextResponse.redirect(new URL('/adm/dashboard', url.origin));
         }
-      } catch {
-        // ignora e usa next
+        return NextResponse.redirect(new URL('/menu', url.origin));
       }
-
-      return NextResponse.redirect(new URL(next, url.origin));
+    } catch {
+      // ignora
     }
 
-    // Se já tem sessão nos cookies, segue
-    const { data } = await supa.auth.getSession();
-    if (data.session) {
-      return NextResponse.redirect(new URL(next, url.origin));
-    }
-
-    return NextResponse.redirect(new URL('/login?err=missing_code_or_token', url.origin));
-  } catch (e: any) {
-    const err = encodeURIComponent(e?.message || 'unknown_error');
-    return NextResponse.redirect(new URL(`/login?err=${err}`, url.origin));
+    // fallback
+    return NextResponse.redirect(new URL(next, url.origin));
+  } catch {
+    // sem erro técnico visível
+    return NextResponse.redirect(new URL('/login', req.url));
   }
 }
