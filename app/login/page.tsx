@@ -136,8 +136,8 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ✅ mantém título, só ajusta tamanho pra 24 como você pediu */}
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
+      {/* ✅ mantém título, só ajusta tamanho pra 20 como você pediu */}
+      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
       {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
 
