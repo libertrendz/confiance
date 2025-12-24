@@ -1,11 +1,120 @@
+// app/login/page.tsx
+'use client';
 
-ByKAhm9p6
+import { useEffect, useMemo, useState } from 'react';
+import getBrowserSupabase from '@/lib/supa';
 
+export const dynamic = 'force-dynamic';
 
+function getErrFromUrl() {
+  try {
+    const u = new URL(window.location.href);
+    return u.searchParams.get('err');
+  } catch {
+    return null;
+  }
+}
 
-Source
-Output
-page.tsx
+function shouldHideErr(e: string) {
+  const msg = (e || '').toLowerCase();
+  return (
+    msg.includes('missing_code_or_token') ||
+    msg.includes('both auth code and code verifier') ||
+    msg.includes('code verifier') ||
+    msg.includes('invalid request')
+  );
+}
+
+export default function LoginPage() {
+  const supa = useMemo(() => getBrowserSupabase(), []);
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+
+  // checa sessão na chegada e redireciona direto se existir
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supa.auth.getSession();
+        const valid = !!(data.session && data.session.user?.id);
+        if (!alive) return;
+
+        if (valid) {
+          setRedirecting(true);
+          window.location.replace('/menu');
+          return;
+        }
+      } catch {
+        // ignora
+      } finally {
+        if (alive) {
+          setChecked(true);
+          const urlErr = typeof window !== 'undefined' ? getErrFromUrl() : null;
+          if (urlErr && !shouldHideErr(urlErr)) setErr(urlErr);
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [supa]);
+
+  async function pedirMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setSending(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      // ✅ sempre aponta para /auth/confirm (page)
+      const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
+
+      const { error } = await supa.auth.signInWithOtp({
+        email: email.trim(),
+        options: { emailRedirectTo: redirect },
+      });
+
+      if (error) throw error;
+      setMsg('Email enviado. Se abrir dentro do app de email, use “Abrir no navegador”.');
+    } catch (e: any) {
+      setErr(e?.message ?? 'Falha ao enviar o email. Tente novamente.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (redirecting) {
+    return (
+      <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrando…</h1>
+        <p>Redirecionando para o menu.</p>
+      </main>
+    );
+  }
+
+  return (
+    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
+      {/* (mantém a tua UI daqui pra baixo — não mexi no layout do logo/Powered que tu já tinhas) */}
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
+
+      {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
+
+      {checked && (
+        <>
+          <form onSubmit={pedirMagicLink} style={{ marginTop: 8 }}>
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
                 width: '100%',
