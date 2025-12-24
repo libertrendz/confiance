@@ -19,6 +19,22 @@ type UltimoPontoHoje = {
   created_at: string;
 } | null;
 
+function todayLocalStr() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function localDateStrFromIso(iso: string) {
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function MenuPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
@@ -136,22 +152,14 @@ export default function MenuPage() {
     window.location.replace('/login');
   }
 
-  function todayStr() {
-    const hoje = new Date();
-    const yyyy = hoje.getFullYear();
-    const mm = String(hoje.getMonth() + 1).padStart(2, '0');
-    const dd = String(hoje.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
   async function carregarRoteiroEStatusHoje() {
     if (!usuarioId || !empresaId) return;
 
     setLoadingRoteiro(true);
     try {
-      const t = todayStr();
+      const t = todayLocalStr();
 
-      // 1) Roteiro do dia (corrigido: não puxa roteiro antigo com data_fim NULL)
+      // 1) Roteiro do dia (somente “ativos”/em curso — evita puxar coisa antiga)
       const { data: r, error: rErr } = await supa
         .from('ponto_roteiros')
         .select(
@@ -167,10 +175,9 @@ export default function MenuPage() {
         )
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
-        .or(
-          `and(data_fim.is.null,data_dia.eq.${t}),and(data_fim.not.is.null,data_dia.lte.${t},data_fim.gte.${t})`
-        )
-        .in('status', ['planeado', 'em_andamento', 'ativo', 'executado'])
+        .lte('data_dia', t)
+        .or(`data_fim.is.null,data_fim.gte.${t}`)
+        .in('status', ['planeado', 'em_andamento', 'ativo'])
         .order('data_dia', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -187,20 +194,20 @@ export default function MenuPage() {
         setRoteiroHoje(null);
       }
 
-      // 2) Último ponto do dia
-      const { data: p, error: pErr } = await supa
+      // 2) Último ponto do “dia local” (evita bug UTC -> mostra “em aberto” sem estar)
+      const { data: pontos, error: pErr } = await supa
         .from('ponto_registro')
         .select('tipo, created_at')
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
-        .gte('created_at', `${t}T00:00:00.000Z`)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(50);
 
       if (pErr) throw pErr;
 
-      setUltimoPontoHoje(p ? ({ tipo: (p as any).tipo, created_at: (p as any).created_at } as any) : null);
+      const hoje = (pontos || []).find((p: any) => localDateStrFromIso(p.created_at) === t) || null;
+
+      setUltimoPontoHoje(hoje ? ({ tipo: hoje.tipo, created_at: hoje.created_at } as any) : null);
     } catch (e) {
       console.error('Erro ao carregar roteiro/status do dia', e);
       setRoteiroHoje(null);
@@ -225,11 +232,13 @@ export default function MenuPage() {
   }
 
   const diaFinalizado = ultimoPontoHoje?.tipo === 'saida';
-  const statusRoteiro = (roteiroHoje?.status || null)?.toLowerCase();
 
-  const temAtividadeHoje = !!roteiroHoje;
-  const atividadeExecutada = temAtividadeHoje && (diaFinalizado || statusRoteiro === 'executado');
-  const atividadeEmAberto = temAtividadeHoje && !atividadeExecutada;
+  // ✅ regra final: se não há roteiro hoje, NÃO pode aparecer “em aberto”
+  const statusPill = !roteiroHoje
+    ? { label: 'Sem atividade hoje', bg: '#EEF3FF' }
+    : diaFinalizado
+      ? { label: 'Atividade executada', bg: '#EEF3FF' }
+      : { label: 'Atividade em aberto', bg: '#FFF7D6' };
 
   return (
     <main
@@ -408,11 +417,11 @@ export default function MenuPage() {
                     padding: '6px 10px',
                     borderRadius: 999,
                     border: '1px solid #D7E3FF',
-                    background: !temAtividadeHoje ? '#EEF3FF' : atividadeExecutada ? '#EEF3FF' : '#FFF7D6',
+                    background: statusPill.bg,
                     color: '#0e3258',
                   }}
                 >
-                  {!temAtividadeHoje ? 'Sem atividade hoje' : atividadeExecutada ? 'Atividade executada' : 'Atividade em aberto'}
+                  {statusPill.label}
                 </span>
               </div>
             )}
@@ -466,15 +475,7 @@ export default function MenuPage() {
 
 type CardAction = { href: string; label: string; kind?: 'primary' | 'accent' | 'ghost'; disabled?: boolean };
 
-function Card({
-  title,
-  desc,
-  actions = [],
-}: {
-  title: string;
-  desc: string;
-  actions?: CardAction[];
-}) {
+function Card({ title, desc, actions = [] }: { title: string; desc: string; actions?: CardAction[] }) {
   return (
     <article
       className="card"
@@ -541,4 +542,4 @@ function Card({
       )}
     </article>
   );
-}:
+}
