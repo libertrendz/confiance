@@ -131,7 +131,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <h1 style={{ fontSize: 28, fontWeight: 900, marginBottom: 12, color: '#0e3258' }}>Entrar</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 12, color: '#0e3258' }}>Entrar</h1>
 
       {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
 
