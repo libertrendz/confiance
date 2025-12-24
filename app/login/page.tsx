@@ -21,7 +21,8 @@ function shouldHideErr(e: string) {
     msg.includes('missing_code_or_token') ||
     msg.includes('both auth code and code verifier') ||
     msg.includes('code verifier') ||
-    msg.includes('invalid request')
+    msg.includes('invalid request') ||
+    msg.includes('link_invalido_ou_aberto_em_outro_dispositivo')
   );
 }
 
@@ -97,24 +98,14 @@ export default function LoginPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-      {/* ✅ Só encaixe de UI (logo + CONFIANCE + powered), sem mexer na lógica */}
-      <div style={{ display: 'grid', justifyItems: 'center', marginTop: 6, marginBottom: 14 }}>
+      {/* ✅ UI fixa do topo: Logo + CONFIANCE (não mexer) */}
+      <div style={{ display: 'grid', justifyItems: 'center', marginBottom: 14 }}>
         <img
           src="/app-novo.png"
           alt="CONFIANCE"
-          style={{ height: 54, width: 'auto', display: 'block' }}
+          style={{ height: 44, width: 'auto', display: 'block' }}
         />
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            fontWeight: 900,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            color: '#0e3258',
-            lineHeight: 1,
-          }}
-        >
+        <div style={{ marginTop: 6, fontSize: 12, letterSpacing: 1, fontWeight: 900, color: '#0e3258' }}>
           CONFIANCE
         </div>
       </div>
@@ -165,13 +156,13 @@ export default function LoginPage() {
           {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
 
-          {/* ✅ Powered by (sempre visível) */}
+          {/* ✅ UI fixa do rodapé: Powered (não mexer) */}
           <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
             <img
               src="/powered-by-libertrendz.png"
               alt="Powered by Libertrendz"
               style={{
-                width: 'min(280px, 70vw)',
+                width: 'min(260px, 70vw)',
                 height: 'auto',
                 display: 'block',
                 opacity: 0.9,
@@ -182,4 +173,4 @@ export default function LoginPage() {
       )}
     </main>
   );
-}
+  }
