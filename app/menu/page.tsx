@@ -151,6 +151,7 @@ export default function MenuPage() {
     try {
       const t = todayStr();
 
+      // 1) Roteiro do dia (corrigido: não puxa roteiro antigo com data_fim NULL)
       const { data: r, error: rErr } = await supa
         .from('ponto_roteiros')
         .select(
@@ -166,9 +167,10 @@ export default function MenuPage() {
         )
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
-        .lte('data_dia', t)
-        .or(`data_fim.is.null,data_fim.gte.${t}`)
-        .in('status', ['planeado', 'ativo', 'em_andamento'])
+        .or(
+          `and(data_fim.is.null,data_dia.eq.${t}),and(data_fim.not.is.null,data_dia.lte.${t},data_fim.gte.${t})`
+        )
+        .in('status', ['planeado', 'em_andamento', 'ativo', 'executado'])
         .order('data_dia', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -185,6 +187,7 @@ export default function MenuPage() {
         setRoteiroHoje(null);
       }
 
+      // 2) Último ponto do dia
       const { data: p, error: pErr } = await supa
         .from('ponto_registro')
         .select('tipo, created_at')
@@ -222,6 +225,11 @@ export default function MenuPage() {
   }
 
   const diaFinalizado = ultimoPontoHoje?.tipo === 'saida';
+  const statusRoteiro = (roteiroHoje?.status || null)?.toLowerCase();
+
+  const temAtividadeHoje = !!roteiroHoje;
+  const atividadeExecutada = temAtividadeHoje && (diaFinalizado || statusRoteiro === 'executado');
+  const atividadeEmAberto = temAtividadeHoje && !atividadeExecutada;
 
   return (
     <main
@@ -232,7 +240,7 @@ export default function MenuPage() {
         margin: '0 auto',
       }}
     >
-      {/* Header: (NÃO MEXER) */}
+      {/* Header: Logo + CONFIANCE + Área do colaborador */}
       <header
         style={{
           display: 'flex',
@@ -272,7 +280,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Topbar (NÃO MEXER) */}
+      {/* Cabeçalho: role + nome + sair */}
       <header
         className="topbar"
         style={{
@@ -335,7 +343,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      {/* Conteúdo: 3 blocos */}
+      {/* Cards */}
       <section
         className="grid"
         style={{
@@ -345,112 +353,107 @@ export default function MenuPage() {
           marginTop: 16,
         }}
       >
-        {/* 1) Registo de Hoje */}
+        {/* HUB: Roteiro de hoje */}
         <article
           className="card"
           style={{
             border: '1px solid #E9EEF7',
-            borderRadius: 18,
-            padding: 20,
+            borderRadius: 16,
+            padding: 16,
             background: '#fff',
             boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            minHeight: 180,
+            minHeight: 160,
             gridColumn: '1 / -1',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-            <div style={{ minWidth: 0 }}>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 18,
-                  fontWeight: 900,
-                  color: '#0e3258',
-                }}
-              >
-                Registo de Hoje
-              </h3>
+          <div>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 800,
+                color: '#0e3258',
+              }}
+            >
+              Roteiro de hoje
+            </h3>
 
+            {loadingRoteiro ? (
+              <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>A carregar…</p>
+            ) : roteiroHoje ? (
+              <>
+                <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
+                  <strong>Tarefa:</strong> {roteiroHoje.tarefa_nome || '—'}
+                </p>
+                <p style={{ margin: '6px 0 0 0', color: '#49546A', fontSize: 13 }}>
+                  <strong>Local:</strong> {roteiroHoje.local_nome || '—'}
+                </p>
+              </>
+            ) : (
               <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                Acompanhe a atividade atribuída e faça a marcação de ponto.
+                Sem atividade atribuída para hoje.
               </p>
-
-              {loadingRoteiro ? (
-                <p style={{ margin: '10px 0 0 0', color: '#49546A', fontSize: 13 }}>A carregar…</p>
-              ) : roteiroHoje ? (
-                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                      Tarefa
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0e3258' }}>
-                      {roteiroHoje.tarefa_nome || '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                      Local
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0e3258' }}>
-                      {roteiroHoje.local_nome || '—'}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            )}
 
             {!loadingRoteiro && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 12,
-                  fontWeight: 800,
-                  padding: '6px 10px',
-                  borderRadius: 999,
-                  border: '1px solid #D7E3FF',
-                  background: diaFinalizado ? '#EEF3FF' : '#FFF7D6',
-                  color: '#0e3258',
-                  whiteSpace: 'nowrap',
-                }}
-                title={diaFinalizado ? 'Atividade finalizada' : 'Atividade em aberto'}
-              >
-                {diaFinalizado ? '✓ Atividade finalizada' : '⏳ Atividade em aberto'}
-              </span>
+              <div style={{ marginTop: 10 }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: '6px 10px',
+                    borderRadius: 999,
+                    border: '1px solid #D7E3FF',
+                    background: !temAtividadeHoje ? '#EEF3FF' : atividadeExecutada ? '#EEF3FF' : '#FFF7D6',
+                    color: '#0e3258',
+                  }}
+                >
+                  {!temAtividadeHoje ? 'Sem atividade hoje' : atividadeExecutada ? 'Atividade executada' : 'Atividade em aberto'}
+                </span>
+              </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
             <a
               href="/ponto"
               style={{
                 textDecoration: 'none',
                 fontSize: 13,
-                padding: '10px 14px',
-                borderRadius: 12,
+                padding: '8px 12px',
+                borderRadius: 10,
                 border: 'none',
                 background: '#0e3258',
                 color: '#fff',
                 fontWeight: 700,
               }}
             >
-              Verificar agora
+              Marcar ponto
+            </a>
+
+            <a
+              href="/ponto/historico"
+              style={{
+                textDecoration: 'none',
+                fontSize: 13,
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: '1px solid #D7E3FF',
+                background: '#FFD24D',
+                color: '#0e3258',
+                fontWeight: 800,
+              }}
+            >
+              Ver histórico
             </a>
           </div>
         </article>
 
-        {/* 2) Histórico */}
-        <Card
-          title="Histórico de Registos"
-          desc="Consulte aqui os seus registos de ponto."
-          actions={[{ href: '/ponto/historico', label: 'Abrir histórico', kind: 'accent' }]}
-        />
-
-        {/* 3) Recibos */}
+        {/* Meus Recibos */}
         <Card
           title="Meus Recibos"
           desc="Consulte aqui seus Recibos de Vencimento."
@@ -477,22 +480,22 @@ function Card({
       className="card"
       style={{
         border: '1px solid #E9EEF7',
-        borderRadius: 18,
-        padding: 18,
+        borderRadius: 16,
+        padding: 16,
         background: '#fff',
         boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        minHeight: 150,
+        minHeight: 140,
       }}
     >
       <div>
         <h3
           style={{
             margin: 0,
-            fontSize: 16,
-            fontWeight: 900,
+            fontSize: 18,
+            fontWeight: 800,
             color: '#0e3258',
           }}
         >
@@ -502,7 +505,7 @@ function Card({
       </div>
 
       {!!actions.length && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           {actions.map((a) => {
             const isDisabled = a.disabled === true;
             const bg = a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff';
@@ -520,8 +523,8 @@ function Card({
                 style={{
                   textDecoration: 'none',
                   fontSize: 13,
-                  padding: '10px 12px',
-                  borderRadius: 12,
+                  padding: '8px 12px',
+                  borderRadius: 10,
                   border,
                   background: bg,
                   color,
@@ -538,4 +541,4 @@ function Card({
       )}
     </article>
   );
-}
+}:
