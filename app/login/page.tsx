@@ -69,7 +69,7 @@ export default function LoginPage() {
     setMsg(null);
     setErr(null);
     try {
-      // ✅ sempre aponta para /auth/confirm (page)
+      // ✅ sempre aponta para /auth/confirm (route)
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
 
       const { error } = await supa.auth.signInWithOtp({
@@ -97,8 +97,29 @@ export default function LoginPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-      {/* (mantém a tua UI daqui pra baixo — não mexi no layout do logo/Powered que tu já tinhas) */}
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
+      {/* ✅ Só encaixe de UI (logo + CONFIANCE + powered), sem mexer na lógica */}
+      <div style={{ display: 'grid', justifyItems: 'center', marginTop: 6, marginBottom: 14 }}>
+        <img
+          src="/app-novo.png"
+          alt="CONFIANCE"
+          style={{ height: 54, width: 'auto', display: 'block' }}
+        />
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            fontWeight: 900,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            color: '#0e3258',
+            lineHeight: 1,
+          }}
+        >
+          CONFIANCE
+        </div>
+      </div>
+
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Entrar</h1>
 
       {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
 
@@ -144,7 +165,19 @@ export default function LoginPage() {
           {msg && <p style={{ marginTop: 12, color: 'green' }}>{msg}</p>}
           {err && <p style={{ marginTop: 12, color: 'crimson' }}>{err}</p>}
 
-          {/* Se o teu PNG powered já estava aqui, mantém o teu bloco exatamente como estava */}
+          {/* ✅ Powered by (sempre visível) */}
+          <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
+            <img
+              src="/powered-by-libertrendz.png"
+              alt="Powered by Libertrendz"
+              style={{
+                width: 'min(280px, 70vw)',
+                height: 'auto',
+                display: 'block',
+                opacity: 0.9,
+              }}
+            />
+          </div>
         </>
       )}
     </main>
