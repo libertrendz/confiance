@@ -159,7 +159,7 @@ export default function MenuPage() {
     try {
       const t = todayLocalStr();
 
-      // 1) Roteiro do dia (somente “ativos”/em curso — evita puxar coisa antiga)
+      // 1) Roteiro do dia
       const { data: r, error: rErr } = await supa
         .from('ponto_roteiros')
         .select(
@@ -194,7 +194,7 @@ export default function MenuPage() {
         setRoteiroHoje(null);
       }
 
-      // 2) Último ponto do “dia local” (evita bug UTC -> mostra “em aberto” sem estar)
+      // 2) Último ponto do “dia local”
       const { data: pontos, error: pErr } = await supa
         .from('ponto_registro')
         .select('tipo, created_at')
@@ -206,7 +206,6 @@ export default function MenuPage() {
       if (pErr) throw pErr;
 
       const hoje = (pontos || []).find((p: any) => localDateStrFromIso(p.created_at) === t) || null;
-
       setUltimoPontoHoje(hoje ? ({ tipo: hoje.tipo, created_at: hoje.created_at } as any) : null);
     } catch (e) {
       console.error('Erro ao carregar roteiro/status do dia', e);
@@ -233,7 +232,7 @@ export default function MenuPage() {
 
   const diaFinalizado = ultimoPontoHoje?.tipo === 'saida';
 
-  // ✅ regra final: se não há roteiro hoje, NÃO pode aparecer “em aberto”
+  // regra final: se não há roteiro hoje, NÃO pode aparecer “em aberto”
   const statusPill = !roteiroHoje
     ? { label: 'Sem atividade hoje', bg: '#EEF3FF' }
     : diaFinalizado
@@ -362,107 +361,41 @@ export default function MenuPage() {
           marginTop: 16,
         }}
       >
-        {/* HUB: Roteiro de hoje */}
-        <article
-          className="card"
-          style={{
-            border: '1px solid #E9EEF7',
-            borderRadius: 16,
-            padding: 16,
-            background: '#fff',
-            boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            minHeight: 160,
-            gridColumn: '1 / -1',
+        {/* 1) Registo de Hoje */}
+        <Card
+          title="Registo de Hoje"
+          desc={
+            roteiroHoje
+              ? `Acompanhe o seu registo de hoje e verifique a sua atividade atual.`
+              : `Acompanhe o seu registo de hoje e verifique a sua atividade atual.`
+          }
+          meta={
+            roteiroHoje
+              ? [
+                  { label: 'Tarefa', value: roteiroHoje.tarefa_nome || '—' },
+                  { label: 'Local', value: roteiroHoje.local_nome || '—' },
+                ]
+              : []
+          }
+          pill={{
+            label: loadingRoteiro ? 'A carregar…' : statusPill.label,
+            bg: statusPill.bg,
+            hidden: loadingRoteiro ? false : false,
           }}
-        >
-          <div>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 18,
-                fontWeight: 800,
-                color: '#0e3258',
-              }}
-            >
-              Roteiro de hoje
-            </h3>
+          actions={[
+            { href: '/ponto', label: 'Verificar agora', kind: 'primary' },
+          ]}
+          loading={loadingRoteiro}
+        />
 
-            {loadingRoteiro ? (
-              <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>A carregar…</p>
-            ) : roteiroHoje ? (
-              <>
-                <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                  <strong>Tarefa:</strong> {roteiroHoje.tarefa_nome || '—'}
-                </p>
-                <p style={{ margin: '6px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                  <strong>Local:</strong> {roteiroHoje.local_nome || '—'}
-                </p>
-              </>
-            ) : (
-              <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>
-                Sem atividade atribuída para hoje.
-              </p>
-            )}
+        {/* 2) Histórico de Registos */}
+        <Card
+          title="Histórico de Registos"
+          desc="Consulte aqui o seu histórico de registos de ponto."
+          actions={[{ href: '/ponto/historico', label: 'Abrir histórico', kind: 'accent' }]}
+        />
 
-            {!loadingRoteiro && (
-              <div style={{ marginTop: 10 }}>
-                <span
-                  style={{
-                    display: 'inline-block',
-                    fontSize: 12,
-                    fontWeight: 800,
-                    padding: '6px 10px',
-                    borderRadius: 999,
-                    border: '1px solid #D7E3FF',
-                    background: statusPill.bg,
-                    color: '#0e3258',
-                  }}
-                >
-                  {statusPill.label}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-            <a
-              href="/ponto"
-              style={{
-                textDecoration: 'none',
-                fontSize: 13,
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: 'none',
-                background: '#0e3258',
-                color: '#fff',
-                fontWeight: 700,
-              }}
-            >
-              Marcar ponto
-            </a>
-
-            <a
-              href="/ponto/historico"
-              style={{
-                textDecoration: 'none',
-                fontSize: 13,
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: '1px solid #D7E3FF',
-                background: '#FFD24D',
-                color: '#0e3258',
-                fontWeight: 800,
-              }}
-            >
-              Ver histórico
-            </a>
-          </div>
-        </article>
-
-        {/* Meus Recibos */}
+        {/* 3) Meus Recibos */}
         <Card
           title="Meus Recibos"
           desc="Consulte aqui seus Recibos de Vencimento."
@@ -473,9 +406,28 @@ export default function MenuPage() {
   );
 }
 
-type CardAction = { href: string; label: string; kind?: 'primary' | 'accent' | 'ghost'; disabled?: boolean };
+type CardAction = {
+  href: string;
+  label: string;
+  kind?: 'primary' | 'accent' | 'ghost';
+  disabled?: boolean;
+};
 
-function Card({ title, desc, actions = [] }: { title: string; desc: string; actions?: CardAction[] }) {
+function Card({
+  title,
+  desc,
+  actions = [],
+  meta = [],
+  pill,
+  loading,
+}: {
+  title: string;
+  desc: string;
+  actions?: CardAction[];
+  meta?: Array<{ label: string; value: string }>;
+  pill?: { label: string; bg: string; hidden?: boolean };
+  loading?: boolean;
+}) {
   return (
     <article
       className="card"
@@ -488,7 +440,7 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        minHeight: 140,
+        minHeight: 160,
       }}
     >
       <div>
@@ -502,11 +454,42 @@ function Card({ title, desc, actions = [] }: { title: string; desc: string; acti
         >
           {title}
         </h3>
+
         <p style={{ margin: '8px 0 0 0', color: '#49546A', fontSize: 13 }}>{desc}</p>
+
+        {!!meta.length && (
+          <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+            {meta.map((m) => (
+              <p key={m.label} style={{ margin: 0, color: '#49546A', fontSize: 13 }}>
+                <strong>{m.label}:</strong> {m.value}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {pill && pill.hidden !== true && (
+          <div style={{ marginTop: 10 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '6px 10px',
+                borderRadius: 999,
+                border: '1px solid #D7E3FF',
+                background: pill.bg,
+                color: '#0e3258',
+                opacity: loading ? 0.8 : 1,
+              }}
+            >
+              {pill.label}
+            </span>
+          </div>
+        )}
       </div>
 
       {!!actions.length && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
           {actions.map((a) => {
             const isDisabled = a.disabled === true;
             const bg = a.kind === 'primary' ? '#0e3258' : a.kind === 'accent' ? '#FFD24D' : '#fff';
