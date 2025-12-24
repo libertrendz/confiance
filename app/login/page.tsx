@@ -205,7 +205,7 @@ export default function LoginPage() {
           {/* Powered by (NÃO some) */}
           <div style={{ display: 'grid', justifyItems: 'center', marginTop: 18 }}>
             <img
-              src="/powered_by_libertrendz.png"
+              src="/powered-by-libertrendz.png"
               alt="Powered by Libertrendz"
               style={{
                 width: 'min(320px, 78vw)',
