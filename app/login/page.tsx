@@ -6,6 +6,8 @@ import getBrowserSupabase from '@/lib/supa';
 
 export const dynamic = 'force-dynamic';
 
+type Papel = 'admin' | 'gestor' | 'externo';
+
 function getErrFromUrl() {
   try {
     const u = new URL(window.location.href);
@@ -14,17 +16,6 @@ function getErrFromUrl() {
     return null;
   }
 }
-
-function clearErrFromUrl() {
-  try {
-    const u = new URL(window.location.href);
-    u.searchParams.delete('err');
-    u.searchParams.delete('flow');
-    window.history.replaceState({}, '', u.pathname + (u.search ? u.search : '') + u.hash);
-  } catch {}
-}
-
-type Papel = 'admin' | 'gestor' | 'externo';
 
 export default function LoginPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
@@ -41,31 +32,42 @@ export default function LoginPage() {
 
     (async () => {
       try {
-        const { data: sess } = await supa.auth.getSession();
-        const uid = sess.session?.user?.id;
-
+        const { data } = await supa.auth.getSession();
+        const valid = !!(data.session && data.session.user?.id);
         if (!alive) return;
 
-        if (uid) {
+        if (valid) {
           setRedirecting(true);
 
-          // limpa qualquer err antigo antes de mandar embora (evita “mensagem feia”)
-          clearErrFromUrl();
+          // tenta decidir destino por papel (profiles tem prioridade)
+          let papel: Papel | null = null;
 
-          // descobre papel no profiles
-          let papel: Papel = 'externo';
           try {
-            const { data: prof } = await supa
-              .from('profiles')
-              .select('papel')
-              .eq('user_id', uid)
-              .maybeSingle();
+            const { data: u } = await supa.auth.getUser();
+            const uid = u.user?.id;
 
-            const db = (prof as any)?.papel as Papel | undefined;
-            if (db && ['admin', 'gestor', 'externo'].includes(db)) papel = db;
-          } catch {}
+            if (uid) {
+              const { data: prof } = await supa
+                .from('profiles')
+                .select('papel')
+                .eq('user_id', uid)
+                .maybeSingle();
 
-          window.location.replace(papel === 'admin' || papel === 'gestor' ? '/adm/dashboard' : '/menu');
+              const p = (prof as any)?.papel as Papel | undefined;
+              if (p && ['admin', 'gestor', 'externo'].includes(p)) papel = p;
+            }
+
+            if (!papel) {
+              const meta = ((u.user?.user_metadata || {}) as any) || {};
+              const p = (meta.app_role || meta.papel) as Papel | undefined;
+              if (p && ['admin', 'gestor', 'externo'].includes(p)) papel = p;
+            }
+          } catch {
+            // ignora e cai no padrão
+          }
+
+          const dest = papel === 'admin' || papel === 'gestor' ? '/adm/dashboard' : '/menu';
+          window.location.replace(dest);
           return;
         }
       } catch {
@@ -73,6 +75,9 @@ export default function LoginPage() {
       } finally {
         if (alive) {
           setChecked(true);
+
+          // Se quiser continuar mostrando erro quando existir ?err=..., mantém.
+          // (Mas agora o /auth/confirm não manda mais err técnico, então some o “flash feio”.)
           const urlErr = typeof window !== 'undefined' ? getErrFromUrl() : null;
           if (urlErr) setErr(urlErr);
         }
@@ -91,8 +96,7 @@ export default function LoginPage() {
     setErr(null);
 
     try {
-      // ⚠️ Mantém confirm como destino
-      // (o Supabase vai redirecionar pra /auth/confirm com token_hash/type)
+      // ✅ IMPORTANTE: enviar para /auth/confirm (não /auth/callback)
       const redirect = `${window.location.origin}/auth/confirm?next=/menu`;
 
       const { error } = await supa.auth.signInWithOtp({
@@ -112,26 +116,36 @@ export default function LoginPage() {
   if (redirecting) {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-        <p style={{ color: '#666' }}>Entrando…</p>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Entrando…</h1>
+        <p>Redirecionando…</p>
       </main>
     );
   }
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 420, margin: '0 auto' }}>
-      {/* Logo + nome */}
-      <div style={{ display: 'grid', justifyItems: 'center', gap: 10, marginBottom: 18 }}>
+      {/* Logo + CONFIANCE (mantém UI) */}
+      <div style={{ display: 'grid', justifyItems: 'center', marginBottom: 16, marginTop: 8 }}>
         <img
           src="/app-novo.png"
           alt="CONFIANCE"
-          style={{ height: 78, width: 'auto', display: 'block' }}
+          style={{ height: 86, width: 'auto', display: 'block' }}
         />
-        <div style={{ fontSize: 14, letterSpacing: 2, fontWeight: 900, color: '#6b7280' }}>
+        <div
+          style={{
+            marginTop: 8,
+            fontWeight: 900,
+            letterSpacing: 2,
+            color: '#6b7280',
+            textTransform: 'uppercase',
+            fontSize: 16,
+          }}
+        >
           CONFIANCE
         </div>
       </div>
 
-      <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 12, color: '#0e3258' }}>Entrar</h1>
+      <h1 style={{ fontSize: 32, fontWeight: 900, marginBottom: 12, color: '#0e3258' }}>Entrar</h1>
 
       {!checked && <p style={{ color: '#666' }}>A verificar sessão…</p>}
 
@@ -154,10 +168,10 @@ export default function LoginPage() {
               style={{
                 width: '100%',
                 padding: 14,
-                marginTop: 8,
+                marginTop: 10,
                 marginBottom: 12,
                 border: '1px solid #d1d5db',
-                borderRadius: 14,
+                borderRadius: 16,
                 outline: 'none',
               }}
             />
@@ -168,7 +182,7 @@ export default function LoginPage() {
               style={{
                 width: '100%',
                 padding: 14,
-                borderRadius: 14,
+                borderRadius: 16,
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 900,
@@ -193,7 +207,7 @@ export default function LoginPage() {
                 width: 'min(320px, 80vw)',
                 height: 'auto',
                 display: 'block',
-                opacity: 0.95,
+                opacity: 0.9,
               }}
             />
           </div>
