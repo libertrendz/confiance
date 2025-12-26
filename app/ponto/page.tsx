@@ -840,7 +840,7 @@ export default function PontoPage() {
               title="2) Saída almoço"
               desc=""
               done={jornada.almocoOut}
-              actionLabel="Registrar saída almoço"
+              actionLabel="Registar saída almoço"
               actionKind="ghost"
               disabled={!regras.podeAlmocoOut || batendo}
               onClick={() => iniciarAcao('saida_almoco')}
@@ -850,7 +850,7 @@ export default function PontoPage() {
               title="3) Retorno almoço"
               desc=""
               done={jornada.almocoIn}
-              actionLabel="Registrar retorno almoço"
+              actionLabel="Registar retorno almoço"
               actionKind="ghost"
               disabled={!regras.podeAlmocoIn || batendo}
               onClick={() => iniciarAcao('retorno_almoco')}
