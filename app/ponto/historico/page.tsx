@@ -336,26 +336,7 @@ export default function PontoHistoricoPage() {
                     )}
                   </div>
 
-                  <details style={{ marginTop: 6 }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 11, color: '#445' }}>Ver detalhes técnicos</summary>
-                    <pre
-                      style={{
-                        margin: 0,
-                        marginTop: 4,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        background: '#fff',
-                        padding: 6,
-                        borderRadius: 6,
-                        border: '1px solid #e0e4f0',
-                      }}
-                    >
-                      {r.meta ? JSON.stringify(r.meta, null, 2) : '{}'}
-                    </pre>
-                  </details>
-                </article>
+                  </article>
               );
             })}
           </div>
