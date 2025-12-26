@@ -95,7 +95,7 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      setMsg('Email enviado. Se abrir dentro do app de email, use “Abrir no navegador”.');
+      setMsg('E-mail para validação de acesso enviado. Ao abrir, clique no link "Entrar Agora".');
     } catch (e: any) {
       setErr(e?.message ?? 'Falha ao enviar o email. Tente novamente.');
     } finally {
