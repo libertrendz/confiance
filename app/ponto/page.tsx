@@ -712,7 +712,7 @@ export default function PontoPage() {
           <div>
             <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258' }}>Atividade atual</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Se surgir uma nova tarefa durante o dia, selecione aqui — a jornada não “quebra”.
+              Verifique aqui a(s) atividade(s) programada(s) para o dia.
             </div>
           </div>
 
