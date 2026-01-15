@@ -35,12 +35,10 @@ export default function AuthConfirmPage() {
       try {
         const next = sanitizeNext(sp.get('next'));
 
-        // parâmetros possíveis do Supabase
+        // parâmetros possíveis
         const code = sp.get('code') || sp.get('verification_code');
-
         const token_hash =
           sp.get('token_hash') || sp.get('token') || sp.get('tokenHash');
-
         const type = (sp.get('type') || '') as
           | 'magiclink'
           | 'recovery'
@@ -49,7 +47,7 @@ export default function AuthConfirmPage() {
           | 'email_change'
           | '';
 
-        // 0) Se já existe sessão, segue o next (não inventa)
+        // 0) Se já existe sessão, segue
         const { data: s0 } = await supa.auth.getSession();
         if (!alive) return;
 
@@ -60,11 +58,14 @@ export default function AuthConfirmPage() {
           return;
         }
 
-        // 1) Fluxo compatível (multi-dispositivo): token_hash + type
+        // 1) Fluxo token_hash + type (compatível e multi-dispositivo)
         if (token_hash && type) {
           setMessage('A validar o link…');
 
-          const { error } = await supa.auth.verifyOtp({ type, token_hash });
+          const { error } = await supa.auth.verifyOtp({
+            type,
+            token_hash,
+          });
 
           if (!alive) return;
 
@@ -74,22 +75,37 @@ export default function AuthConfirmPage() {
             return;
           }
 
-          // ✅ Invite: confirmou → manda para login pedir magic link
+          // garante que a sessão foi realmente persistida (quando aplicável)
+          const { data: s1 } = await supa.auth.getSession();
+          if (!alive) return;
+
+          // Invite: confirma e já manda pro login, SEM manter sessão colada
           if (type === 'invite') {
+            try {
+              await supa.auth.signOut();
+            } catch {}
+
             setStep('ok');
             setMessage('Convite aceite com sucesso. Agora pode entrar pelo Magic Link.');
             router.replace('/login?msg=invite_ok');
             return;
           }
 
-          // magiclink / recovery / signup / email_change → segue next
-          setStep('ok');
-          setMessage('Acesso confirmado. A entrar…');
-          router.replace(next);
+          // Magic link e outros: se sessão existe, segue
+          if (s1.session?.user?.id) {
+            setStep('ok');
+            setMessage('Acesso confirmado. A entrar…');
+            router.replace(next);
+            return;
+          }
+
+          // Se não criou sessão, algo abriu em webview / ambiente sem storage
+          setStep('error');
+          setMessage('Não foi possível criar sessão neste navegador. Abra o link em “Abrir no navegador” e tente novamente.');
           return;
         }
 
-        // 2) Fluxo PKCE/code (só tenta se realmente veio "code")
+        // 2) Fluxo com code (PKCE / algumas configurações)
         if (code) {
           setMessage('A finalizar autenticação…');
 
@@ -103,13 +119,22 @@ export default function AuthConfirmPage() {
             return;
           }
 
-          setStep('ok');
-          setMessage('Acesso confirmado. A entrar…');
-          router.replace(next);
+          const { data: s2 } = await supa.auth.getSession();
+          if (!alive) return;
+
+          if (s2.session?.user?.id) {
+            setStep('ok');
+            setMessage('Acesso confirmado. A entrar…');
+            router.replace(next);
+            return;
+          }
+
+          setStep('error');
+          setMessage('Autenticação concluída, mas a sessão não persistiu. Abra o link em “Abrir no navegador”.');
           return;
         }
 
-        // 3) Nada útil no URL
+        // 3) Nada útil
         setStep('error');
         setMessage('Link inválido ou expirado. Volte a pedir o acesso.');
       } catch (e: any) {
@@ -172,22 +197,6 @@ export default function AuthConfirmPage() {
               }}
             >
               Voltar ao login
-            </a>
-
-            <a
-              href="/login"
-              style={{
-                textDecoration: 'none',
-                fontSize: 13,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: 'none',
-                background: '#0e3258',
-                color: '#fff',
-                fontWeight: 800,
-              }}
-            >
-              Pedir Magic Link
             </a>
           </div>
         )}
