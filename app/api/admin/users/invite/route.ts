@@ -65,7 +65,8 @@ export async function POST(req: Request) {
     // 1) Envia convite (apenas para utilizador novo)
     // IMPORTANTE: invite deve cair no login depois (para pedir Magic Link)
     const origin = new URL(req.url).origin;
-    const redirectTo = `${origin}/auth/confirm?next=/login`;
+    const redirectTo =
+  `${new URL(req.url).origin}/auth/confirm?next=/login?msg=invite_ok`;
 
     const { data: invited, error: invErr } = await supa.auth.admin.inviteUserByEmail(email, {
       redirectTo,
