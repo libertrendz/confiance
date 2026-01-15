@@ -33,13 +33,14 @@ export default function AuthConfirmPage() {
 
     (async () => {
       try {
-        // next (se vier)
         const next = sanitizeNext(sp.get('next'));
 
         // parâmetros possíveis do Supabase
         const code = sp.get('code') || sp.get('verification_code');
+
         const token_hash =
           sp.get('token_hash') || sp.get('token') || sp.get('tokenHash');
+
         const type = (sp.get('type') || '') as
           | 'magiclink'
           | 'recovery'
@@ -48,24 +49,22 @@ export default function AuthConfirmPage() {
           | 'email_change'
           | '';
 
-        // 0) Se já existe sessão, não inventa: manda embora
+        // 0) Se já existe sessão, segue o next (não inventa)
         const { data: s0 } = await supa.auth.getSession();
         if (!alive) return;
+
         if (s0.session?.user?.id) {
-          // Se já tem sessão, só segue o next
           setStep('ok');
           setMessage('Acesso confirmado. A entrar…');
           router.replace(next);
           return;
         }
 
-        // 1) Se vier token_hash + type (convite / links compat)
+        // 1) Fluxo compatível (multi-dispositivo): token_hash + type
         if (token_hash && type) {
           setMessage('A validar o link…');
-          const { error } = await supa.auth.verifyOtp({
-            type,
-            token_hash,
-          });
+
+          const { error } = await supa.auth.verifyOtp({ type, token_hash });
 
           if (!alive) return;
 
@@ -75,7 +74,7 @@ export default function AuthConfirmPage() {
             return;
           }
 
-          // Convite: não “força” entrar no app; manda pro login com aviso
+          // ✅ Invite: confirmou → manda para login pedir magic link
           if (type === 'invite') {
             setStep('ok');
             setMessage('Convite aceite com sucesso. Agora pode entrar pelo Magic Link.');
@@ -83,22 +82,18 @@ export default function AuthConfirmPage() {
             return;
           }
 
-          // magiclink/recovery/etc: segue o destino padrão
+          // magiclink / recovery / signup / email_change → segue next
           setStep('ok');
           setMessage('Acesso confirmado. A entrar…');
           router.replace(next);
           return;
         }
 
-        // 2) Se vier code (PKCE / magic link moderno no mesmo browser)
+        // 2) Fluxo PKCE/code (só tenta se realmente veio "code")
         if (code) {
           setMessage('A finalizar autenticação…');
 
-          // ⚠️ Importante: no client, o supabase-js usa o flow state do browser.
-          // Abrir este link noutro dispositivo pode dar "invalid flow state".
-          const { error } = await supa.auth.exchangeCodeForSession(
-            window.location.href
-          );
+          const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
 
           if (!alive) return;
 
@@ -129,7 +124,6 @@ export default function AuthConfirmPage() {
     };
   }, [supa, router, sp]);
 
-  // UI simples e “bonita o suficiente” sem mexer no resto do teu app
   return (
     <main
       style={{
