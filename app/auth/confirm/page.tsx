@@ -35,10 +35,20 @@ export default function AuthConfirmPage() {
       try {
         const next = sanitizeNext(sp.get('next'));
 
-        // parâmetros possíveis
-        const code = sp.get('code') || sp.get('verification_code');
+        // 1) Se já existe sessão, segue (sem inventar)
+        const { data: s0 } = await supa.auth.getSession();
+        if (!alive) return;
+        if (s0.session?.user?.id) {
+          setStep('ok');
+          setMessage('Acesso confirmado. A entrar…');
+          router.replace(next);
+          return;
+        }
+
+        // 2) Fluxo token_hash + type (Invite e alguns links “antigos”)
         const token_hash =
           sp.get('token_hash') || sp.get('token') || sp.get('tokenHash');
+
         const type = (sp.get('type') || '') as
           | 'magiclink'
           | 'recovery'
@@ -47,26 +57,10 @@ export default function AuthConfirmPage() {
           | 'email_change'
           | '';
 
-        // 0) Se já existe sessão, segue
-        const { data: s0 } = await supa.auth.getSession();
-        if (!alive) return;
-
-        if (s0.session?.user?.id) {
-          setStep('ok');
-          setMessage('Acesso confirmado. A entrar…');
-          router.replace(next);
-          return;
-        }
-
-        // 1) Fluxo token_hash + type (compatível e multi-dispositivo)
         if (token_hash && type) {
           setMessage('A validar o link…');
 
-          const { error } = await supa.auth.verifyOtp({
-            type,
-            token_hash,
-          });
-
+          const { error } = await supa.auth.verifyOtp({ type, token_hash });
           if (!alive) return;
 
           if (error) {
@@ -75,68 +69,76 @@ export default function AuthConfirmPage() {
             return;
           }
 
-          // garante que a sessão foi realmente persistida (quando aplicável)
-          const { data: s1 } = await supa.auth.getSession();
-          if (!alive) return;
-
-          // Invite: confirma e já manda pro login, SEM manter sessão colada
+          // ✅ Regra de negócio: convite NÃO entra no app; manda pro login
           if (type === 'invite') {
-            try {
-              await supa.auth.signOut();
-            } catch {}
-
             setStep('ok');
-            setMessage('Convite aceite com sucesso. Agora pode entrar pelo Magic Link.');
+            setMessage('Convite aceite com sucesso. Agora solicite o Magic Link para entrar.');
             router.replace('/login?msg=invite_ok');
             return;
           }
 
-          // Magic link e outros: se sessão existe, segue
-          if (s1.session?.user?.id) {
-            setStep('ok');
-            setMessage('Acesso confirmado. A entrar…');
-            router.replace(next);
-            return;
-          }
-
-          // Se não criou sessão, algo abriu em webview / ambiente sem storage
-          setStep('error');
-          setMessage('Não foi possível criar sessão neste navegador. Abra o link em “Abrir no navegador” e tente novamente.');
+          // outros tipos seguem o destino
+          setStep('ok');
+          setMessage('Acesso confirmado. A entrar…');
+          router.replace(next);
           return;
         }
 
-        // 2) Fluxo com code (PKCE / algumas configurações)
+        // 3) Fluxo PKCE / code (Magic Link moderno)
+        const code = sp.get('code') || sp.get('verification_code');
         if (code) {
           setMessage('A finalizar autenticação…');
 
           const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
-
           if (!alive) return;
 
           if (error) {
             setStep('error');
-            setMessage(error.message || 'Falha ao concluir autenticação.');
+
+            // mensagem “útil” sem loop
+            const msg = (error.message || '').toLowerCase();
+            if (msg.includes('invalid flow state')) {
+              setMessage(
+                'Este link foi aberto num navegador diferente do que pediu o Magic Link. Volte ao login e peça novamente, e abra o email no mesmo navegador.'
+              );
+            } else {
+              setMessage(error.message || 'Falha ao concluir autenticação.');
+            }
             return;
           }
 
-          const { data: s2 } = await supa.auth.getSession();
-          if (!alive) return;
+          // ✅ Pós-login: decide destino por papel (sem depender do "next" do email)
+          try {
+            const { data: u } = await supa.auth.getUser();
+            const uid = u.user?.id;
+            if (uid) {
+              const { data: prof } = await supa
+                .from('profiles')
+                .select('papel')
+                .eq('user_id', uid)
+                .maybeSingle();
 
-          if (s2.session?.user?.id) {
-            setStep('ok');
-            setMessage('Acesso confirmado. A entrar…');
-            router.replace(next);
-            return;
+              const papel = (prof as any)?.papel as string | undefined;
+              if (papel === 'admin' || papel === 'gestor') {
+                setStep('ok');
+                setMessage('Acesso confirmado. A entrar…');
+                router.replace('/adm/dashboard');
+                return;
+              }
+            }
+          } catch {
+            // ignora e segue next
           }
 
-          setStep('error');
-          setMessage('Autenticação concluída, mas a sessão não persistiu. Abra o link em “Abrir no navegador”.');
+          setStep('ok');
+          setMessage('Acesso confirmado. A entrar…');
+          router.replace(next);
           return;
         }
 
-        // 3) Nada útil
+        // 4) Nada útil
         setStep('error');
-        setMessage('Link inválido ou expirado. Volte a pedir o acesso.');
+        setMessage('Link inválido ou expirado. Volte ao login e peça um novo Magic Link.');
       } catch (e: any) {
         if (!alive) return;
         setStep('error');
@@ -150,30 +152,9 @@ export default function AuthConfirmPage() {
   }, [supa, router, sp]);
 
   return (
-    <main
-      style={{
-        padding: 24,
-        fontFamily: 'system-ui',
-        maxWidth: 520,
-        margin: '0 auto',
-      }}
-    >
-      <div
-        style={{
-          background: '#fff',
-          border: '1px solid #E9EEF7',
-          borderRadius: 16,
-          padding: 16,
-        }}
-      >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 20,
-            fontWeight: 800,
-            color: '#0e3258',
-          }}
-        >
+    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
+      <div style={{ background: '#fff', border: '1px solid #E9EEF7', borderRadius: 16, padding: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0e3258' }}>
           {step === 'error' ? 'Não foi possível confirmar' : 'Confirmando acesso'}
         </h1>
 
@@ -181,25 +162,23 @@ export default function AuthConfirmPage() {
           {message}
         </p>
 
-        {step === 'error' && (
-          <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <a
-              href="/login"
-              style={{
-                textDecoration: 'none',
-                fontSize: 13,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: '1px solid #D7E3FF',
-                background: '#fff',
-                color: '#0e3258',
-                fontWeight: 800,
-              }}
-            >
-              Voltar ao login
-            </a>
-          </div>
-        )}
+        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <a
+            href="/login"
+            style={{
+              textDecoration: 'none',
+              fontSize: 13,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid #D7E3FF',
+              background: '#fff',
+              color: '#0e3258',
+              fontWeight: 800,
+            }}
+          >
+            Ir para o login
+          </a>
+        </div>
       </div>
     </main>
   );
