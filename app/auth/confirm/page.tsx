@@ -20,17 +20,11 @@ function sanitizeNext(nextRaw: string | null) {
   }
 }
 
-function isLikelyConsumedOrExpiredInvite(msg: string) {
-  const m = (msg || '').toLowerCase();
-  return (
-    m.includes('expired') ||
-    m.includes('invalid') ||
-    m.includes('not found') ||
-    m.includes('link') ||
-    m.includes('token') ||
-    m.includes('already') ||
-    m.includes('used')
-  );
+function parseHashParams() {
+  if (typeof window === 'undefined') return new URLSearchParams();
+  const h = window.location.hash || '';
+  if (!h.startsWith('#')) return new URLSearchParams();
+  return new URLSearchParams(h.slice(1));
 }
 
 export default function AuthConfirmPage() {
@@ -48,23 +42,9 @@ export default function AuthConfirmPage() {
       try {
         const next = sanitizeNext(sp.get('next'));
 
-        const code = sp.get('code') || sp.get('verification_code');
-
-        const token_hash =
-          sp.get('token_hash') || sp.get('token') || sp.get('tokenHash');
-
-        const type = (sp.get('type') || '') as
-          | 'magiclink'
-          | 'recovery'
-          | 'invite'
-          | 'signup'
-          | 'email_change'
-          | '';
-
-        // 0) Se já existe sessão, só segue (não inventa)
+        // 0) Se já existe sessão, segue direto (não inventa fluxo)
         const { data: s0 } = await supa.auth.getSession();
         if (!alive) return;
-
         if (s0.session?.user?.id) {
           setStep('ok');
           setMessage('Acesso confirmado. A entrar…');
@@ -72,44 +52,89 @@ export default function AuthConfirmPage() {
           return;
         }
 
-        // 1) token_hash + type (invite e compatibilidade)
-        if (token_hash && type) {
-          setMessage('A validar o link…');
+        // Parâmetros em QUERY
+        const code = sp.get('code') || sp.get('verification_code');
+        const token_hash = sp.get('token_hash') || sp.get('token') || sp.get('tokenHash');
+        const typeQ = (sp.get('type') || '') as
+          | 'magiclink'
+          | 'recovery'
+          | 'invite'
+          | 'signup'
+          | 'email_change'
+          | '';
 
-          const { error } = await supa.auth.verifyOtp({ type, token_hash });
+        // Parâmetros em HASH (#access_token=...&refresh_token=...&type=invite)
+        const hp = parseHashParams();
+        const access_token = hp.get('access_token');
+        const refresh_token = hp.get('refresh_token');
+        const typeH = (hp.get('type') || '') as
+          | 'magiclink'
+          | 'recovery'
+          | 'invite'
+          | 'signup'
+          | 'email_change'
+          | '';
 
+        const effectiveType = typeQ || typeH;
+
+        // 1) Fluxo HASH (muito comum no INVITE): access_token + refresh_token
+        if (access_token && refresh_token) {
+          setMessage('A validar o convite…');
+
+          const { error } = await supa.auth.setSession({ access_token, refresh_token });
           if (!alive) return;
 
           if (error) {
-            // ✅ Invite: se já foi consumido/expirou, não assusta o utilizador
-            if (type === 'invite' && isLikelyConsumedOrExpiredInvite(error.message || '')) {
-              setStep('ok');
-              setMessage('Convite confirmado. Agora pode entrar pelo Magic Link.');
-              router.replace('/login?msg=invite_ok');
-              return;
-            }
-
             setStep('error');
-            setMessage(error.message || 'Falha ao validar o link.');
+            setMessage(error.message || 'Falha ao validar o convite.');
             return;
           }
 
-          // Invite: sempre manda para login (fluxo esperado)
-          if (type === 'invite') {
+          // Invite: sempre manda pro login (teu fluxo)
+          if (effectiveType === 'invite') {
             setStep('ok');
-            setMessage('Convite aceite com sucesso. Agora pode entrar pelo Magic Link.');
+            setMessage('Convite aceite. Agora pode pedir o Magic Link.');
             router.replace('/login?msg=invite_ok');
             return;
           }
 
-          // Outros tipos: segue next
           setStep('ok');
           setMessage('Acesso confirmado. A entrar…');
           router.replace(next);
           return;
         }
 
-        // 2) code (PKCE / magic link moderno)
+        // 2) Fluxo token_hash + type (compat)
+        if (token_hash && effectiveType) {
+          setMessage('A validar o link…');
+
+          const { error } = await supa.auth.verifyOtp({
+            type: effectiveType as any,
+            token_hash,
+          });
+
+          if (!alive) return;
+
+          if (error) {
+            setStep('error');
+            setMessage(error.message || 'Falha ao validar o link.');
+            return;
+          }
+
+          if (effectiveType === 'invite') {
+            setStep('ok');
+            setMessage('Convite aceite. Agora pode pedir o Magic Link.');
+            router.replace('/login?msg=invite_ok');
+            return;
+          }
+
+          setStep('ok');
+          setMessage('Acesso confirmado. A entrar…');
+          router.replace(next);
+          return;
+        }
+
+        // 3) Fluxo code (PKCE / alguns links modernos)
         if (code) {
           setMessage('A finalizar autenticação…');
 
@@ -123,13 +148,19 @@ export default function AuthConfirmPage() {
             return;
           }
 
+          if (effectiveType === 'invite') {
+            setStep('ok');
+            setMessage('Convite aceite. Agora pode pedir o Magic Link.');
+            router.replace('/login?msg=invite_ok');
+            return;
+          }
+
           setStep('ok');
           setMessage('Acesso confirmado. A entrar…');
           router.replace(next);
           return;
         }
 
-        // 3) nada útil
         setStep('error');
         setMessage('Link inválido ou expirado. Volte a pedir o acesso.');
       } catch (e: any) {
@@ -145,9 +176,30 @@ export default function AuthConfirmPage() {
   }, [supa, router, sp]);
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 520, margin: '0 auto' }}>
-      <div style={{ background: '#fff', border: '1px solid #E9EEF7', borderRadius: 16, padding: 16 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0e3258' }}>
+    <main
+      style={{
+        padding: 24,
+        fontFamily: 'system-ui',
+        maxWidth: 520,
+        margin: '0 auto',
+      }}
+    >
+      <div
+        style={{
+          background: '#fff',
+          border: '1px solid #E9EEF7',
+          borderRadius: 16,
+          padding: 16,
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 20,
+            fontWeight: 800,
+            color: '#0e3258',
+          }}
+        >
           {step === 'error' ? 'Não foi possível confirmar' : 'Confirmando acesso'}
         </h1>
 
@@ -171,6 +223,22 @@ export default function AuthConfirmPage() {
               }}
             >
               Voltar ao login
+            </a>
+
+            <a
+              href="/login"
+              style={{
+                textDecoration: 'none',
+                fontSize: 13,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: 'none',
+                background: '#0e3258',
+                color: '#fff',
+                fontWeight: 800,
+              }}
+            >
+              Pedir Magic Link
             </a>
           </div>
         )}
