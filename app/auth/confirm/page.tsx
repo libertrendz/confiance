@@ -20,6 +20,19 @@ function sanitizeNext(nextRaw: string | null) {
   }
 }
 
+function isLikelyConsumedOrExpiredInvite(msg: string) {
+  const m = (msg || '').toLowerCase();
+  return (
+    m.includes('expired') ||
+    m.includes('invalid') ||
+    m.includes('not found') ||
+    m.includes('link') ||
+    m.includes('token') ||
+    m.includes('already') ||
+    m.includes('used')
+  );
+}
+
 export default function AuthConfirmPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const router = useRouter();
@@ -35,17 +48,8 @@ export default function AuthConfirmPage() {
       try {
         const next = sanitizeNext(sp.get('next'));
 
-        // 1) Se já existe sessão, segue (sem inventar)
-        const { data: s0 } = await supa.auth.getSession();
-        if (!alive) return;
-        if (s0.session?.user?.id) {
-          setStep('ok');
-          setMessage('Acesso confirmado. A entrar…');
-          router.replace(next);
-          return;
-        }
+        const code = sp.get('code') || sp.get('verification_code');
 
-        // 2) Fluxo token_hash + type (Invite e alguns links “antigos”)
         const token_hash =
           sp.get('token_hash') || sp.get('token') || sp.get('tokenHash');
 
@@ -57,77 +61,66 @@ export default function AuthConfirmPage() {
           | 'email_change'
           | '';
 
+        // 0) Se já existe sessão, só segue (não inventa)
+        const { data: s0 } = await supa.auth.getSession();
+        if (!alive) return;
+
+        if (s0.session?.user?.id) {
+          setStep('ok');
+          setMessage('Acesso confirmado. A entrar…');
+          router.replace(next);
+          return;
+        }
+
+        // 1) token_hash + type (invite e compatibilidade)
         if (token_hash && type) {
           setMessage('A validar o link…');
 
           const { error } = await supa.auth.verifyOtp({ type, token_hash });
+
           if (!alive) return;
 
           if (error) {
+            // ✅ Invite: se já foi consumido/expirou, não assusta o utilizador
+            if (type === 'invite' && isLikelyConsumedOrExpiredInvite(error.message || '')) {
+              setStep('ok');
+              setMessage('Convite confirmado. Agora pode entrar pelo Magic Link.');
+              router.replace('/login?msg=invite_ok');
+              return;
+            }
+
             setStep('error');
             setMessage(error.message || 'Falha ao validar o link.');
             return;
           }
 
-          // ✅ Regra de negócio: convite NÃO entra no app; manda pro login
+          // Invite: sempre manda para login (fluxo esperado)
           if (type === 'invite') {
             setStep('ok');
-            setMessage('Convite aceite com sucesso. Agora solicite o Magic Link para entrar.');
+            setMessage('Convite aceite com sucesso. Agora pode entrar pelo Magic Link.');
             router.replace('/login?msg=invite_ok');
             return;
           }
 
-          // outros tipos seguem o destino
+          // Outros tipos: segue next
           setStep('ok');
           setMessage('Acesso confirmado. A entrar…');
           router.replace(next);
           return;
         }
 
-        // 3) Fluxo PKCE / code (Magic Link moderno)
-        const code = sp.get('code') || sp.get('verification_code');
+        // 2) code (PKCE / magic link moderno)
         if (code) {
           setMessage('A finalizar autenticação…');
 
           const { error } = await supa.auth.exchangeCodeForSession(window.location.href);
+
           if (!alive) return;
 
           if (error) {
             setStep('error');
-
-            // mensagem “útil” sem loop
-            const msg = (error.message || '').toLowerCase();
-            if (msg.includes('invalid flow state')) {
-              setMessage(
-                'Este link foi aberto num navegador diferente do que pediu o Magic Link. Volte ao login e peça novamente, e abra o email no mesmo navegador.'
-              );
-            } else {
-              setMessage(error.message || 'Falha ao concluir autenticação.');
-            }
+            setMessage(error.message || 'Falha ao concluir autenticação.');
             return;
-          }
-
-          // ✅ Pós-login: decide destino por papel (sem depender do "next" do email)
-          try {
-            const { data: u } = await supa.auth.getUser();
-            const uid = u.user?.id;
-            if (uid) {
-              const { data: prof } = await supa
-                .from('profiles')
-                .select('papel')
-                .eq('user_id', uid)
-                .maybeSingle();
-
-              const papel = (prof as any)?.papel as string | undefined;
-              if (papel === 'admin' || papel === 'gestor') {
-                setStep('ok');
-                setMessage('Acesso confirmado. A entrar…');
-                router.replace('/adm/dashboard');
-                return;
-              }
-            }
-          } catch {
-            // ignora e segue next
           }
 
           setStep('ok');
@@ -136,9 +129,9 @@ export default function AuthConfirmPage() {
           return;
         }
 
-        // 4) Nada útil
+        // 3) nada útil
         setStep('error');
-        setMessage('Link inválido ou expirado. Volte ao login e peça um novo Magic Link.');
+        setMessage('Link inválido ou expirado. Volte a pedir o acesso.');
       } catch (e: any) {
         if (!alive) return;
         setStep('error');
@@ -162,23 +155,25 @@ export default function AuthConfirmPage() {
           {message}
         </p>
 
-        <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <a
-            href="/login"
-            style={{
-              textDecoration: 'none',
-              fontSize: 13,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: '1px solid #D7E3FF',
-              background: '#fff',
-              color: '#0e3258',
-              fontWeight: 800,
-            }}
-          >
-            Ir para o login
-          </a>
-        </div>
+        {step === 'error' && (
+          <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a
+              href="/login"
+              style={{
+                textDecoration: 'none',
+                fontSize: 13,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: '1px solid #D7E3FF',
+                background: '#fff',
+                color: '#0e3258',
+                fontWeight: 800,
+              }}
+            >
+              Voltar ao login
+            </a>
+          </div>
+        )}
       </div>
     </main>
   );
