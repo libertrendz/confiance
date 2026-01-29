@@ -409,44 +409,51 @@ export default function PontoPage() {
   }
 
   // ---------- Regras de habilitação ----------
-  const regras = useMemo(() => {
-    const r = roteiroSelecionado;
-    const st = r?.status || 'planeado';
+const regras = useMemo(() => {
+  const r = roteiroSelecionado;
+  const st = r?.status || 'planeado';
 
-    const podeCheckin = !!r && st === 'planeado';
+  // check-in continua por tarefa
+  const podeCheckin = !!r && st === 'planeado';
 
-    // almoço é DO DIA (não depende de roteiro), mas exige ao menos 1 check-in hoje
-    const podeAlmocoOut = jornada.anyCheckinToday && !jornada.almocoOut;
-    const podeAlmocoIn = jornada.almocoOut && !jornada.almocoIn;
+  /**
+   * 🔹 ALMOÇO É DO DIA (não da tarefa)
+   * Regras:
+   * - precisa existir pelo menos 1 check-in HOJE (em qualquer tarefa)
+   * - só pode sair uma vez
+   * - retorno só depois da saída
+   */
+  const podeAlmocoOut =
+    jornada.anyCheckinToday === true &&
+    !jornada.almocoOut;
 
-    // Se saiu para almoço, exige retorno antes do checkout (em qualquer tarefa)
-    const bloqueioCheckoutPorAlmoco = jornada.almocoOut && !jornada.almocoIn;
+  const podeAlmocoIn =
+    jornada.almocoOut === true &&
+    !jornada.almocoIn;
 
-    const podeCheckout = !!r && st === 'em_andamento' && !jornada.checkout && !bloqueioCheckoutPorAlmoco;
+  /**
+   * 🔒 Bloqueio de checkout:
+   * se saiu para almoço, precisa voltar antes de encerrar qualquer tarefa
+   */
+  const bloqueioCheckoutPorAlmoco =
+    jornada.almocoOut === true &&
+    !jornada.almocoIn;
 
-    return { st, podeCheckin, podeAlmocoOut, podeAlmocoIn, podeCheckout, bloqueioCheckoutPorAlmoco };
-  }, [roteiroSelecionado, jornada]);
+  const podeCheckout =
+    !!r &&
+    st === 'em_andamento' &&
+    !jornada.checkout &&
+    !bloqueioCheckoutPorAlmoco;
 
-  // UI: “Registos” só quando há atividade ativa selecionada
-  const temAtividadeAtiva = useMemo(() => {
-    if (!roteiroSelecionado) return false;
-    const st = roteiroSelecionado.status || 'planeado';
-    return st !== 'executado';
-  }, [roteiroSelecionado]);
-
-  function resetAcaoUI() {
-    setPendingFotoFile(null);
-    setPhotoPreview(null);
-    setTarefaConcluida(null);
-    setJustificativa('');
-    setJustificativaAlmoco('');
-  }
-
-  async function iniciarAcao(tipo: TipoPonto) {
-    setErr(null);
-    setMsg(null);
-    resetAcaoUI();
-    setAcaoTipo(tipo);
+  return {
+    st,
+    podeCheckin,
+    podeAlmocoOut,
+    podeAlmocoIn,
+    podeCheckout,
+    bloqueioCheckoutPorAlmoco,
+  };
+}, [roteiroSelecionado, jornada]);
 
     // check-in/out exigem atividade selecionada
     if ((tipo === 'entrada' || tipo === 'saida') && !roteiroSelecionado) {
