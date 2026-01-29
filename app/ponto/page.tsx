@@ -103,7 +103,7 @@ function tsOf(p: PontoRowLite) {
 
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
-  const TZ = 'Europe/Zurich';
+const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Lisbon', []);
 
   const [nome, setNome] = useState<string | null>(null);
 
