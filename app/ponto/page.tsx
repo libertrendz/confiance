@@ -95,6 +95,12 @@ function tipoLabel(t: TipoPonto) {
   }
 }
 
+function tsOf(p: PontoRowLite) {
+  const base = p.batida_at || p.created_at || '';
+  const t = base ? new Date(base).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
   const TZ = 'Europe/Zurich';
@@ -160,9 +166,22 @@ export default function PontoPage() {
     // check-in hoje (qualquer tarefa) → libera almoço
     const anyCheckinToday = hoje.some((p) => p.tipo === 'entrada');
 
-    // último roteiro onde houve check-in hoje (para backend que ainda exige roteiro_id)
-    const lastCheckin = [...hoje].find((p) => p.tipo === 'entrada' && p?.meta?.roteiro_id);
-    const lastCheckinRoteiroId = (lastCheckin?.meta?.roteiro_id as string | undefined) || null;
+    // ✅ ÚLTIMO roteiro com check-in HOJE (robusto: maior timestamp)
+    const lastCheckinRoteiroId = (() => {
+      let bestTs = 0;
+      let bestId: string | null = null;
+      for (const p of hoje) {
+        if (p.tipo !== 'entrada') continue;
+        const rid = p?.meta?.roteiro_id ? String(p.meta.roteiro_id) : '';
+        if (!rid) continue;
+        const t = tsOf(p);
+        if (t >= bestTs) {
+          bestTs = t;
+          bestId = rid;
+        }
+      }
+      return bestId;
+    })();
 
     // check-in/out por tarefa (roteiro)
     const selId = roteiroSelecionado?.id || null;
@@ -473,7 +492,7 @@ export default function PontoPage() {
       return;
     }
 
-    // Foto só para 1 e 4
+    // Foto só para check-in/out
     const exigeFoto = tipo === 'entrada' || tipo === 'saida';
     if (exigeFoto) {
       if (fileInputRef.current) fileInputRef.current.click();
@@ -489,6 +508,11 @@ export default function PontoPage() {
     setMsg(null);
 
     try {
+      // ✅ almoço exige check-in antes (fail fast)
+      if ((tipo === 'saida_almoco' || tipo === 'retorno_almoco') && !jornada.anyCheckinToday) {
+        throw new Error('almoco_requires_checkin_today');
+      }
+
       const g = await obterGeo();
       if (!g) return;
 
@@ -528,16 +552,15 @@ export default function PontoPage() {
         fotoInfo = await uploadFoto(file, roteiroSelecionado.id, tipo);
       }
 
-      // 🔑 roteiroId usado no RPC:
-      // - para check-in/out: o selecionado
-      // - para almoço: usa o último check-in do dia (ou o selecionado), porque o backend pode exigir p_roteiro_id
+      // 🔑 FIX DEFINITIVO:
+      // almoço deve estar amarrado ao último check-in do dia (não ao roteiro selecionado)
       const roteiroIdParaRpc =
         tipo === 'saida_almoco' || tipo === 'retorno_almoco'
-          ? roteiroSelecionado?.id || jornada.lastCheckinRoteiroId || null
+          ? jornada.lastCheckinRoteiroId || roteiroSelecionado?.id || null
           : roteiroSelecionado?.id || null;
 
       if (!roteiroIdParaRpc) {
-        throw new Error('Para registar o almoço, faça primeiro um Check-in numa atividade.');
+        throw new Error('roteiro_required');
       }
 
       const meta: Record<string, any> = {
@@ -549,15 +572,16 @@ export default function PontoPage() {
         jornada_dia: true,
       };
 
-      // contexto (quando houver)
+      // ✅ meta coerente com o roteiro usado no RPC (principalmente para almoço)
+      meta.roteiro_id = roteiroIdParaRpc;
+
+      // contexto do roteiro selecionado (só como info extra, não como chave do almoço)
       if (roteiroSelecionado) {
-        meta.roteiro_id = roteiroSelecionado.id;
         meta.tarefa_id = roteiroSelecionado.tarefa_id;
         meta.tarefa_nome = roteiroSelecionado.tarefa_nome;
         meta.roteiro_local_id = roteiroSelecionado.local_id;
         meta.roteiro_local_nome = roteiroSelecionado.local_nome;
-      } else if (jornada.lastCheckinRoteiroId) {
-        meta.roteiro_id = jornada.lastCheckinRoteiroId;
+        meta.roteiro_selecionado_id = roteiroSelecionado.id;
       }
 
       if (fotoInfo) {
@@ -661,7 +685,9 @@ export default function PontoPage() {
   const mostrarConfirmacao =
     temAtividadeAtiva &&
     ((acaoTipo === 'entrada' && !!photoPreview) ||
-      (acaoTipo === 'saida' && !jornada.checkout && (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo)));
+      (acaoTipo === 'saida' &&
+        !jornada.checkout &&
+        (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo)));
 
   return (
     <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
@@ -874,6 +900,11 @@ export default function PontoPage() {
             </div>
           )}
         </div>
+
+        {/* ✅ feedback visível também aqui (antes ficava “mudo”) */}
+        {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
+        {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
+        {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
       </section>
 
       {/* ✅ Registos por atividade */}
@@ -914,10 +945,6 @@ export default function PontoPage() {
             />
           </div>
 
-          {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
-          {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
-          {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
-
           <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
             A validação de localização é aplicada conforme o local configurado na atividade.
           </p>
@@ -952,12 +979,22 @@ export default function PontoPage() {
 
                 <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
                   <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 }}>
-                    <input type="radio" name="tarefaConcluida" checked={tarefaConcluida === true} onChange={() => setTarefaConcluida(true)} />
+                    <input
+                      type="radio"
+                      name="tarefaConcluida"
+                      checked={tarefaConcluida === true}
+                      onChange={() => setTarefaConcluida(true)}
+                    />
                     <span>Concluí a tarefa atribuída.</span>
                   </label>
 
                   <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 }}>
-                    <input type="radio" name="tarefaConcluida" checked={tarefaConcluida === false} onChange={() => setTarefaConcluida(false)} />
+                    <input
+                      type="radio"
+                      name="tarefaConcluida"
+                      checked={tarefaConcluida === false}
+                      onChange={() => setTarefaConcluida(false)}
+                    />
                     <span>Não concluí a tarefa (exige justificativa).</span>
                   </label>
                 </div>
