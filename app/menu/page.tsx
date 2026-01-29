@@ -19,6 +19,13 @@ type UltimoPontoHoje = {
   created_at: string;
 } | null;
 
+type JornadaHoje = {
+  hasEntrada: boolean;
+  almocoOut: boolean;
+  almocoIn: boolean;
+  hasSaida: boolean;
+};
+
 function todayLocalStr() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -48,6 +55,13 @@ export default function MenuPage() {
 
   const [roteiroHoje, setRoteiroHoje] = useState<RoteiroHoje>(null);
   const [ultimoPontoHoje, setUltimoPontoHoje] = useState<UltimoPontoHoje>(null);
+  const [jornadaHoje, setJornadaHoje] = useState<JornadaHoje>({
+    hasEntrada: false,
+    almocoOut: false,
+    almocoIn: false,
+    hasSaida: false,
+  });
+
   const [loadingRoteiro, setLoadingRoteiro] = useState(false);
 
   useEffect(() => {
@@ -194,23 +208,35 @@ export default function MenuPage() {
         setRoteiroHoje(null);
       }
 
-      // 2) Último ponto do “dia local”
+      // 2) Pontos do “dia local”
       const { data: pontos, error: pErr } = await supa
         .from('ponto_registro')
         .select('tipo, created_at')
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (pErr) throw pErr;
 
-      const hoje = (pontos || []).find((p: any) => localDateStrFromIso(p.created_at) === t) || null;
-      setUltimoPontoHoje(hoje ? ({ tipo: hoje.tipo, created_at: hoje.created_at } as any) : null);
+      const pontosHoje = (pontos || []).filter((p: any) => localDateStrFromIso(p.created_at) === t);
+
+      const hasEntrada = pontosHoje.some((p: any) => p.tipo === 'entrada');
+      const almocoOut = pontosHoje.some((p: any) => p.tipo === 'saida_almoco');
+      const almocoIn = pontosHoje.some((p: any) => p.tipo === 'retorno_almoco');
+      const hasSaida = pontosHoje.some((p: any) => p.tipo === 'saida');
+
+      // último ponto hoje (apenas para auditoria/visão rápida)
+      const ultimo = pontosHoje[0] || null;
+      setUltimoPontoHoje(ultimo ? ({ tipo: ultimo.tipo, created_at: ultimo.created_at } as any) : null);
+
+      // jornada do dia (almoço é do dia, não da tarefa)
+      setJornadaHoje({ hasEntrada, almocoOut, almocoIn, hasSaida });
     } catch (e) {
       console.error('Erro ao carregar roteiro/status do dia', e);
       setRoteiroHoje(null);
       setUltimoPontoHoje(null);
+      setJornadaHoje({ hasEntrada: false, almocoOut: false, almocoIn: false, hasSaida: false });
     } finally {
       setLoadingRoteiro(false);
     }
@@ -230,14 +256,23 @@ export default function MenuPage() {
     );
   }
 
-  const diaFinalizado = ultimoPontoHoje?.tipo === 'saida';
+  const diaFinalizado = jornadaHoje.hasSaida;
 
-  // regra final: se não há roteiro hoje, NÃO pode aparecer “em aberto”
+  // ✅ almoço do dia (depende de existir pelo menos 1 check-in hoje)
+  const almocoCompleto = jornadaHoje.almocoOut && jornadaHoje.almocoIn;
+  const emAlmoco = jornadaHoje.almocoOut && !jornadaHoje.almocoIn;
+  const almocoPendente = jornadaHoje.hasEntrada && !almocoCompleto && !emAlmoco;
+
+  // ✅ regra final: se não há roteiro hoje, NÃO pode aparecer “em aberto”
   const statusPill = !roteiroHoje
     ? { label: 'Sem atividade hoje', bg: '#EEF3FF' }
     : diaFinalizado
       ? { label: 'Atividade executada', bg: '#EEF3FF' }
-      : { label: 'Atividade em aberto', bg: '#FFF7D6' };
+      : emAlmoco
+        ? { label: 'Em almoço', bg: '#FFF7D6' }
+        : almocoPendente
+          ? { label: 'Almoço pendente', bg: '#FFF7D6' }
+          : { label: 'Atividade em aberto', bg: '#FFF7D6' };
 
   return (
     <main
@@ -364,27 +399,42 @@ export default function MenuPage() {
         {/* 1) Registo de Hoje */}
         <Card
           title="Registo de Hoje"
-          desc={
-            roteiroHoje
-              ? `Acompanhe o seu registo de hoje e verifique a sua atividade atual.`
-              : `Acompanhe o seu registo de hoje e verifique a sua atividade atual.`
-          }
+          desc="Acompanhe o seu registo de hoje e verifique a sua atividade atual."
           meta={
             roteiroHoje
               ? [
                   { label: 'Tarefa', value: roteiroHoje.tarefa_nome || '—' },
                   { label: 'Local', value: roteiroHoje.local_nome || '—' },
+                  {
+                    label: 'Almoço',
+                    value: !jornadaHoje.hasEntrada
+                      ? 'Faça check-in para liberar o almoço'
+                      : emAlmoco
+                        ? 'Em curso'
+                        : almocoCompleto
+                          ? 'Concluído'
+                          : 'Pendente',
+                  },
                 ]
-              : []
+              : [
+                  {
+                    label: 'Almoço',
+                    value: !jornadaHoje.hasEntrada
+                      ? 'Sem check-in hoje'
+                      : emAlmoco
+                        ? 'Em curso'
+                        : almocoCompleto
+                          ? 'Concluído'
+                          : 'Pendente',
+                  },
+                ]
           }
           pill={{
             label: loadingRoteiro ? 'A carregar…' : statusPill.label,
             bg: statusPill.bg,
-            hidden: loadingRoteiro ? false : false,
+            hidden: false,
           }}
-          actions={[
-            { href: '/ponto', label: 'Verificar agora', kind: 'primary' },
-          ]}
+          actions={[{ href: '/ponto', label: 'Verificar agora', kind: 'primary' }]}
           loading={loadingRoteiro}
         />
 
