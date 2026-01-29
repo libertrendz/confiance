@@ -101,9 +101,20 @@ function tsOf(p: PontoRowLite) {
   return Number.isFinite(t) ? t : 0;
 }
 
+// ✅ legado
+const isEntradaTipo = (t: string | null | undefined) => t === 'entrada' || t === 'in';
+
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
-const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Lisbon', []);
+
+  // ✅ TZ dinâmico do device (fallback Europe/Lisbon)
+  const TZ = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Lisbon';
+    } catch {
+      return 'Europe/Lisbon';
+    }
+  }, []);
 
   const [nome, setNome] = useState<string | null>(null);
 
@@ -163,15 +174,15 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
     const almocoOut = hoje.some((p) => p.tipo === 'saida_almoco');
     const almocoIn = hoje.some((p) => p.tipo === 'retorno_almoco');
 
-    // check-in hoje (qualquer tarefa) → libera almoço
-    const anyCheckinToday = hoje.some((p) => p.tipo === 'entrada');
+    // ✅ check-in hoje (qualquer tarefa) → libera almoço (aceita legado 'in')
+    const anyCheckinToday = hoje.some((p) => isEntradaTipo(p.tipo));
 
-    // ✅ ÚLTIMO roteiro com check-in HOJE (robusto: maior timestamp)
+    // ✅ ÚLTIMO roteiro com check-in HOJE (robusto: maior timestamp; aceita legado)
     const lastCheckinRoteiroId = (() => {
       let bestTs = 0;
       let bestId: string | null = null;
       for (const p of hoje) {
-        if (p.tipo !== 'entrada') continue;
+        if (!isEntradaTipo(p.tipo)) continue;
         const rid = p?.meta?.roteiro_id ? String(p.meta.roteiro_id) : '';
         if (!rid) continue;
         const t = tsOf(p);
@@ -186,7 +197,7 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
     // check-in/out por tarefa (roteiro)
     const selId = roteiroSelecionado?.id || null;
     const checkin = selId
-      ? hoje.some((p) => p.tipo === 'entrada' && String(p?.meta?.roteiro_id || '') === selId)
+      ? hoje.some((p) => isEntradaTipo(p.tipo) && String(p?.meta?.roteiro_id || '') === selId)
       : false;
     const checkout = selId
       ? hoje.some((p) => p.tipo === 'saida' && String(p?.meta?.roteiro_id || '') === selId)
@@ -508,7 +519,7 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
     setMsg(null);
 
     try {
-      // ✅ almoço exige check-in antes (fail fast)
+      // almoço exige check-in antes (fail fast)
       if ((tipo === 'saida_almoco' || tipo === 'retorno_almoco') && !jornada.anyCheckinToday) {
         throw new Error('almoco_requires_checkin_today');
       }
@@ -552,8 +563,7 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
         fotoInfo = await uploadFoto(file, roteiroSelecionado.id, tipo);
       }
 
-      // 🔑 FIX DEFINITIVO:
-      // almoço deve estar amarrado ao último check-in do dia (não ao roteiro selecionado)
+      // 🔑 almoço deve estar amarrado ao último check-in do dia (não ao roteiro selecionado)
       const roteiroIdParaRpc =
         tipo === 'saida_almoco' || tipo === 'retorno_almoco'
           ? jornada.lastCheckinRoteiroId || roteiroSelecionado?.id || null
@@ -572,10 +582,10 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
         jornada_dia: true,
       };
 
-      // ✅ meta coerente com o roteiro usado no RPC (principalmente para almoço)
+      // coerência: meta.roteiro_id aponta para o contexto usado no RPC
       meta.roteiro_id = roteiroIdParaRpc;
 
-      // contexto do roteiro selecionado (só como info extra, não como chave do almoço)
+      // contexto do selecionado (info extra)
       if (roteiroSelecionado) {
         meta.tarefa_id = roteiroSelecionado.tarefa_id;
         meta.tarefa_nome = roteiroSelecionado.tarefa_nome;
@@ -622,8 +632,14 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
         setErr('O tempo de almoço deve ser entre 60 e 65 minutos. Se precisar diferente, informe a justificativa.');
       } else if (m.includes('almoco_out_required_before_return')) {
         setErr('Registe primeiro a Saída do almoço antes do Retorno.');
+      } else if (m.includes('almoco_saida_ja_registada')) {
+        setErr('A Saída do almoço já foi registada hoje.');
+      } else if (m.includes('almoco_retorno_sem_saida')) {
+        setErr('Registe primeiro a Saída do almoço antes do Retorno.');
       } else if (m.includes('roteiro_required')) {
         setErr('Para registar o almoço, faça primeiro um Check-in numa atividade.');
+      } else if (m.includes('roteiro_already_executed')) {
+        setErr('A atividade selecionada já foi finalizada. Para o almoço, use a última atividade com Check-in do dia.');
       } else {
         setErr(e?.message || 'Falha ao registar ponto.');
       }
@@ -655,7 +671,7 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
     if (acaoTipo === 'entrada') {
       await baterPonto('entrada', file);
     }
-    // Checkout fica pendente (para marcar conclusão/justificativa antes)
+    // Checkout fica pendente
   }
 
   const outrasAtividades = useMemo(() => {
@@ -703,6 +719,9 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
             Confiance
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>Jornada de hoje</div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+            TZ: {TZ} • Hoje: {hojeStr}
+          </div>
         </div>
 
         <a
@@ -901,7 +920,7 @@ const TZ = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Eu
           )}
         </div>
 
-        {/* ✅ feedback visível também aqui (antes ficava “mudo”) */}
+        {/* feedback visível aqui também */}
         {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
         {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
         {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
