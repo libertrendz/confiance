@@ -1,4 +1,4 @@
-///app/ponto/page.tsx
+// app/ponto/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -38,19 +38,23 @@ type PontoRowLite = {
   meta: any;
 };
 
-function todayLocalStr() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
+function todayLocalStrTZ(tz: string) {
+  // dia local via Intl (evita UTC “virar o dia”)
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(
+    new Date()
+  );
+  const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
+  const mm = parts.find((p) => p.type === 'month')?.value || '01';
+  const dd = parts.find((p) => p.type === 'day')?.value || '01';
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function localDateStrFromIso(iso: string) {
+function localDateStrFromIsoTZ(iso: string, tz: string) {
   const d = new Date(iso);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+  const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
+  const mm = parts.find((p) => p.type === 'month')?.value || '01';
+  const dd = parts.find((p) => p.type === 'day')?.value || '01';
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -84,6 +88,8 @@ function tipoLabel(t: TipoPonto) {
 
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
+  const TZ = 'Europe/Zurich';
+
   const [nome, setNome] = useState<string | null>(null);
 
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
@@ -119,43 +125,46 @@ export default function PontoPage() {
   const [tarefaConcluida, setTarefaConcluida] = useState<boolean | null>(null);
   const [justificativa, setJustificativa] = useState<string>('');
 
+  // almoço: justificativa quando fora da janela
+  const [justificativaAlmoco, setJustificativaAlmoco] = useState<string>('');
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const hojeStr = todayLocalStr();
+  const hojeStr = todayLocalStrTZ(TZ);
 
-  // ---------- Helpers de “jornada do dia” (A: almoço é do dia) ----------
+  // ---------- Helpers do dia ----------
   const jornada = useMemo(() => {
     const today = hojeStr;
 
     const isToday = (r: PontoRowLite) => {
-      const base = r.created_at || r.batida_at || '';
+      const base = r.batida_at || r.created_at || '';
       if (!base) return false;
-      return localDateStrFromIso(base) === today;
+      return localDateStrFromIsoTZ(base, TZ) === today;
     };
 
     const hoje = pontosHoje.filter(isToday);
 
+    // almoço (do dia)
     const almocoOut = hoje.some((p) => p.tipo === 'saida_almoco');
     const almocoIn = hoje.some((p) => p.tipo === 'retorno_almoco');
 
-    const selId = roteiroSelecionado?.id || null;
+    // check-in hoje (qualquer tarefa) → libera almoço
+    const anyCheckinToday = hoje.some((p) => p.tipo === 'entrada');
 
     // check-in/out por tarefa (roteiro)
-    const checkin = selId
-      ? hoje.some((p) => p.tipo === 'entrada' && String(p?.meta?.roteiro_id || '') === selId)
-      : false;
-
-    const checkout = selId
-      ? hoje.some((p) => p.tipo === 'saida' && String(p?.meta?.roteiro_id || '') === selId)
-      : false;
+    const selId = roteiroSelecionado?.id || null;
+    const checkin = selId ? hoje.some((p) => p.tipo === 'entrada' && String(p?.meta?.roteiro_id || '') === selId) : false;
+    const checkout = selId ? hoje.some((p) => p.tipo === 'saida' && String(p?.meta?.roteiro_id || '') === selId) : false;
 
     return {
+      anyCheckinToday,
       checkin,
       almocoOut,
       almocoIn,
       checkout,
+      hoje,
     };
-  }, [pontosHoje, hojeStr, roteiroSelecionado]);
+  }, [pontosHoje, hojeStr, roteiroSelecionado, TZ]);
 
   // ---------- Foto: upload no bucket privado ponto-fotos ----------
   async function uploadFoto(file: File, roteiroId: string, tipoAtual: TipoPonto) {
@@ -165,7 +174,6 @@ export default function PontoPage() {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const dia = new Date().toISOString().slice(0, 10);
 
-    // inclui roteiroId no path para facilitar auditoria
     const path = `${empresaId}/${usuarioId}/${dia}/${roteiroId}/${tipoAtual}-${ts}.${ext}`;
 
     const { error: upErr } = await supa.storage.from('ponto-fotos').upload(path, file, {
@@ -228,8 +236,6 @@ export default function PontoPage() {
 
     setLoadingRoteiros(true);
     try {
-      const todayStr = todayLocalStr();
-
       const { data, error } = await supa
         .from('ponto_roteiros')
         .select(
@@ -249,8 +255,8 @@ export default function PontoPage() {
         )
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
-        .lte('data_dia', todayStr)
-        .or(`data_fim.is.null,data_fim.gte.${todayStr}`)
+        .lte('data_dia', hojeStr)
+        .or(`data_fim.is.null,data_fim.gte.${hojeStr}`)
         .in('status', ['planeado', 'em_andamento', 'executado', 'ativo'])
         .order('data_dia', { ascending: false })
         .limit(50);
@@ -272,17 +278,13 @@ export default function PontoPage() {
         observacoes: r.observacoes ?? null,
       }));
 
-      // Ordenação: pendentes primeiro, em andamento depois, executados por último
       const score = (s: string | null) => (s === 'planeado' ? 0 : s === 'em_andamento' ? 1 : s === 'executado' ? 9 : 5);
       mapped.sort((a, b) => score(a.status) - score(b.status));
 
       setRoteirosHoje(mapped);
 
-      // seleciona automaticamente o primeiro “ativo” (não executado), senão o primeiro da lista
       const firstActive = mapped.find((r) => (r.status || 'planeado') !== 'executado') || mapped[0] || null;
-      if (firstActive && !roteiroSelecionadoId) {
-        setRoteiroSelecionadoId(firstActive.id);
-      }
+      if (firstActive && !roteiroSelecionadoId) setRoteiroSelecionadoId(firstActive.id);
       if (!firstActive) setRoteiroSelecionadoId('');
     } catch (e: any) {
       console.error('Erro ao carregar roteiros do dia', e);
@@ -291,13 +293,12 @@ export default function PontoPage() {
     }
   }
 
-  // ---------- Carregar pontos de hoje (para controlar almoço do dia) ----------
+  // ---------- Carregar pontos do dia (janela curta) ----------
   async function carregarPontosHoje() {
     if (!empresaId || !usuarioId) return;
 
     setLoadingPontosHoje(true);
     try {
-      // Pegamos uma janela curta (últimos 200) e filtramos localmente por dia.
       const { data, error } = await supa
         .from('ponto_registro')
         .select('id,tipo,created_at,batida_at,meta')
@@ -383,7 +384,6 @@ export default function PontoPage() {
   function validarRaioPorRoteiro(g: GeoState, r: RoteiroHojeRow) {
     if (g.lat == null || g.lon == null) return { ok: true, motivo: 'Sem geo' };
 
-    // valida por local do roteiro
     if (r.local_lat != null && r.local_lng != null) {
       const d = distanceMeters(g.lat, g.lon, Number(r.local_lat), Number(r.local_lng));
       const raio = Number(r.local_radius_m ?? 0);
@@ -405,46 +405,41 @@ export default function PontoPage() {
       };
     }
 
-    return { ok: true, motivo: 'Local do roteiro sem lat/lng; ponto registado sem validação de raio.' };
+    return { ok: true, motivo: 'Local sem lat/lng; ponto registado sem validação de raio.' };
   }
 
-  // ---------- Regras de habilitação (jornada) ----------
+  // ---------- Regras de habilitação ----------
   const regras = useMemo(() => {
     const r = roteiroSelecionado;
     const st = r?.status || 'planeado';
 
     const podeCheckin = !!r && st === 'planeado';
-    const podeAlmocoOut = !!r && (st === 'em_andamento' || st === 'planeado') && jornada.checkin && !jornada.almocoOut;
-    const podeAlmocoIn = !!r && jornada.almocoOut && !jornada.almocoIn;
 
-    // Se saiu para almoço, exige retorno antes do checkout
+    // almoço é DO DIA (não depende de roteiro), mas exige ao menos 1 check-in hoje
+    const podeAlmocoOut = jornada.anyCheckinToday && !jornada.almocoOut;
+    const podeAlmocoIn = jornada.almocoOut && !jornada.almocoIn;
+
+    // Se saiu para almoço, exige retorno antes do checkout (em qualquer tarefa)
     const bloqueioCheckoutPorAlmoco = jornada.almocoOut && !jornada.almocoIn;
 
     const podeCheckout = !!r && st === 'em_andamento' && !jornada.checkout && !bloqueioCheckoutPorAlmoco;
 
-    return {
-      st,
-      podeCheckin,
-      podeAlmocoOut,
-      podeAlmocoIn,
-      podeCheckout,
-      bloqueioCheckoutPorAlmoco,
-    };
+    return { st, podeCheckin, podeAlmocoOut, podeAlmocoIn, podeCheckout, bloqueioCheckoutPorAlmoco };
   }, [roteiroSelecionado, jornada]);
 
-  // ✅ Negócio/UI: “Registos de hoje” só aparece quando existe tarefa ativa
+  // UI: “Registos” só quando há atividade ativa selecionada
   const temAtividadeAtiva = useMemo(() => {
     if (!roteiroSelecionado) return false;
     const st = roteiroSelecionado.status || 'planeado';
     return st !== 'executado';
   }, [roteiroSelecionado]);
 
-  // ---------- Ações ----------
   function resetAcaoUI() {
     setPendingFotoFile(null);
     setPhotoPreview(null);
     setTarefaConcluida(null);
     setJustificativa('');
+    setJustificativaAlmoco('');
   }
 
   async function iniciarAcao(tipo: TipoPonto) {
@@ -453,27 +448,22 @@ export default function PontoPage() {
     resetAcaoUI();
     setAcaoTipo(tipo);
 
-    if (!roteiroSelecionado) {
-      setErr('Nenhuma atividade selecionada.');
+    // check-in/out exigem atividade selecionada
+    if ((tipo === 'entrada' || tipo === 'saida') && !roteiroSelecionado) {
+      setErr('Selecione uma atividade para continuar.');
       return;
     }
 
-    // Foto só para 1 e 4 (checkin/checkout)
     const exigeFoto = tipo === 'entrada' || tipo === 'saida';
     if (exigeFoto) {
       if (fileInputRef.current) fileInputRef.current.click();
       return;
     }
 
-    // ações sem foto (almoço)
     await baterPonto(tipo, null);
   }
 
   async function baterPonto(tipo: TipoPonto, file: File | null) {
-    if (!roteiroSelecionado) {
-      setErr('Nenhuma atividade selecionada.');
-      return;
-    }
     setBatendo(true);
     setErr(null);
     setMsg(null);
@@ -482,13 +472,17 @@ export default function PontoPage() {
       const g = await obterGeo();
       if (!g) return;
 
-      const raioCheck = validarRaioPorRoteiro(g, roteiroSelecionado);
-      if (!raioCheck.ok) {
-        setErr(
-          `Não foi possível registar ponto: ${raioCheck.motivo} ` +
-            'Fale com o responsável ou verifique se está no local correto.'
-        );
-        return;
+      // valida raio só para check-in/out (por roteiro)
+      if (tipo === 'entrada' || tipo === 'saida') {
+        if (!roteiroSelecionado) throw new Error('Selecione uma atividade.');
+        const raioCheck = validarRaioPorRoteiro(g, roteiroSelecionado);
+        if (!raioCheck.ok) {
+          setErr(
+            `Não foi possível registar ponto: ${raioCheck.motivo} ` +
+              'Fale com o responsável ou verifique se está no local correto.'
+          );
+          return;
+        }
       }
 
       // checkout: exige decisão de conclusão
@@ -506,6 +500,7 @@ export default function PontoPage() {
       let fotoInfo: { bucket: string; path: string } | null = null;
 
       if (tipo === 'entrada' || tipo === 'saida') {
+        if (!roteiroSelecionado) throw new Error('Selecione uma atividade.');
         if (!file) {
           setErr('Foto obrigatória. Abra a câmara e tire a foto para continuar.');
           return;
@@ -519,18 +514,17 @@ export default function PontoPage() {
         lat: g.lat,
         lon: g.lon,
         accuracy: g.accuracy,
-        raio_validacao: raioCheck.motivo,
-
-        // vínculo de auditoria
-        roteiro_id: roteiroSelecionado.id,
-        tarefa_id: roteiroSelecionado.tarefa_id,
-        tarefa_nome: roteiroSelecionado.tarefa_nome,
-        roteiro_local_id: roteiroSelecionado.local_id,
-        roteiro_local_nome: roteiroSelecionado.local_nome,
-
-        // jornada (almoço é do dia, mas mantemos roteiro_id como contexto)
         jornada_dia: true,
       };
+
+      // contexto (quando houver)
+      if (roteiroSelecionado) {
+        meta.roteiro_id = roteiroSelecionado.id;
+        meta.tarefa_id = roteiroSelecionado.tarefa_id;
+        meta.tarefa_nome = roteiroSelecionado.tarefa_nome;
+        meta.roteiro_local_id = roteiroSelecionado.local_id;
+        meta.roteiro_local_nome = roteiroSelecionado.local_nome;
+      }
 
       if (fotoInfo) {
         meta.foto_bucket = fotoInfo.bucket;
@@ -541,15 +535,17 @@ export default function PontoPage() {
       if (tipo === 'saida') {
         meta.tarefa_concluida = tarefaConcluida;
         if (tarefaConcluida === false) meta.justificativa = justificativa.trim();
-      } else if (justificativa.trim()) {
-        // justificativa opcional em outros passos
-        meta.justificativa = justificativa.trim();
+      }
+
+      // almoço: justificativa opcional (usada pelo backend quando fora da janela)
+      if ((tipo === 'saida_almoco' || tipo === 'retorno_almoco') && justificativaAlmoco.trim()) {
+        meta.justificativa = justificativaAlmoco.trim();
       }
 
       const { error } = await supa.rpc('rpc_ponto_bater', {
         p_tipo: tipo,
+        p_roteiro_id: roteiroSelecionado?.id ?? null, // ✅ almoço pode ir com null
         p_meta: meta,
-        p_roteiro_id: roteiroSelecionado.id,
       });
 
       if (error) throw error;
@@ -557,11 +553,21 @@ export default function PontoPage() {
       setMsg(`${tipoLabel(tipo)} registado com sucesso.`);
       resetAcaoUI();
 
-      // atualiza estado do dia
       await Promise.all([carregarRoteirosHoje(), carregarPontosHoje()]);
     } catch (e: any) {
       console.error('Erro ao bater ponto', e);
-      setErr(e?.message || 'Falha ao registar ponto.');
+
+      // mensagens amigáveis para as regras novas do almoço
+      const m = String(e?.message || '');
+      if (m.includes('almoco_requires_checkin_today')) {
+        setErr('Para registar o almoço, é necessário ter pelo menos um Check-in hoje.');
+      } else if (m.includes('almoco_duration_out_of_range_requires_justificativa')) {
+        setErr('O tempo de almoço deve ser entre 60 e 65 minutos. Se precisar diferente, informe a justificativa.');
+      } else if (m.includes('almoco_out_required_before_return')) {
+        setErr('Registe primeiro a Saída do almoço antes do Retorno.');
+      } else {
+        setErr(e?.message || 'Falha ao registar ponto.');
+      }
     } finally {
       setBatendo(false);
     }
@@ -586,11 +592,9 @@ export default function PontoPage() {
     };
     reader.readAsDataURL(file);
 
-    // Check-in é “rápido”: confirma foto e registra automaticamente
     if (acaoTipo === 'entrada') {
       await baterPonto('entrada', file);
     }
-    // Checkout: fica pendente pra permitir marcar conclusão/justificativa antes de enviar
   }
 
   const outrasAtividades = useMemo(() => {
@@ -617,23 +621,13 @@ export default function PontoPage() {
 
   const selectedStatus = roteiroSelecionado?.status || 'planeado';
 
-  // ✅ Confirmar registo só quando realmente há algo pendente e existe atividade ativa
   const mostrarConfirmacao =
     temAtividadeAtiva &&
     ((acaoTipo === 'entrada' && !!photoPreview) ||
-      (acaoTipo === 'saida' &&
-        !jornada.checkout &&
-        (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo)));
+      (acaoTipo === 'saida' && !jornada.checkout && (!!photoPreview || !!pendingFotoFile || tarefaConcluida !== null || batendo)));
 
   return (
-    <main
-      style={{
-        padding: 16,
-        fontFamily: 'system-ui',
-        maxWidth: 1100,
-        margin: '0 auto',
-      }}
-    >
+    <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
       {/* HEADER */}
       <header style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <img
@@ -642,20 +636,10 @@ export default function PontoPage() {
           style={{ height: 28, width: 'auto', display: 'block' }}
         />
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: 0.8,
-              color: '#6b7280',
-              lineHeight: 1.1,
-            }}
-          >
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280', lineHeight: 1.1 }}>
             Confiance
           </div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>
-            Jornada de hoje
-          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>Jornada de hoje</div>
         </div>
 
         <a
@@ -678,14 +662,12 @@ export default function PontoPage() {
         </a>
       </header>
 
-      {/* Subheader */}
       <header style={{ marginBottom: 14 }}>
         <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#49546A' }}>
           {nome ? `Olá, ${nome}. Registe a sua jornada com foto e localização.` : 'Registe a sua jornada com foto e localização.'}
         </p>
       </header>
 
-      {/* Input foto escondido */}
       <input
         ref={fileInputRef}
         id="foto-ponto-input"
@@ -712,7 +694,7 @@ export default function PontoPage() {
           <div>
             <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258' }}>Atividade atual</div>
             <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              Verifique aqui a(s) atividade(s) programada(s) para o dia.
+              Selecione a atividade para fazer Check-in/Check-out.
             </div>
           </div>
 
@@ -740,13 +722,7 @@ export default function PontoPage() {
                 resetAcaoUI();
                 setRoteiroSelecionadoId(e.target.value);
               }}
-              style={{
-                width: '100%',
-                padding: 10,
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                background: '#fff',
-              }}
+              style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: 10, background: '#fff' }}
               disabled={!roteirosHoje.length || batendo}
             >
               {!roteirosHoje.length && <option value="">Sem atividade atribuída</option>}
@@ -759,20 +735,10 @@ export default function PontoPage() {
           </div>
 
           {roteiroSelecionado ? (
-            <div
-              style={{
-                marginTop: 2,
-                padding: 12,
-                border: '1px solid var(--border)',
-                borderRadius: 12,
-                background: '#fff',
-              }}
-            >
+            <div style={{ marginTop: 2, padding: 12, border: '1px solid var(--border)', borderRadius: 12, background: '#fff' }}>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: '#0e3258' }}>
-                    {roteiroSelecionado.tarefa_nome || 'Tarefa'}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: '#0e3258' }}>{roteiroSelecionado.tarefa_nome || 'Tarefa'}</div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                     Local: {roteiroSelecionado.local_nome || '—'}
                   </div>
@@ -807,7 +773,72 @@ export default function PontoPage() {
         </div>
       </section>
 
-      {/* ✅ Registos de hoje só aparece quando existir atividade ativa */}
+      {/* ✅ Pausa de almoço (DO DIA) */}
+      <section
+        className="card"
+        style={{
+          border: '1px solid #E9EEF7',
+          borderRadius: 16,
+          padding: 16,
+          background: '#fff',
+          boxShadow: '0 1px 0 rgba(14,50,88,0.06)',
+          marginBottom: 12,
+          maxWidth: 680,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 8 }}>Pausa de almoço (do dia)</div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+          O almoço é registado <strong>uma vez por dia</strong> e só fica disponível após existir pelo menos um <strong>Check-in</strong> hoje.
+        </p>
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <StepRow
+            title="Saída almoço"
+            desc={jornada.anyCheckinToday ? '' : 'Faça pelo menos um Check-in hoje para liberar o almoço.'}
+            done={jornada.almocoOut}
+            actionLabel="Registar saída"
+            actionKind="ghost"
+            disabled={!regras.podeAlmocoOut || batendo}
+            onClick={() => iniciarAcao('saida_almoco')}
+          />
+
+          <StepRow
+            title="Retorno almoço"
+            desc="O retorno deve ocorrer entre 60 e 65 minutos. Se precisar diferente, informe justificativa."
+            done={jornada.almocoIn}
+            actionLabel="Registar retorno"
+            actionKind="ghost"
+            disabled={!regras.podeAlmocoIn || batendo}
+            onClick={() => iniciarAcao('retorno_almoco')}
+          />
+
+          {/* justificativa para retorno (quando necessário) */}
+          {acaoTipo === 'retorno_almoco' && regras.podeAlmocoIn && (
+            <div style={{ marginTop: 4 }}>
+              <label className="muted">Justificativa (se almoço for diferente de 60–65 min)</label>
+              <textarea
+                value={justificativaAlmoco}
+                onChange={(e) => setJustificativaAlmoco(e.target.value)}
+                rows={3}
+                placeholder="Ex.: Consulta rápida, urgência no local, etc."
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  resize: 'vertical',
+                  marginTop: 6,
+                }}
+              />
+              <p className="muted" style={{ fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                Se o tempo estiver fora da regra, o sistema exigirá justificativa.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ✅ Registos por atividade */}
       {temAtividadeAtiva && (
         <section
           className="card"
@@ -821,9 +852,7 @@ export default function PontoPage() {
             maxWidth: 680,
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 10 }}>
-            Registos de hoje
-          </div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 10 }}>Registos da atividade selecionada</div>
 
           <div style={{ display: 'grid', gap: 10 }}>
             <StepRow
@@ -837,28 +866,8 @@ export default function PontoPage() {
             />
 
             <StepRow
-              title="2) Saída almoço"
-              desc=""
-              done={jornada.almocoOut}
-              actionLabel="Registar saída almoço"
-              actionKind="ghost"
-              disabled={!regras.podeAlmocoOut || batendo}
-              onClick={() => iniciarAcao('saida_almoco')}
-            />
-
-            <StepRow
-              title="3) Retorno almoço"
-              desc=""
-              done={jornada.almocoIn}
-              actionLabel="Registar retorno almoço"
-              actionKind="ghost"
-              disabled={!regras.podeAlmocoIn || batendo}
-              onClick={() => iniciarAcao('retorno_almoco')}
-            />
-
-            <StepRow
-              title="4) Check-out"
-              desc=""
+              title="2) Check-out"
+              desc={regras.bloqueioCheckoutPorAlmoco ? 'Antes do Check-out, registe o Retorno do almoço.' : ''}
               done={jornada.checkout || regras.st === 'executado'}
               actionLabel="Fazer check-out"
               actionKind="accent"
@@ -877,7 +886,7 @@ export default function PontoPage() {
         </section>
       )}
 
-      {/* Confirmação do check-out (apenas quando necessário) */}
+      {/* Confirmação do check-out */}
       {mostrarConfirmacao && (
         <section className="card" style={{ marginBottom: 16, maxWidth: 680 }}>
           <h2 className="h2" style={{ marginBottom: 12 }}>
@@ -894,12 +903,7 @@ export default function PontoPage() {
               <img
                 src={photoPreview}
                 alt="Pré-visualização"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: 260,
-                  borderRadius: 10,
-                  border: '1px solid var(--border)',
-                }}
+                style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 10, border: '1px solid var(--border)' }}
               />
             </div>
           )}
@@ -911,22 +915,12 @@ export default function PontoPage() {
 
                 <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
                   <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 }}>
-                    <input
-                      type="radio"
-                      name="tarefaConcluida"
-                      checked={tarefaConcluida === true}
-                      onChange={() => setTarefaConcluida(true)}
-                    />
+                    <input type="radio" name="tarefaConcluida" checked={tarefaConcluida === true} onChange={() => setTarefaConcluida(true)} />
                     <span>Concluí a tarefa atribuída.</span>
                   </label>
 
                   <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 }}>
-                    <input
-                      type="radio"
-                      name="tarefaConcluida"
-                      checked={tarefaConcluida === false}
-                      onChange={() => setTarefaConcluida(false)}
-                    />
+                    <input type="radio" name="tarefaConcluida" checked={tarefaConcluida === false} onChange={() => setTarefaConcluida(false)} />
                     <span>Não concluí a tarefa (exige justificativa).</span>
                   </label>
                 </div>
@@ -939,14 +933,8 @@ export default function PontoPage() {
                     value={justificativa}
                     onChange={(e) => setJustificativa(e.target.value)}
                     rows={3}
-                    placeholder="Descreva o motivo."
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 10,
-                      border: '1px solid var(--border)',
-                      resize: 'vertical',
-                    }}
+                    placeholder="Descreva o motivo de forma objetiva."
+                    style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical' }}
                   />
                 </div>
               )}
@@ -954,12 +942,7 @@ export default function PontoPage() {
               <button
                 className="btn btn-primary"
                 style={{ marginTop: 12 }}
-                disabled={
-                  batendo ||
-                  !pendingFotoFile ||
-                  tarefaConcluida === null ||
-                  (tarefaConcluida === false && !justificativa.trim())
-                }
+                disabled={batendo || !pendingFotoFile || tarefaConcluida === null || (tarefaConcluida === false && !justificativa.trim())}
                 onClick={async () => {
                   if (!pendingFotoFile) return;
                   await baterPonto('saida', pendingFotoFile);
@@ -972,27 +955,18 @@ export default function PontoPage() {
         </section>
       )}
 
-      {/* Outras atividades (contexto) */}
       {!!outrasAtividades.length && (
         <section className="card" style={{ marginBottom: 16 }}>
           <h2 className="h2" style={{ marginBottom: 8 }}>
             Outras atividades de hoje
           </h2>
           <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
-            Apenas para consulta. A jornada é controlada acima pela atividade selecionada.
+            Apenas para consulta. Check-in/Check-out são feitos pela atividade selecionada acima.
           </p>
 
           <div style={{ display: 'grid', gap: 10 }}>
             {outrasAtividades.map((r) => (
-              <div
-                key={r.id}
-                style={{
-                  border: '1px solid #E9EEF7',
-                  borderRadius: 14,
-                  padding: 12,
-                  background: '#fff',
-                }}
-              >
+              <div key={r.id} style={{ border: '1px solid #E9EEF7', borderRadius: 14, padding: 12, background: '#fff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258' }}>{r.tarefa_nome || 'Tarefa'}</div>
@@ -1105,11 +1079,7 @@ function StepRow({
 
       <button
         className={actionKind === 'primary' ? 'btn btn-primary' : 'btn btn-ghost'}
-        style={
-          actionKind === 'accent'
-            ? { background: '#FFD24D', border: 'none', fontWeight: 800, color: '#0e3258' }
-            : undefined
-        }
+        style={actionKind === 'accent' ? { background: '#FFD24D', border: 'none', fontWeight: 800, color: '#0e3258' } : undefined}
         disabled={disabled}
         onClick={onClick}
       >
