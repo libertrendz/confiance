@@ -39,10 +39,13 @@ type PontoRowLite = {
 };
 
 function todayLocalStrTZ(tz: string) {
-  // dia local via Intl (evita UTC “virar o dia”)
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(
-    new Date()
-  );
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
   const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
   const mm = parts.find((p) => p.type === 'month')?.value || '01';
   const dd = parts.find((p) => p.type === 'day')?.value || '01';
@@ -51,7 +54,13 @@ function todayLocalStrTZ(tz: string) {
 
 function localDateStrFromIsoTZ(iso: string, tz: string) {
   const d = new Date(iso);
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+
   const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
   const mm = parts.find((p) => p.type === 'month')?.value || '01';
   const dd = parts.find((p) => p.type === 'day')?.value || '01';
@@ -125,7 +134,7 @@ export default function PontoPage() {
   const [tarefaConcluida, setTarefaConcluida] = useState<boolean | null>(null);
   const [justificativa, setJustificativa] = useState<string>('');
 
-  // almoço: justificativa quando fora da janela
+  // almoço: justificativa quando fora da janela (backend valida)
   const [justificativaAlmoco, setJustificativaAlmoco] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -151,13 +160,22 @@ export default function PontoPage() {
     // check-in hoje (qualquer tarefa) → libera almoço
     const anyCheckinToday = hoje.some((p) => p.tipo === 'entrada');
 
+    // último roteiro onde houve check-in hoje (para backend que ainda exige roteiro_id)
+    const lastCheckin = [...hoje].find((p) => p.tipo === 'entrada' && p?.meta?.roteiro_id);
+    const lastCheckinRoteiroId = (lastCheckin?.meta?.roteiro_id as string | undefined) || null;
+
     // check-in/out por tarefa (roteiro)
     const selId = roteiroSelecionado?.id || null;
-    const checkin = selId ? hoje.some((p) => p.tipo === 'entrada' && String(p?.meta?.roteiro_id || '') === selId) : false;
-    const checkout = selId ? hoje.some((p) => p.tipo === 'saida' && String(p?.meta?.roteiro_id || '') === selId) : false;
+    const checkin = selId
+      ? hoje.some((p) => p.tipo === 'entrada' && String(p?.meta?.roteiro_id || '') === selId)
+      : false;
+    const checkout = selId
+      ? hoje.some((p) => p.tipo === 'saida' && String(p?.meta?.roteiro_id || '') === selId)
+      : false;
 
     return {
       anyCheckinToday,
+      lastCheckinRoteiroId,
       checkin,
       almocoOut,
       almocoIn,
@@ -409,51 +427,45 @@ export default function PontoPage() {
   }
 
   // ---------- Regras de habilitação ----------
-const regras = useMemo(() => {
-  const r = roteiroSelecionado;
-  const st = r?.status || 'planeado';
+  const regras = useMemo(() => {
+    const r = roteiroSelecionado;
+    const st = r?.status || 'planeado';
 
-  // check-in continua por tarefa
-  const podeCheckin = !!r && st === 'planeado';
+    // check-in continua por tarefa
+    const podeCheckin = !!r && st === 'planeado';
 
-  /**
-   * 🔹 ALMOÇO É DO DIA (não da tarefa)
-   * Regras:
-   * - precisa existir pelo menos 1 check-in HOJE (em qualquer tarefa)
-   * - só pode sair uma vez
-   * - retorno só depois da saída
-   */
-  const podeAlmocoOut =
-    jornada.anyCheckinToday === true &&
-    !jornada.almocoOut;
+    // almoço é DO DIA (não da tarefa), mas exige ao menos 1 check-in hoje
+    const podeAlmocoOut = jornada.anyCheckinToday === true && !jornada.almocoOut;
+    const podeAlmocoIn = jornada.almocoOut === true && !jornada.almocoIn;
 
-  const podeAlmocoIn =
-    jornada.almocoOut === true &&
-    !jornada.almocoIn;
+    // se saiu para almoço, precisa voltar antes de encerrar qualquer tarefa
+    const bloqueioCheckoutPorAlmoco = jornada.almocoOut === true && !jornada.almocoIn;
 
-  /**
-   * 🔒 Bloqueio de checkout:
-   * se saiu para almoço, precisa voltar antes de encerrar qualquer tarefa
-   */
-  const bloqueioCheckoutPorAlmoco =
-    jornada.almocoOut === true &&
-    !jornada.almocoIn;
+    const podeCheckout = !!r && st === 'em_andamento' && !jornada.checkout && !bloqueioCheckoutPorAlmoco;
 
-  const podeCheckout =
-    !!r &&
-    st === 'em_andamento' &&
-    !jornada.checkout &&
-    !bloqueioCheckoutPorAlmoco;
+    return { st, podeCheckin, podeAlmocoOut, podeAlmocoIn, podeCheckout, bloqueioCheckoutPorAlmoco };
+  }, [roteiroSelecionado, jornada]);
 
-  return {
-    st,
-    podeCheckin,
-    podeAlmocoOut,
-    podeAlmocoIn,
-    podeCheckout,
-    bloqueioCheckoutPorAlmoco,
-  };
-}, [roteiroSelecionado, jornada]);
+  // UI: “Registos” só quando há atividade ativa selecionada
+  const temAtividadeAtiva = useMemo(() => {
+    if (!roteiroSelecionado) return false;
+    const st = roteiroSelecionado.status || 'planeado';
+    return st !== 'executado';
+  }, [roteiroSelecionado]);
+
+  function resetAcaoUI() {
+    setPendingFotoFile(null);
+    setPhotoPreview(null);
+    setTarefaConcluida(null);
+    setJustificativa('');
+    setJustificativaAlmoco('');
+  }
+
+  async function iniciarAcao(tipo: TipoPonto) {
+    setErr(null);
+    setMsg(null);
+    resetAcaoUI();
+    setAcaoTipo(tipo);
 
     // check-in/out exigem atividade selecionada
     if ((tipo === 'entrada' || tipo === 'saida') && !roteiroSelecionado) {
@@ -461,6 +473,7 @@ const regras = useMemo(() => {
       return;
     }
 
+    // Foto só para 1 e 4
     const exigeFoto = tipo === 'entrada' || tipo === 'saida';
     if (exigeFoto) {
       if (fileInputRef.current) fileInputRef.current.click();
@@ -515,6 +528,18 @@ const regras = useMemo(() => {
         fotoInfo = await uploadFoto(file, roteiroSelecionado.id, tipo);
       }
 
+      // 🔑 roteiroId usado no RPC:
+      // - para check-in/out: o selecionado
+      // - para almoço: usa o último check-in do dia (ou o selecionado), porque o backend pode exigir p_roteiro_id
+      const roteiroIdParaRpc =
+        tipo === 'saida_almoco' || tipo === 'retorno_almoco'
+          ? roteiroSelecionado?.id || jornada.lastCheckinRoteiroId || null
+          : roteiroSelecionado?.id || null;
+
+      if (!roteiroIdParaRpc) {
+        throw new Error('Para registar o almoço, faça primeiro um Check-in numa atividade.');
+      }
+
       const meta: Record<string, any> = {
         origem: 'externo-web',
         device: 'browser',
@@ -531,6 +556,8 @@ const regras = useMemo(() => {
         meta.tarefa_nome = roteiroSelecionado.tarefa_nome;
         meta.roteiro_local_id = roteiroSelecionado.local_id;
         meta.roteiro_local_nome = roteiroSelecionado.local_nome;
+      } else if (jornada.lastCheckinRoteiroId) {
+        meta.roteiro_id = jornada.lastCheckinRoteiroId;
       }
 
       if (fotoInfo) {
@@ -544,14 +571,14 @@ const regras = useMemo(() => {
         if (tarefaConcluida === false) meta.justificativa = justificativa.trim();
       }
 
-      // almoço: justificativa opcional (usada pelo backend quando fora da janela)
+      // almoço: justificativa opcional (backend valida quando fora da janela)
       if ((tipo === 'saida_almoco' || tipo === 'retorno_almoco') && justificativaAlmoco.trim()) {
         meta.justificativa = justificativaAlmoco.trim();
       }
 
       const { error } = await supa.rpc('rpc_ponto_bater', {
         p_tipo: tipo,
-        p_roteiro_id: roteiroSelecionado?.id ?? null, // ✅ almoço pode ir com null
+        p_roteiro_id: roteiroIdParaRpc,
         p_meta: meta,
       });
 
@@ -564,7 +591,6 @@ const regras = useMemo(() => {
     } catch (e: any) {
       console.error('Erro ao bater ponto', e);
 
-      // mensagens amigáveis para as regras novas do almoço
       const m = String(e?.message || '');
       if (m.includes('almoco_requires_checkin_today')) {
         setErr('Para registar o almoço, é necessário ter pelo menos um Check-in hoje.');
@@ -572,6 +598,8 @@ const regras = useMemo(() => {
         setErr('O tempo de almoço deve ser entre 60 e 65 minutos. Se precisar diferente, informe a justificativa.');
       } else if (m.includes('almoco_out_required_before_return')) {
         setErr('Registe primeiro a Saída do almoço antes do Retorno.');
+      } else if (m.includes('roteiro_required')) {
+        setErr('Para registar o almoço, faça primeiro um Check-in numa atividade.');
       } else {
         setErr(e?.message || 'Falha ao registar ponto.');
       }
@@ -599,9 +627,11 @@ const regras = useMemo(() => {
     };
     reader.readAsDataURL(file);
 
+    // Check-in é “rápido”: registra automaticamente
     if (acaoTipo === 'entrada') {
       await baterPonto('entrada', file);
     }
+    // Checkout fica pendente (para marcar conclusão/justificativa antes)
   }
 
   const outrasAtividades = useMemo(() => {
@@ -675,6 +705,7 @@ const regras = useMemo(() => {
         </p>
       </header>
 
+      {/* Input foto escondido */}
       <input
         ref={fileInputRef}
         id="foto-ponto-input"
@@ -838,7 +869,7 @@ const regras = useMemo(() => {
                 }}
               />
               <p className="muted" style={{ fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                Se o tempo estiver fora da regra, o sistema exigirá justificativa.
+                Se o tempo estiver fora da regra, o sistema poderá exigir justificativa.
               </p>
             </div>
           )}
@@ -901,8 +932,7 @@ const regras = useMemo(() => {
           </h2>
 
           <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-            Para <strong>Check-in</strong> o registo é automático após confirmar a foto.
-            Para <strong>Check-out</strong>, confirme a conclusão da tarefa.
+            Para <strong>Check-in</strong> o registo é automático após confirmar a foto. Para <strong>Check-out</strong>, confirme a conclusão da tarefa.
           </p>
 
           {photoPreview && (
