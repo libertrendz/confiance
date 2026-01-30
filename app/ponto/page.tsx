@@ -38,35 +38,6 @@ type PontoRowLite = {
   meta: any;
 };
 
-function todayLocalStrTZ(tz: string) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-
-  const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
-  const mm = parts.find((p) => p.type === 'month')?.value || '01';
-  const dd = parts.find((p) => p.type === 'day')?.value || '01';
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function localDateStrFromIsoTZ(iso: string, tz: string) {
-  const d = new Date(iso);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(d);
-
-  const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
-  const mm = parts.find((p) => p.type === 'month')?.value || '01';
-  const dd = parts.find((p) => p.type === 'day')?.value || '01';
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function statusLabel(s: string | null) {
   switch (s) {
     case 'planeado':
@@ -104,10 +75,37 @@ function tsOf(p: PontoRowLite) {
 // ✅ legado
 const isEntradaTipo = (t: string | null | undefined) => t === 'entrada' || t === 'in';
 
+// Data key no timezone (robusto). Fallback se Intl/timeZone falhar em algum Android/WebView.
+function dateKeyInTZ(d: Date, tz?: string) {
+  try {
+    if (!tz) throw new Error('no_tz');
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d);
+
+    const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
+    const mm = parts.find((p) => p.type === 'month')?.value || '01';
+    const dd = parts.find((p) => p.type === 'day')?.value || '01';
+    return `${yyyy}-${mm}-${dd}`;
+  } catch {
+    // fallback UTC (estável e previsível)
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function dateKeyFromIsoInTZ(iso: string, tz?: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return dateKeyInTZ(d, tz);
+}
+
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
-  // ✅ TZ dinâmico do device (fallback Europe/Lisbon)
+  // TZ do device (apenas para formatação/“hoje” do front)
   const TZ = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Lisbon';
@@ -115,6 +113,10 @@ export default function PontoPage() {
       return 'Europe/Lisbon';
     }
   }, []);
+
+  // ✅ hojeStr usado para FILTRAR ROTEIROS (campos date)
+  // aqui mantemos o timezone do device para evitar “hoje” errado no mobile.
+  const hojeStr = useMemo(() => dateKeyInTZ(new Date(), TZ), [TZ]);
 
   const [nome, setNome] = useState<string | null>(null);
 
@@ -156,16 +158,24 @@ export default function PontoPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const hojeStr = todayLocalStrTZ(TZ);
-
   // ---------- Helpers do dia ----------
   const jornada = useMemo(() => {
-    const today = hojeStr;
+    const todayKey = hojeStr;
 
+    // 1) filtra “hoje” usando TZ do device; fallback UTC se necessário
     const isToday = (r: PontoRowLite) => {
       const base = r.batida_at || r.created_at || '';
       if (!base) return false;
-      return localDateStrFromIsoTZ(base, TZ) === today;
+
+      const k = dateKeyFromIsoInTZ(base, TZ);
+      if (k && k === todayKey) return true;
+
+      // fallback extra: tenta UTC direto (casos WebView com Intl estranho)
+      try {
+        return new Date(base).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+      } catch {
+        return false;
+      }
     };
 
     const hoje = pontosHoje.filter(isToday);
@@ -175,7 +185,15 @@ export default function PontoPage() {
     const almocoIn = hoje.some((p) => p.tipo === 'retorno_almoco');
 
     // ✅ check-in hoje (qualquer tarefa) → libera almoço (aceita legado 'in')
-    const anyCheckinToday = hoje.some((p) => isEntradaTipo(p.tipo));
+    const anyCheckinByRegistro = hoje.some((p) => isEntradaTipo(p.tipo));
+
+    // ✅ fallback: se existir roteiro em andamento/executado, houve check-in
+    const anyCheckinByRoteiroStatus = roteirosHoje.some((r) => {
+      const st = (r.status || '').toLowerCase();
+      return st === 'em_andamento' || st === 'executado';
+    });
+
+    const anyCheckinToday = anyCheckinByRegistro || anyCheckinByRoteiroStatus;
 
     // ✅ ÚLTIMO roteiro com check-in HOJE (robusto: maior timestamp; aceita legado)
     const lastCheckinRoteiroId = (() => {
@@ -212,7 +230,7 @@ export default function PontoPage() {
       checkout,
       hoje,
     };
-  }, [pontosHoje, hojeStr, roteiroSelecionado, TZ]);
+  }, [pontosHoje, hojeStr, roteiroSelecionado, TZ, roteirosHoje]);
 
   // ---------- Foto: upload no bucket privado ponto-fotos ----------
   async function uploadFoto(file: File, roteiroId: string, tipoAtual: TipoPonto) {
@@ -719,9 +737,6 @@ export default function PontoPage() {
             Confiance
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>Jornada de hoje</div>
-          <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-            TZ: {TZ} • Hoje: {hojeStr}
-          </div>
         </div>
 
         <a
