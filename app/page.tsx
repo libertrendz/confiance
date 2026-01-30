@@ -1,4 +1,4 @@
-///app/page.tsx
+// app/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -37,15 +37,15 @@ type RoteiroHojeRow = {
   justificativa: string | null;
 };
 
-type TipoPonto = 'entrada' | 'saida' | 'saida_almoco' | 'retorno_almoco';
+type PontoRowLite = {
+  id: string;
+  tipo: string;
+  created_at: string;
+  batida_at: string | null;
+  meta: any;
+};
 
-function todayLocalStr() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
+type TipoPonto = 'entrada' | 'saida' | 'saida_almoco' | 'retorno_almoco';
 
 function statusLabel(s: string | null) {
   switch (s) {
@@ -60,8 +60,60 @@ function statusLabel(s: string | null) {
   }
 }
 
+function tipoLabel(t: TipoPonto) {
+  switch (t) {
+    case 'entrada':
+      return 'Check-in';
+    case 'saida':
+      return 'Check-out';
+    case 'saida_almoco':
+      return 'Saída almoço';
+    case 'retorno_almoco':
+      return 'Retorno almoço';
+    default:
+      return t;
+  }
+}
+
+// legado
+const isEntradaTipo = (t: string | null | undefined) => t === 'entrada' || t === 'in';
+
+function tsOf(p: PontoRowLite) {
+  const base = p.batida_at || p.created_at || '';
+  const t = base ? new Date(base).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+
+function dateKeyInTZ(d: Date, tz: string) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d);
+
+    const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
+    const mm = parts.find((p) => p.type === 'month')?.value || '01';
+    const dd = parts.find((p) => p.type === 'day')?.value || '01';
+    return `${yyyy}-${mm}-${dd}`;
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function dateKeyFromIsoInTZ(iso: string, tz: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return dateKeyInTZ(d, tz);
+}
+
 export default function PontoPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
+
+  // ✅ Backend usa Zurich (teu RPC está fixo em Europe/Zurich)
+  const TZ_BACKEND = 'Europe/Zurich';
+
   const [nome, setNome] = useState<string | null>(null);
 
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
@@ -71,6 +123,9 @@ export default function PontoPage() {
 
   const [roteirosHoje, setRoteirosHoje] = useState<RoteiroHojeRow[]>([]);
   const [loadingRoteiros, setLoadingRoteiros] = useState(false);
+
+  const [pontosHoje, setPontosHoje] = useState<PontoRowLite[]>([]);
+  const [loadingPontos, setLoadingPontos] = useState(false);
 
   const [geo, setGeo] = useState<GeoState>({ lat: null, lon: null, accuracy: null });
   const [gettingGeo, setGettingGeo] = useState(false);
@@ -89,13 +144,54 @@ export default function PontoPage() {
   const [tarefaConcluida, setTarefaConcluida] = useState<boolean | null>(true);
   const [justificativa, setJustificativa] = useState<string>('');
 
+  // almoço: justificativa opcional (backend só exige fora da janela no retorno)
+  const [justificativaAlmoco, setJustificativaAlmoco] = useState<string>('');
+
+  const hojeStr = useMemo(() => dateKeyInTZ(new Date(), TZ_BACKEND), []);
+
+  // ---------- Helpers de jornada (DO DIA) ----------
+  const jornada = useMemo(() => {
+    const today = hojeStr;
+
+    const isToday = (r: PontoRowLite) => {
+      const base = r.batida_at || r.created_at || '';
+      if (!base) return false;
+      const k = dateKeyFromIsoInTZ(base, TZ_BACKEND);
+      return k === today;
+    };
+
+    const hoje = pontosHoje.filter(isToday);
+
+    const almocoOut = hoje.some((p) => p.tipo === 'saida_almoco');
+    const almocoIn = hoje.some((p) => p.tipo === 'retorno_almoco');
+
+    const anyCheckinToday = hoje.some((p) => isEntradaTipo(p.tipo));
+
+    const lastCheckinRoteiroId = (() => {
+      let bestTs = 0;
+      let bestId: string | null = null;
+
+      for (const p of hoje) {
+        if (!isEntradaTipo(p.tipo)) continue;
+        const rid = p?.meta?.roteiro_id ? String(p.meta.roteiro_id) : '';
+        if (!rid) continue;
+        const t = tsOf(p);
+        if (t >= bestTs) {
+          bestTs = t;
+          bestId = rid;
+        }
+      }
+      return bestId;
+    })();
+
+    return { anyCheckinToday, almocoOut, almocoIn, lastCheckinRoteiroId, hoje };
+  }, [pontosHoje, hojeStr]);
+
   // ---------- Foto: upload no bucket privado ponto-fotos ----------
   async function uploadFoto(file: File, roteiroId: string, tipoAtual: TipoPonto) {
     if (!empresaId || !usuarioId) throw new Error('Sessão inválida para upload.');
 
-    const ext =
-      file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-
+    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const dia = new Date().toISOString().slice(0, 10);
 
@@ -155,14 +251,12 @@ export default function PontoPage() {
     };
   }, [supa]);
 
-  // ---------- Carregar roteiros do dia (multi-roteiro) ----------
+  // ---------- Carregar roteiros do dia ----------
   async function carregarRoteirosHoje() {
     if (!empresaId || !usuarioId) return;
 
     setLoadingRoteiros(true);
     try {
-      const todayStr = todayLocalStr();
-
       const { data, error } = await supa
         .from('ponto_roteiros')
         .select(
@@ -190,8 +284,8 @@ export default function PontoPage() {
         )
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
-        .lte('data_dia', todayStr)
-        .or(`data_fim.is.null,data_fim.gte.${todayStr}`)
+        .lte('data_dia', hojeStr)
+        .or(`data_fim.is.null,data_fim.gte.${hojeStr}`)
         .in('status', ['planeado', 'em_andamento', 'executado', 'ativo'])
         .order('data_dia', { ascending: false })
         .limit(50);
@@ -221,9 +315,7 @@ export default function PontoPage() {
         justificativa: r.justificativa ?? null,
       }));
 
-      const score = (s: string | null) =>
-        s === 'planeado' ? 0 : s === 'em_andamento' ? 1 : s === 'executado' ? 9 : 5;
-
+      const score = (s: string | null) => (s === 'planeado' ? 0 : s === 'em_andamento' ? 1 : s === 'executado' ? 9 : 5);
       mapped.sort((a, b) => score(a.status) - score(b.status));
 
       setRoteirosHoje(mapped);
@@ -234,8 +326,44 @@ export default function PontoPage() {
     }
   }
 
+  // ---------- Carregar pontos (para jornada do dia) ----------
+  async function carregarPontosHoje() {
+    if (!empresaId || !usuarioId) return;
+
+    setLoadingPontos(true);
+    try {
+      const { data, error } = await supa
+        .from('ponto_registro')
+        .select('id,tipo,created_at,batida_at,meta')
+        .eq('empresa_id', empresaId)
+        .eq('usuario_id', usuarioId)
+        .order('created_at', { ascending: false })
+        .limit(250);
+
+      if (error) throw error;
+
+      const rows = (data || []) as any[];
+      setPontosHoje(
+        rows.map((r) => ({
+          id: r.id,
+          tipo: r.tipo,
+          created_at: r.created_at,
+          batida_at: r.batida_at ?? null,
+          meta: r.meta,
+        }))
+      );
+    } catch (e: any) {
+      console.error('Erro ao carregar pontos', e);
+    } finally {
+      setLoadingPontos(false);
+    }
+  }
+
   useEffect(() => {
-    if (usuarioId && empresaId) carregarRoteirosHoje();
+    if (usuarioId && empresaId) {
+      carregarRoteirosHoje();
+      carregarPontosHoje();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioId, empresaId]);
 
@@ -281,10 +409,7 @@ export default function PontoPage() {
     const dLon = toRad(lon2 - lon1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -320,12 +445,6 @@ export default function PontoPage() {
   function isDoneCheckin(r: RoteiroHojeRow) {
     return !!r.foto_checkin_path || r.status === 'em_andamento' || r.status === 'executado';
   }
-  function isDoneAlmocoSaida(r: RoteiroHojeRow) {
-    return !!r.almoco_saida_at;
-  }
-  function isDoneAlmocoRetorno(r: RoteiroHojeRow) {
-    return !!r.almoco_retorno_at;
-  }
   function isDoneCheckout(r: RoteiroHojeRow) {
     return !!r.foto_checkout_path || r.status === 'executado';
   }
@@ -334,25 +453,13 @@ export default function PontoPage() {
     return !isDoneCheckin(r) && (r.status === 'planeado' || !r.status);
   }
 
-  function canAlmocoSaida(r: RoteiroHojeRow) {
-    // só depois do check-in e antes do checkout
-    if (!isDoneCheckin(r)) return false;
-    if (isDoneCheckout(r)) return false;
-    return !isDoneAlmocoSaida(r);
-  }
-
-  function canAlmocoRetorno(r: RoteiroHojeRow) {
-    if (!isDoneCheckin(r)) return false;
-    if (isDoneCheckout(r)) return false;
-    if (!isDoneAlmocoSaida(r)) return false;
-    return !isDoneAlmocoRetorno(r);
-  }
-
   function canCheckout(r: RoteiroHojeRow) {
     if (!isDoneCheckin(r)) return false;
     if (isDoneCheckout(r)) return false;
-    // se já saiu pro almoço, exige retorno antes do checkout
-    if (isDoneAlmocoSaida(r) && !isDoneAlmocoRetorno(r)) return false;
+
+    // almoço do dia: se saiu e não voltou, bloqueia checkout
+    if (jornada.almocoOut && !jornada.almocoIn) return false;
+
     return true;
   }
 
@@ -364,7 +471,6 @@ export default function PontoPage() {
     setRoteiroSelecionado(roteiro);
     setAcaoTipo(tipo);
 
-    // checkout: reset controles
     if (tipo === 'saida') {
       setTarefaConcluida(true);
       setJustificativa('');
@@ -373,23 +479,22 @@ export default function PontoPage() {
     if (fileInputRef.current) fileInputRef.current.click();
   }
 
-  async function executarAcaoSemFoto(roteiro: RoteiroHojeRow, tipo: 'saida_almoco' | 'retorno_almoco') {
+  async function executarAlmoco(tipo: 'saida_almoco' | 'retorno_almoco') {
     setBatendo(true);
     setErr(null);
     setMsg(null);
 
     try {
+      if (!jornada.anyCheckinToday) {
+        throw new Error('almoco_requires_checkin_today');
+      }
+
       const g = await obterGeo();
       if (!g) return;
 
-      const raioCheck = validarRaioPorRoteiro(g, roteiro);
-      if (!raioCheck.ok) {
-        setErr(
-          `Não foi possível registar ponto: ${raioCheck.motivo} ` +
-            'Fale com o responsável ou verifique se está no local correto.'
-        );
-        return;
-      }
+      // almoço amarrado ao último check-in do dia
+      const roteiroIdParaRpc = jornada.lastCheckinRoteiroId || roteirosHoje[0]?.id || null;
+      if (!roteiroIdParaRpc) throw new Error('roteiro_required');
 
       const meta: Record<string, any> = {
         origem: 'externo-web',
@@ -397,27 +502,44 @@ export default function PontoPage() {
         lat: g.lat,
         lon: g.lon,
         accuracy: g.accuracy,
-        raio_validacao: raioCheck.motivo,
-        roteiro_id: roteiro.id,
-        tarefa_id: roteiro.tarefa_id,
-        tarefa_nome: roteiro.tarefa_nome,
-        roteiro_local_id: roteiro.local_id,
-        roteiro_local_nome: roteiro.local_nome,
+        jornada_dia: true,
+        roteiro_id: roteiroIdParaRpc,
       };
+
+      if (tipo === 'retorno_almoco' && justificativaAlmoco.trim()) {
+        meta.justificativa = justificativaAlmoco.trim();
+      }
 
       const { error } = await supa.rpc('rpc_ponto_bater', {
         p_tipo: tipo,
-        p_roteiro_id: roteiro.id,
+        p_roteiro_id: roteiroIdParaRpc,
         p_meta: meta,
       });
 
       if (error) throw error;
 
-      setMsg(tipo === 'saida_almoco' ? 'Saída para almoço registada.' : 'Retorno do almoço registado.');
-      await carregarRoteirosHoje();
+      setMsg(`${tipoLabel(tipo)} registado com sucesso.`);
+      await Promise.all([carregarPontosHoje(), carregarRoteirosHoje()]);
     } catch (e: any) {
-      console.error('Erro ao bater ponto (sem foto)', e);
-      setErr(e?.message || 'Falha ao registar.');
+      const m = String(e?.message || '');
+
+      // mapeamento consistente (sem “mensagem crua”)
+      if (m.includes('almoco_requires_checkin_today')) {
+        setErr('Para registar o almoço, é necessário ter pelo menos um Check-in hoje.');
+      } else if (m.includes('almoco_retorno_sem_saida') || m.includes('almoco_out_required_before_return')) {
+        setErr('Registe primeiro a Saída do almoço antes do Retorno.');
+      } else if (m.includes('almoco_saida_ja_registada')) {
+        setErr('A Saída do almoço já foi registada hoje.');
+      } else if (m.includes('almoco_retorno_ja_registado')) {
+        setErr('O Retorno do almoço já foi registado hoje.');
+      } else if (m.includes('almoco_duracao_fora_da_janela_exige_justificativa')) {
+        // Se aparecer na SAÍDA, é backend desatualizado. Com a migration abaixo isso some.
+        setErr('Duração do almoço fora de 60–65 min: informe justificativa no Retorno. (Se isto apareceu na Saída, atualize o RPC com a migration.)');
+      } else if (m.includes('roteiro_required')) {
+        setErr('Para registar o almoço, faça primeiro um Check-in numa atividade.');
+      } else {
+        setErr(e?.message || 'Falha ao registar o almoço.');
+      }
     } finally {
       setBatendo(false);
     }
@@ -465,7 +587,6 @@ export default function PontoPage() {
         foto_capturada: true,
       };
 
-      // checkout: grava conclusão/justificativa
       if (acaoTipo === 'saida') {
         const concl = tarefaConcluida === true;
         meta.tarefa_concluida = concl;
@@ -492,7 +613,7 @@ export default function PontoPage() {
       setPhotoPreview(null);
       setRoteiroSelecionado(null);
 
-      await carregarRoteirosHoje();
+      await Promise.all([carregarPontosHoje(), carregarRoteirosHoje()]);
     } catch (e: any) {
       console.error('Erro ao bater ponto', e);
       setErr(e?.message || 'Falha ao registar ponto.');
@@ -538,14 +659,7 @@ export default function PontoPage() {
   }
 
   return (
-    <main
-      style={{
-        padding: 16,
-        fontFamily: 'system-ui',
-        maxWidth: 1100,
-        margin: '0 auto',
-      }}
-    >
+    <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
       {/* HEADER */}
       <header style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <img
@@ -554,20 +668,10 @@ export default function PontoPage() {
           style={{ height: 28, width: 'auto', display: 'block' }}
         />
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: 0.8,
-              color: '#6b7280',
-              lineHeight: 1.1,
-            }}
-          >
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280', lineHeight: 1.1 }}>
             Confiance
           </div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>
-            Ponto
-          </div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#0e3258', lineHeight: 1.1 }}>Ponto</div>
         </div>
 
         <a
@@ -590,7 +694,6 @@ export default function PontoPage() {
         </a>
       </header>
 
-      {/* Subheader */}
       <header style={{ marginBottom: 12 }}>
         <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#49546A' }}>
           {nome ? `Olá, ${nome}. Registe os pontos da sua atividade.` : 'Registe os pontos da sua atividade.'}
@@ -608,7 +711,7 @@ export default function PontoPage() {
         style={{ display: 'none' }}
       />
 
-      {/* Lista de roteiros */}
+      {/* ✅ 1) Atividades (Check-in / Check-out PRIMEIRO) */}
       <section className="card" style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <h2 className="h2" style={{ margin: 0 }}>
@@ -617,19 +720,21 @@ export default function PontoPage() {
 
           <button
             className="btn btn-ghost"
-            onClick={carregarRoteirosHoje}
-            disabled={loadingRoteiros || batendo}
+            onClick={async () => {
+              setMsg(null);
+              setErr(null);
+              await Promise.all([carregarRoteirosHoje(), carregarPontosHoje()]);
+            }}
+            disabled={loadingRoteiros || loadingPontos || batendo}
           >
-            {loadingRoteiros ? 'Atualizando…' : 'Atualizar'}
+            {loadingRoteiros || loadingPontos ? 'Atualizando…' : 'Atualizar'}
           </button>
         </div>
 
-        {loadingRoteiros && <p className="muted" style={{ marginTop: 10 }}>A carregar atividades…</p>}
+        {(loadingRoteiros || loadingPontos) && <p className="muted" style={{ marginTop: 10 }}>A carregar…</p>}
 
         {!loadingRoteiros && !roteirosHoje.length && (
-          <p className="muted" style={{ marginTop: 10 }}>
-            Nenhuma atividade atribuída para hoje.
-          </p>
+          <p className="muted" style={{ marginTop: 10 }}>Nenhuma atividade atribuída para hoje.</p>
         )}
 
         {!!roteirosHoje.length && (
@@ -638,13 +743,9 @@ export default function PontoPage() {
               const st = r.status || 'planeado';
 
               const okCheckin = isDoneCheckin(r);
-              const okAlmocoSaida = isDoneAlmocoSaida(r);
-              const okAlmocoRetorno = isDoneAlmocoRetorno(r);
               const okCheckout = isDoneCheckout(r);
 
               const btnCheckin = canCheckin(r);
-              const btnAlmocoSaida = canAlmocoSaida(r);
-              const btnAlmocoRetorno = canAlmocoRetorno(r);
               const btnCheckout = canCheckout(r);
 
               return (
@@ -689,52 +790,15 @@ export default function PontoPage() {
                     </span>
                   </div>
 
-                  {/* Ações */}
+                  {/* ✅ Ordem correta: Check-in / Check-out */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                    <button
-                      className="btn btn-primary"
-                      disabled={!btnCheckin || batendo}
-                      onClick={() => iniciarAcaoComFoto(r, 'entrada')}
-                    >
+                    <button className="btn btn-primary" disabled={!btnCheckin || batendo} onClick={() => iniciarAcaoComFoto(r, 'entrada')}>
                       {batendo && roteiroSelecionado?.id === r.id && acaoTipo === 'entrada' ? 'A registar…' : 'Check-in'}
                     </button>
 
                     <button
                       className="btn btn-ghost"
-                      disabled={!btnAlmocoSaida || batendo}
-                      onClick={() => executarAcaoSemFoto(r, 'saida_almoco')}
-                      style={{
-                        border: '1px solid #D7E3FF',
-                        background: '#fff',
-                        color: '#0e3258',
-                        fontWeight: 700,
-                      }}
-                    >
-                      Saída almoço
-                    </button>
-
-                    <button
-                      className="btn btn-ghost"
-                      disabled={!btnAlmocoRetorno || batendo}
-                      onClick={() => executarAcaoSemFoto(r, 'retorno_almoco')}
-                      style={{
-                        border: '1px solid #D7E3FF',
-                        background: '#fff',
-                        color: '#0e3258',
-                        fontWeight: 700,
-                      }}
-                    >
-                      Retorno almoço
-                    </button>
-
-                    <button
-                      className="btn btn-ghost"
-                      style={{
-                        background: '#FFD24D',
-                        border: 'none',
-                        fontWeight: 900,
-                        color: '#0e3258',
-                      }}
+                      style={{ background: '#FFD24D', border: 'none', fontWeight: 900, color: '#0e3258' }}
                       disabled={!btnCheckout || batendo}
                       onClick={() => iniciarAcaoComFoto(r, 'saida')}
                     >
@@ -742,7 +806,6 @@ export default function PontoPage() {
                     </button>
                   </div>
 
-                  {/* Registos de hoje (somente visual, sem regra/negócio) */}
                   <div
                     style={{
                       marginTop: 12,
@@ -754,14 +817,9 @@ export default function PontoPage() {
                       paddingTop: 10,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#0e3258' }}>Registos de hoje</span>
-                    </div>
-
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#0e3258' }}>Registos da atividade</span>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                       <StagePill label="Check-in" ok={okCheckin} />
-                      <StagePill label="Saída almoço" ok={okAlmocoSaida} />
-                      <StagePill label="Retorno almoço" ok={okAlmocoRetorno} />
                       <StagePill label="Check-out" ok={okCheckout} />
                     </div>
                   </div>
@@ -772,7 +830,59 @@ export default function PontoPage() {
         )}
       </section>
 
-      {/* Checkout: confirmação + justificativa (somente quando aplicável) */}
+      {/* ✅ 2) Almoço DO DIA (aparece depois) */}
+      <section className="card" style={{ marginBottom: 12, maxWidth: 680 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 8 }}>Pausa de almoço (do dia)</div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+          O almoço é registado <strong>uma vez por dia</strong> e só fica disponível após existir pelo menos um <strong>Check-in</strong> hoje.
+        </p>
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <StepRow
+            title="Saída almoço"
+            desc={jornada.anyCheckinToday ? '' : 'Faça pelo menos um Check-in hoje para liberar o almoço.'}
+            done={jornada.almocoOut}
+            actionLabel="Registar saída"
+            disabled={!jornada.anyCheckinToday || jornada.almocoOut || batendo}
+            onClick={() => executarAlmoco('saida_almoco')}
+          />
+
+          <StepRow
+            title="Retorno almoço"
+            desc="O retorno deve ocorrer entre 60 e 65 minutos. Se precisar diferente, informe justificativa."
+            done={jornada.almocoIn}
+            actionLabel="Registar retorno"
+            disabled={!jornada.almocoOut || jornada.almocoIn || batendo}
+            onClick={() => executarAlmoco('retorno_almoco')}
+          />
+
+          {(!jornada.almocoIn && jornada.almocoOut) && (
+            <div style={{ marginTop: 4 }}>
+              <label className="muted">Justificativa (se almoço for diferente de 60–65 min)</label>
+              <textarea
+                value={justificativaAlmoco}
+                onChange={(e) => setJustificativaAlmoco(e.target.value)}
+                rows={3}
+                placeholder="Ex.: Consulta rápida, urgência no local, etc."
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  resize: 'vertical',
+                  marginTop: 6,
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
+        {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
+        {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
+      </section>
+
+      {/* ✅ Confirmação do checkout (mantido) */}
       <section className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
         <h2 className="h2" style={{ marginBottom: 12 }}>
           Confirmar registo
@@ -787,17 +897,11 @@ export default function PontoPage() {
             <img
               src={photoPreview}
               alt="Pré-visualização"
-              style={{
-                maxWidth: '100%',
-                maxHeight: 260,
-                borderRadius: 10,
-                border: '1px solid var(--border)',
-              }}
+              style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 10, border: '1px solid var(--border)' }}
             />
           </div>
         )}
 
-        {/* Só mostra a parte de conclusão quando a ação é checkout */}
         {roteiroSelecionado && acaoTipo === 'saida' && (
           <div style={{ marginTop: 12 }}>
             <label className="muted" style={{ display: 'block', marginBottom: 8 }}>
@@ -806,22 +910,12 @@ export default function PontoPage() {
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <label style={radioLabelStyle}>
-                <input
-                  type="radio"
-                  name="tarefaConcluida"
-                  checked={tarefaConcluida === true}
-                  onChange={() => setTarefaConcluida(true)}
-                />
+                <input type="radio" name="tarefaConcluida" checked={tarefaConcluida === true} onChange={() => setTarefaConcluida(true)} />
                 <span>Concluída</span>
               </label>
 
               <label style={radioLabelStyle}>
-                <input
-                  type="radio"
-                  name="tarefaConcluida"
-                  checked={tarefaConcluida === false}
-                  onChange={() => setTarefaConcluida(false)}
-                />
+                <input type="radio" name="tarefaConcluida" checked={tarefaConcluida === false} onChange={() => setTarefaConcluida(false)} />
                 <span>Não concluída</span>
               </label>
             </div>
@@ -834,22 +928,12 @@ export default function PontoPage() {
                   onChange={(e) => setJustificativa(e.target.value)}
                   rows={3}
                   placeholder="Obrigatório quando não concluída."
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    borderRadius: 10,
-                    border: '1px solid var(--border)',
-                    resize: 'vertical',
-                  }}
+                  style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical' }}
                 />
               </div>
             )}
           </div>
         )}
-
-        {gettingGeo && <p className="muted" style={{ marginTop: 10 }}>A obter localização do dispositivo…</p>}
-        {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
-        {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
 
         <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
           Validação de localização ativa (quando configurada no roteiro).
@@ -905,6 +989,69 @@ function StagePill({ label, ok }: { label: string; ok: boolean }) {
       </span>
       <span>{label}</span>
     </span>
+  );
+}
+
+function StepRow({
+  title,
+  desc,
+  done,
+  actionLabel,
+  disabled,
+  onClick,
+}: {
+  title: string;
+  desc: string;
+  done: boolean;
+  actionLabel: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const badge = done ? '✓' : '🕒';
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '28px 1fr auto',
+        gap: 10,
+        alignItems: 'center',
+        padding: 12,
+        border: '1px solid #E9EEF7',
+        borderRadius: 14,
+        background: '#fff',
+      }}
+    >
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 999,
+          display: 'grid',
+          placeItems: 'center',
+          background: done ? '#E8FFF1' : '#FFF7E6',
+          border: done ? '1px solid #BDE6C8' : '1px solid #FFD08A',
+          color: '#0e3258',
+          fontWeight: 900,
+        }}
+        aria-label={done ? 'Concluído' : 'Pendente'}
+      >
+        {badge}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258' }}>{title}</div>
+        {desc ? (
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            {desc}
+          </div>
+        ) : null}
+      </div>
+
+      <button className="btn btn-ghost" disabled={disabled} onClick={onClick}>
+        {actionLabel}
+      </button>
+    </div>
   );
 }
 
