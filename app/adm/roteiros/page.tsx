@@ -80,6 +80,22 @@ function CellClock({ done }: { done: boolean }) {
   );
 }
 
+function todayStrZurich() {
+  // admin painel não precisa ser "do device": é pra ver o dia do sistema/regra
+  // (se preferir, troca Europe/Zurich por TZ padrão do teu negócio)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Zurich',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
+  const mm = parts.find((p) => p.type === 'month')?.value || '01';
+  const dd = parts.find((p) => p.type === 'day')?.value || '01';
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
 
@@ -101,10 +117,8 @@ export default function RoteirosPage() {
 
   const [salvando, setSalvando] = useState(false);
 
-  // edição
   const [editId, setEditId] = useState<string | null>(null);
 
-  // “tarefa nova” (opção A)
   const [criandoTarefa, setCriandoTarefa] = useState(false);
   const [novaTarefaNome, setNovaTarefaNome] = useState('');
 
@@ -201,6 +215,7 @@ export default function RoteirosPage() {
   async function loadLista(eid: string) {
     setLoading(true);
     setErr(null);
+
     try {
       const { data, error } = await supa
         .from('ponto_roteiros')
@@ -230,7 +245,6 @@ export default function RoteirosPage() {
         `
         )
         .eq('empresa_id', eid)
-        // ✅ ordem definitiva: mais recentemente atualizado primeiro (resolve “roteiro novo não sobe”)
         .order('updated_at', { ascending: false })
         .order('created_at', { ascending: false })
         .order('data_dia', { ascending: false })
@@ -238,7 +252,7 @@ export default function RoteirosPage() {
 
       if (error) throw error;
 
-      const mapped: RoteiroRow[] = (data || []).map((r: any) => ({
+      const mappedBase: RoteiroRow[] = (data || []).map((r: any) => ({
         id: r.id,
         usuario_id: r.usuario_id,
         data_dia: r.data_dia,
@@ -263,7 +277,49 @@ export default function RoteirosPage() {
         local_id: r.local_id ?? null,
       }));
 
-      setLista(mapped);
+      // ✅ COMPLEMENTO UI: busca os pontos de HOJE e “reforça” almoço no painel
+      // (porque o almoço é gravado em ponto_registro e nem sempre em ponto_roteiros)
+      const todayZurich = todayStrZurich();
+
+      const { data: pontos, error: pontosErr } = await supa
+        .from('ponto_registro')
+        .select('tipo, created_at, meta')
+        .eq('empresa_id', eid)
+        .gte('created_at', `${todayZurich}T00:00:00.000Z`)
+        .lte('created_at', `${todayZurich}T23:59:59.999Z`)
+        .limit(2000);
+
+      if (pontosErr) {
+        // não quebra o painel se der erro aqui
+        console.warn('Falha ao carregar pontos do dia para UI do almoço', pontosErr);
+        setLista(mappedBase);
+        return;
+      }
+
+      const almocoMap: Record<string, { saida: boolean; retorno: boolean }> = {};
+
+      for (const p of pontos || []) {
+        const tipo = (p as any).tipo as string | undefined;
+        const rid = (p as any)?.meta?.roteiro_id ? String((p as any).meta.roteiro_id) : '';
+        if (!rid) continue;
+
+        if (!almocoMap[rid]) almocoMap[rid] = { saida: false, retorno: false };
+
+        if (tipo === 'saida_almoco') almocoMap[rid].saida = true;
+        if (tipo === 'retorno_almoco') almocoMap[rid].retorno = true;
+      }
+
+      const merged = mappedBase.map((r) => {
+        const m = almocoMap[r.id];
+        // se já tem coluna preenchida, mantém; se não, usa o mapa do ponto_registro
+        return {
+          ...r,
+          almoco_saida_at: r.almoco_saida_at ?? (m?.saida ? 'ok' : null),
+          almoco_retorno_at: r.almoco_retorno_at ?? (m?.retorno ? 'ok' : null),
+        };
+      });
+
+      setLista(merged);
     } catch (e: any) {
       console.error('Erro ao carregar ponto_roteiros', e);
       setErr(e?.message || 'Falha ao carregar roteiros.');
@@ -311,12 +367,7 @@ export default function RoteirosPage() {
     }
 
     try {
-      const { data, error } = await supa
-        .from('tarefas_padrao')
-        .insert({ nome, ativo: true })
-        .select('id')
-        .maybeSingle();
-
+      const { data, error } = await supa.from('tarefas_padrao').insert({ nome, ativo: true }).select('id').maybeSingle();
       if (error) throw error;
 
       const newId = (data as any)?.id as string | undefined;
@@ -371,12 +422,7 @@ export default function RoteirosPage() {
       if (form.data_fim) payload.data_fim = form.data_fim;
 
       if (editId) {
-        const { error } = await supa
-          .from('ponto_roteiros')
-          .update(payload)
-          .eq('id', editId)
-          .eq('empresa_id', empresaId);
-
+        const { error } = await supa.from('ponto_roteiros').update(payload).eq('id', editId).eq('empresa_id', empresaId);
         if (error) throw error;
         alert('Roteiro atualizado.');
       } else {
@@ -403,12 +449,7 @@ export default function RoteirosPage() {
 
     setErr(null);
     try {
-      const { error } = await supa
-        .from('ponto_roteiros')
-        .delete()
-        .eq('id', id)
-        .eq('empresa_id', empresaId);
-
+      const { error } = await supa.from('ponto_roteiros').delete().eq('id', id).eq('empresa_id', empresaId);
       if (error) throw error;
 
       if (editId === id) resetForm();
@@ -468,11 +509,7 @@ export default function RoteirosPage() {
             Roteiros de trabalho
           </h1>
           <div className="muted" style={{ fontSize: 12 }}>
-            {loadingEmpresa
-              ? 'A carregar empresa…'
-              : empresaId
-              ? `Empresa: ${empresaId.slice(0, 8)}…`
-              : 'Empresa não carregada'}
+            {loadingEmpresa ? 'A carregar empresa…' : empresaId ? `Empresa: ${empresaId.slice(0, 8)}…` : 'Empresa não carregada'}
           </div>
         </div>
 
@@ -678,6 +715,8 @@ export default function RoteirosPage() {
 
                   const hasIn = !!r.foto_checkin_path;
                   const hasOut = !!r.foto_checkout_path;
+
+                  // ✅ agora almoço pode vir da coluna ou do “ok” (merge feito no loadLista)
                   const hasAlmocoOut = !!r.almoco_saida_at;
                   const hasAlmocoIn = !!r.almoco_retorno_at;
 
