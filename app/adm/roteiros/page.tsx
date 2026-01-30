@@ -31,6 +31,11 @@ type RoteiroRow = {
   local_id: string | null;
 };
 
+type AlmocoAgg = {
+  out: boolean;
+  in: boolean;
+};
+
 function statusLabel(s: string | null) {
   switch (s) {
     case 'planeado':
@@ -80,15 +85,14 @@ function CellClock({ done }: { done: boolean }) {
   );
 }
 
-function todayStrZurich() {
-  // admin painel não precisa ser "do device": é pra ver o dia do sistema/regra
-  // (se preferir, troca Europe/Zurich por TZ padrão do teu negócio)
+function dateStrFromIsoTZ(iso: string, tz: string) {
+  const d = new Date(iso);
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Zurich',
+    timeZone: tz,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(d);
 
   const yyyy = parts.find((p) => p.type === 'year')?.value || '1970';
   const mm = parts.find((p) => p.type === 'month')?.value || '01';
@@ -96,8 +100,18 @@ function todayStrZurich() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function safeDateOnly(d: string | null | undefined) {
+  // espera 'YYYY-MM-DD'
+  if (!d) return null;
+  return String(d).slice(0, 10);
+}
+
 export default function RoteirosPage() {
   const supa = useMemo(() => getBrowserSupabase(), []);
+
+  // ✅ fixa o TZ que o backend usa para “dia local” no RPC
+  // (evita admin “ver um dia diferente” dependendo do device)
+  const TZ = 'Europe/Zurich';
 
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [loadingEmpresa, setLoadingEmpresa] = useState(true);
@@ -109,6 +123,10 @@ export default function RoteirosPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // ✅ mapa almoço (do dia) por colaborador+data
+  // key: `${usuario_id}|${YYYY-MM-DD}`
+  const [almocoMap, setAlmocoMap] = useState<Record<string, AlmocoAgg>>({});
+
   const colabNomePorId = useMemo(() => {
     const map: Record<string, string> = {};
     for (const c of colabOpts) map[c.id] = c.nome;
@@ -117,8 +135,10 @@ export default function RoteirosPage() {
 
   const [salvando, setSalvando] = useState(false);
 
+  // edição
   const [editId, setEditId] = useState<string | null>(null);
 
+  // “tarefa nova”
   const [criandoTarefa, setCriandoTarefa] = useState(false);
   const [novaTarefaNome, setNovaTarefaNome] = useState('');
 
@@ -149,12 +169,7 @@ export default function RoteirosPage() {
       const uid = ud.user?.id ?? null;
       if (!uid) throw new Error('Sessão expirada. Faça login novamente.');
 
-      const { data: prof, error: profErr } = await supa
-        .from('profiles')
-        .select('empresa_id')
-        .eq('user_id', uid)
-        .maybeSingle();
-
+      const { data: prof, error: profErr } = await supa.from('profiles').select('empresa_id').eq('user_id', uid).maybeSingle();
       if (profErr) throw profErr;
 
       const eid = prof?.empresa_id ?? null;
@@ -212,10 +227,79 @@ export default function RoteirosPage() {
     }
   }
 
+  // ✅ carrega status do almoço via view (do dia, não do roteiro)
+  async function loadAlmocoDoDia(eid: string, roteiros: RoteiroRow[]) {
+    try {
+      if (!roteiros.length) {
+        setAlmocoMap({});
+        return;
+      }
+
+      const userIds = Array.from(new Set(roteiros.map((r) => r.usuario_id).filter(Boolean)));
+      if (!userIds.length) {
+        setAlmocoMap({});
+        return;
+      }
+
+      // intervalo de datas baseado na lista
+      const allDates: string[] = [];
+      for (const r of roteiros) {
+        const d1 = safeDateOnly(r.data_dia);
+        const d2 = safeDateOnly(r.data_fim);
+        if (d1) allDates.push(d1);
+        if (d2) allDates.push(d2);
+      }
+      allDates.sort();
+      const minDay = allDates[0] || safeDateOnly(roteiros[0].data_dia) || null;
+      const maxDay = allDates[allDates.length - 1] || safeDateOnly(roteiros[0].data_dia) || null;
+
+      // janela “folgada” pra evitar erro de timezone
+      const startISO = minDay ? new Date(`${minDay}T00:00:00.000Z`).toISOString() : new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString();
+      const endISO = maxDay ? new Date(`${maxDay}T23:59:59.999Z`).toISOString() : new Date().toISOString();
+
+      // busca apenas batidas de almoço
+      const { data, error } = await supa
+        .from('v_adm_ponto_registros')
+        .select('usuario_id,tipo,created_at,batida_at')
+        .eq('empresa_id', eid)
+        .in('usuario_id', userIds)
+        .in('tipo', ['saida_almoco', 'retorno_almoco'])
+        .gte('created_at', startISO)
+        .lte('created_at', endISO)
+        .order('created_at', { ascending: false })
+        .limit(5000);
+
+      if (error) throw error;
+
+      const map: Record<string, AlmocoAgg> = {};
+
+      for (const row of (data || []) as any[]) {
+        const uid = String(row.usuario_id || '');
+        if (!uid) continue;
+
+        const base = String(row.batida_at || row.created_at || '');
+        if (!base) continue;
+
+        const day = dateStrFromIsoTZ(base, TZ);
+        const key = `${uid}|${day}`;
+
+        if (!map[key]) map[key] = { out: false, in: false };
+
+        if (row.tipo === 'saida_almoco') map[key].out = true;
+        if (row.tipo === 'retorno_almoco') map[key].in = true;
+      }
+
+      setAlmocoMap(map);
+    } catch (e) {
+      console.error('Erro ao carregar almoço do dia (view)', e);
+      // não quebra a página – apenas mantém o fallback
+      setAlmocoMap({});
+    }
+  }
+
   async function loadLista(eid: string) {
     setLoading(true);
     setErr(null);
-
     try {
       const { data, error } = await supa
         .from('ponto_roteiros')
@@ -252,7 +336,7 @@ export default function RoteirosPage() {
 
       if (error) throw error;
 
-      const mappedBase: RoteiroRow[] = (data || []).map((r: any) => ({
+      const mapped: RoteiroRow[] = (data || []).map((r: any) => ({
         id: r.id,
         usuario_id: r.usuario_id,
         data_dia: r.data_dia,
@@ -277,53 +361,15 @@ export default function RoteirosPage() {
         local_id: r.local_id ?? null,
       }));
 
-      // ✅ COMPLEMENTO UI: busca os pontos de HOJE e “reforça” almoço no painel
-      // (porque o almoço é gravado em ponto_registro e nem sempre em ponto_roteiros)
-      const todayZurich = todayStrZurich();
+      setLista(mapped);
 
-      const { data: pontos, error: pontosErr } = await supa
-        .from('ponto_registro')
-        .select('tipo, created_at, meta')
-        .eq('empresa_id', eid)
-        .gte('created_at', `${todayZurich}T00:00:00.000Z`)
-        .lte('created_at', `${todayZurich}T23:59:59.999Z`)
-        .limit(2000);
-
-      if (pontosErr) {
-        // não quebra o painel se der erro aqui
-        console.warn('Falha ao carregar pontos do dia para UI do almoço', pontosErr);
-        setLista(mappedBase);
-        return;
-      }
-
-      const almocoMap: Record<string, { saida: boolean; retorno: boolean }> = {};
-
-      for (const p of pontos || []) {
-        const tipo = (p as any).tipo as string | undefined;
-        const rid = (p as any)?.meta?.roteiro_id ? String((p as any).meta.roteiro_id) : '';
-        if (!rid) continue;
-
-        if (!almocoMap[rid]) almocoMap[rid] = { saida: false, retorno: false };
-
-        if (tipo === 'saida_almoco') almocoMap[rid].saida = true;
-        if (tipo === 'retorno_almoco') almocoMap[rid].retorno = true;
-      }
-
-      const merged = mappedBase.map((r) => {
-        const m = almocoMap[r.id];
-        // se já tem coluna preenchida, mantém; se não, usa o mapa do ponto_registro
-        return {
-          ...r,
-          almoco_saida_at: r.almoco_saida_at ?? (m?.saida ? 'ok' : null),
-          almoco_retorno_at: r.almoco_retorno_at ?? (m?.retorno ? 'ok' : null),
-        };
-      });
-
-      setLista(merged);
+      // ✅ agora o almoço vem do “dia” via view
+      await loadAlmocoDoDia(eid, mapped);
     } catch (e: any) {
       console.error('Erro ao carregar ponto_roteiros', e);
       setErr(e?.message || 'Falha ao carregar roteiros.');
       setLista([]);
+      setAlmocoMap({});
     } finally {
       setLoading(false);
     }
@@ -510,6 +556,9 @@ export default function RoteirosPage() {
           </h1>
           <div className="muted" style={{ fontSize: 12 }}>
             {loadingEmpresa ? 'A carregar empresa…' : empresaId ? `Empresa: ${empresaId.slice(0, 8)}…` : 'Empresa não carregada'}
+          </div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+            TZ (admin): {TZ}
           </div>
         </div>
 
@@ -716,9 +765,14 @@ export default function RoteirosPage() {
                   const hasIn = !!r.foto_checkin_path;
                   const hasOut = !!r.foto_checkout_path;
 
-                  // ✅ agora almoço pode vir da coluna ou do “ok” (merge feito no loadLista)
-                  const hasAlmocoOut = !!r.almoco_saida_at;
-                  const hasAlmocoIn = !!r.almoco_retorno_at;
+                  // ✅ almoço do dia via view:
+                  const dia = safeDateOnly(r.data_dia) || '';
+                  const key = `${r.usuario_id}|${dia}`;
+                  const agg = almocoMap[key];
+
+                  // fallback: se ainda populam colunas do roteiro, respeita também
+                  const hasAlmocoOut = !!(agg?.out || r.almoco_saida_at);
+                  const hasAlmocoIn = !!(agg?.in || r.almoco_retorno_at);
 
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
@@ -785,9 +839,7 @@ export default function RoteirosPage() {
                         )}
                       </td>
 
-                      <td style={{ padding: 8 }}>
-                        {r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Sim' : 'Não'}
-                      </td>
+                      <td style={{ padding: 8 }}>{r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Sim' : 'Não'}</td>
                       <td style={{ padding: 8, maxWidth: 260 }}>{r.justificativa || '—'}</td>
 
                       <td style={{ padding: 8 }}>
