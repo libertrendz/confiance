@@ -136,8 +136,8 @@ export default function PontoPage() {
   const [err, setErr] = useState<string | null>(null);
 
   // debug operacional
-  const [lastRpcTipo, setLastRpcTipo] = useState<string | null>(null);
-  const [lastRpcError, setLastRpcError] = useState<string | null>(null);
+ // const [lastRpcTipo, setLastRpcTipo] = useState<string | null>(null);
+ // const [lastRpcError, setLastRpcError] = useState<string | null>(null);
 
   // seleção de roteiro
   const [roteiroSelecionadoId, setRoteiroSelecionadoId] = useState<string>('');
@@ -486,8 +486,8 @@ export default function PontoPage() {
     setBatendo(true);
     setErr(null);
     setMsg(null);
-    setLastRpcError(null);
-    setLastRpcTipo(tipo);
+   // setLastRpcError(null);
+   // setLastRpcTipo(tipo);
 
     try {
       if ((tipo === 'saida_almoco' || tipo === 'retorno_almoco') && !jornada.anyCheckinToday) {
@@ -1004,30 +1004,7 @@ export default function PontoPage() {
         {err && <p style={{ color: 'crimson', marginTop: 10 }}>{err}</p>}
         {msg && <p style={{ color: 'green', marginTop: 10 }}>{msg}</p>}
 
-        {/* DEBUG */}
-        <div style={{ marginTop: 10, fontSize: 11, color: '#6b7280' }}>
-          <div>
-            DEBUG: last p_tipo enviado: <strong>{lastRpcTipo || '—'}</strong>
-          </div>
-          {lastRpcError ? (
-            <details style={{ marginTop: 6 }}>
-              <summary style={{ cursor: 'pointer' }}>DEBUG: erro bruto do Supabase</summary>
-              <pre
-                style={{
-                  whiteSpace: 'pre-wrap',
-                  marginTop: 6,
-                  padding: 10,
-                  borderRadius: 10,
-                  border: '1px solid #eee',
-                  background: '#fafafa',
-                }}
-              >
-                {lastRpcError}
-              </pre>
-            </details>
-          ) : null}
-        </div>
-      </section>
+        </section>
 
       {/* Confirmação do check-out */}
       {mostrarConfirmacao && (
