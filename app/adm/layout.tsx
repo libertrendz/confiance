@@ -29,6 +29,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     (async () => {
       try {
         setLoadingUser(true);
+
         const { data, error } = await supa.auth.getUser();
         if (error) throw error;
         if (!alive) return;
@@ -109,56 +110,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: '/adm/configuracoes', label: 'Configurações', visible: isAdmin, disabled: true, hint: 'Em breve' },
   ].filter((i) => i.visible);
 
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '260px 1fr',
-        minHeight: '100vh',
-      }}
-    >
-      <aside
-        style={{
-          position: 'sticky',
-          top: 0,
-          alignSelf: 'start',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
-          background: '#071c34',
-          color: '#fff',
-          padding: 16,
-          gap: 10,
+  if (loadingUser) {
+    return (
+      <main style={{ padding: 16, fontFamily: 'system-ui' }}>
+        <p style={{ color: '#666' }}>A carregar área administrativa…</p>
+      </main>
+    );
+  }
 
-          // ✅ CRÍTICO: permite rolar o menu lateral quando o viewport é menor (zoom, barras, etc.)
-          overflowY: 'auto',
-          overscrollBehavior: 'contain',
-        }}
-      >
+  return (
+    <div style={shellStyle}>
+      <aside style={sidebarStyle}>
         {/* Logo */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            paddingBottom: 12,
-            marginBottom: 6,
-            borderBottom: '1px solid rgba(255,255,255,.12)',
-          }}
-        >
+        <div style={logoRowStyle}>
           <img src="/app-novo.png" alt="CONFIANCE" style={{ height: 56, width: 'auto', display: 'block' }} />
-          <span
-            style={{
-              fontWeight: 900,
-              fontSize: 18,
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-              whiteSpace: 'nowrap',
-              lineHeight: 1,
-            }}
-          >
-            CONFIANCE
-          </span>
+          <span style={brandStyle}>CONFIANCE</span>
         </div>
 
         {/* Menu */}
@@ -197,19 +163,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     {item.label}
                   </span>
 
-                  {item.hint ? (
-                    <span
-                      style={{
-                        marginLeft: 'auto',
-                        fontSize: 11,
-                        opacity: 0.65,
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {item.hint}
-                    </span>
-                  ) : null}
+                  {item.hint ? <span style={hintStyle}>{item.hint}</span> : null}
                 </span>
               </a>
             );
@@ -219,44 +173,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <div style={{ flex: 1 }} />
 
         {/* Footer */}
-        <div
-          style={{
-            borderTop: '1px solid rgba(255,255,255,.15)',
-            paddingTop: 10,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              opacity: 0.85,
-              marginBottom: 8,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={email ?? undefined}
-          >
+        <div style={footerStyle}>
+          <div style={emailStyle} title={email ?? undefined}>
             {email ?? '—'}
           </div>
 
-          <button
-            onClick={sair}
-            style={{
-              width: '100%',
-              height: 40,
-              background: '#F2B705',
-              color: '#071c34',
-              borderRadius: 10,
-              border: 'none',
-              fontWeight: 800,
-              cursor: 'pointer',
-              marginBottom: 10,
-            }}
-          >
+          <button onClick={sair} style={logoutButtonStyle}>
             Sair
           </button>
 
-          {/* ✅ PNG (fundo transparente) - maior e responsivo */}
           <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 6 }}>
             <img
               src="/powered_by_libertrendzt.png"
@@ -264,7 +189,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               style={{
                 display: 'block',
                 width: '100%',
-                maxWidth: 220,   // fica “visível”, sem virar minúsculo
+                maxWidth: 220,
                 height: 'auto',
                 maxHeight: 46,
                 objectFit: 'contain',
@@ -275,10 +200,70 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div style={{ padding: 16 }}>{children}</div>
+      <main style={contentShellStyle}>
+        <div style={contentInnerStyle}>{children}</div>
+      </main>
     </div>
   );
 }
+
+const shellStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '260px minmax(0, 1fr)',
+  minHeight: '100vh',
+  width: '100%',
+  maxWidth: '100vw',
+  overflow: 'hidden',
+};
+
+const sidebarStyle: CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  alignSelf: 'start',
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100vh',
+  background: '#071c34',
+  color: '#fff',
+  padding: 16,
+  gap: 10,
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
+};
+
+const contentShellStyle: CSSProperties = {
+  minWidth: 0,
+  width: '100%',
+  maxWidth: '100%',
+  overflowX: 'auto',
+  overflowY: 'auto',
+  background: '#f8fafc',
+};
+
+const contentInnerStyle: CSSProperties = {
+  width: '100%',
+  minWidth: 0,
+  padding: 16,
+  boxSizing: 'border-box',
+};
+
+const logoRowStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  paddingBottom: 12,
+  marginBottom: 6,
+  borderBottom: '1px solid rgba(255,255,255,.12)',
+};
+
+const brandStyle: CSSProperties = {
+  fontWeight: 900,
+  fontSize: 18,
+  letterSpacing: 1,
+  textTransform: 'uppercase',
+  whiteSpace: 'nowrap',
+  lineHeight: 1,
+};
 
 const linkBaseStyle: CSSProperties = {
   padding: '10px 10px',
@@ -300,4 +285,38 @@ const linkActiveStyle: CSSProperties = {
 const linkDisabledStyle: CSSProperties = {
   opacity: 0.45,
   cursor: 'not-allowed',
+};
+
+const hintStyle: CSSProperties = {
+  marginLeft: 'auto',
+  fontSize: 11,
+  opacity: 0.65,
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+};
+
+const footerStyle: CSSProperties = {
+  borderTop: '1px solid rgba(255,255,255,.15)',
+  paddingTop: 10,
+};
+
+const emailStyle: CSSProperties = {
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 8,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
+const logoutButtonStyle: CSSProperties = {
+  width: '100%',
+  height: 40,
+  background: '#F2B705',
+  color: '#071c34',
+  borderRadius: 10,
+  border: 'none',
+  fontWeight: 800,
+  cursor: 'pointer',
+  marginBottom: 10,
 };
