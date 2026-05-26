@@ -738,24 +738,40 @@ export default function RoteirosPage() {
         {!lista.length && !loading && <p className="muted">Sem roteiros registados.</p>}
 
         {!!lista.length && (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <colgroup>
+                <col style={{ width: '9.5%' }} />
+                <col style={{ width: '9.5%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '5.8%' }} />
+                <col style={{ width: '5.8%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '6.2%' }} />
+                <col style={{ width: '6.2%' }} />
+                <col style={{ width: '6.2%' }} />
+                <col style={{ width: '6.2%' }} />
+                <col style={{ width: '6.8%' }} />
+                <col style={{ width: '8.8%' }} />
+                <col style={{ width: '7%' }} />
+              </colgroup>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: 8 }}>Colaborador</th>
-                  <th style={{ padding: 8 }}>Tarefa</th>
-                  <th style={{ padding: 8 }}>Local</th>
-                  <th style={{ padding: 8 }}>Data início</th>
-                  <th style={{ padding: 8 }}>Data fim</th>
-                  <th style={{ padding: 8 }}>Observações</th>
-                  <th style={{ padding: 8 }}>Status</th>
-                  <th style={{ padding: 8, textAlign: 'center' }}>Check-in</th>
-                  <th style={{ padding: 8, textAlign: 'center' }}>Saída almoço</th>
-                  <th style={{ padding: 8, textAlign: 'center' }}>Retorno almoço</th>
-                  <th style={{ padding: 8, textAlign: 'center' }}>Check-out</th>
-                  <th style={{ padding: 8 }}>Tarefa concluída?</th>
-                  <th style={{ padding: 8 }}>Justificativa</th>
-                  <th style={{ padding: 8 }}>Ações</th>
+                  <th style={thStyle}>Colaborador</th>
+                  <th style={thStyle}>Tarefa</th>
+                  <th style={thStyle}>Local</th>
+                  <th style={thStyle}>Início</th>
+                  <th style={thStyle}>Fim</th>
+                  <th style={thStyle}>Obs.</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thCenterStyle}>Check-in</th>
+                  <th style={thCenterStyle}>S. almoço</th>
+                  <th style={thCenterStyle}>R. almoço</th>
+                  <th style={thCenterStyle}>Check-out</th>
+                  <th style={thStyle}>Concl.</th>
+                  <th style={thStyle}>Justif.</th>
+                  <th style={thStyle}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -776,27 +792,35 @@ export default function RoteirosPage() {
 
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: 8 }}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</td>
-                      <td style={{ padding: 8 }}>{r.tarefa_nome || '—'}</td>
-                      <td style={{ padding: 8 }}>{r.local_nome || r.local_label || '—'}</td>
-                      <td style={{ padding: 8 }}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
-                      <td style={{ padding: 8 }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
-                      <td style={{ padding: 8, maxWidth: 240 }}>{r.observacoes || '—'}</td>
+                      <td style={tdStyle} title={colabNomePorId[r.usuario_id] ?? r.usuario_id}>
+                        <span style={clipTextStyle}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</span>
+                      </td>
+                      <td style={tdStyle} title={r.tarefa_nome || '—'}>
+                        <span style={clipTextStyle}>{r.tarefa_nome || '—'}</span>
+                      </td>
+                      <td style={tdStyle} title={r.local_nome || r.local_label || '—'}>
+                        <span style={clipTextStyle}>{r.local_nome || r.local_label || '—'}</span>
+                      </td>
+                      <td style={tdStyle}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
+                      <td style={tdStyle}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
+                      <td style={tdStyle} title={r.observacoes || '—'}>
+                        <span style={clipTextStyle}>{r.observacoes || '—'}</span>
+                      </td>
 
-                      <td style={{ padding: 8 }}>
+                      <td style={tdStyle}>
                         <SmallPill text={statusLabel(r.status)} />
                       </td>
 
-                      <td style={{ padding: 8, textAlign: 'center' }}>
+                      <td style={tdCenterStyle}>
                         {hasIn ? (
                           <button
                             type="button"
                             className="btn btn-ghost"
                             onClick={() => abrirFoto(bucket, r.foto_checkin_path as string)}
                             style={{
-                              padding: '6px 10px',
-                              fontWeight: 600,
-                              fontSize: 12,
+                              padding: '5px 8px',
+                              fontWeight: 700,
+                              fontSize: 11,
                               background: '#ECFDF3',
                               border: '1px solid #A6F4C5',
                               color: '#067647',
@@ -809,24 +833,24 @@ export default function RoteirosPage() {
                         )}
                       </td>
 
-                      <td style={{ padding: 8, textAlign: 'center' }}>
+                      <td style={tdCenterStyle}>
                         <CellClock done={hasAlmocoOut} />
                       </td>
 
-                      <td style={{ padding: 8, textAlign: 'center' }}>
+                      <td style={tdCenterStyle}>
                         <CellClock done={hasAlmocoIn} />
                       </td>
 
-                      <td style={{ padding: 8, textAlign: 'center' }}>
+                      <td style={tdCenterStyle}>
                         {hasOut ? (
                           <button
                             type="button"
                             className="btn btn-ghost"
                             onClick={() => abrirFoto(bucket, r.foto_checkout_path as string)}
                             style={{
-                              padding: '6px 10px',
-                              fontWeight: 600,
-                              fontSize: 12,
+                              padding: '5px 8px',
+                              fontWeight: 700,
+                              fontSize: 11,
                               background: '#ECFDF3',
                               border: '1px solid #A6F4C5',
                               color: '#067647',
@@ -839,15 +863,17 @@ export default function RoteirosPage() {
                         )}
                       </td>
 
-                      <td style={{ padding: 8 }}>{r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Sim' : 'Não'}</td>
-                      <td style={{ padding: 8, maxWidth: 260 }}>{r.justificativa || '—'}</td>
+                      <td style={tdStyle}>{r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Sim' : 'Não'}</td>
+                      <td style={tdStyle} title={r.justificativa || '—'}>
+                        <span style={clipTextStyle}>{r.justificativa || '—'}</span>
+                      </td>
 
-                      <td style={{ padding: 8 }}>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-ghost" type="button" onClick={() => preencherParaEditar(r)}>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button className="btn btn-ghost" type="button" onClick={() => preencherParaEditar(r)} style={miniActionButtonStyle}>
                             Editar
                           </button>
-                          <button className="btn btn-ghost" type="button" onClick={() => excluirRoteiro(r.id)}>
+                          <button className="btn btn-ghost" type="button" onClick={() => excluirRoteiro(r.id)} style={miniActionButtonStyle}>
                             Excluir
                           </button>
                         </div>
@@ -865,6 +891,61 @@ export default function RoteirosPage() {
     </main>
   );
 }
+
+const tableWrapStyle: React.CSSProperties = {
+  width: '100%',
+  overflowX: 'auto',
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+};
+
+const tableStyle: React.CSSProperties = {
+  width: '100%',
+  minWidth: 1080,
+  borderCollapse: 'collapse',
+  tableLayout: 'fixed',
+  fontSize: 12,
+};
+
+const thStyle: React.CSSProperties = {
+  padding: '7px 6px',
+  fontSize: 11,
+  fontWeight: 800,
+  color: '#0e3258',
+  whiteSpace: 'nowrap',
+  verticalAlign: 'middle',
+};
+
+const thCenterStyle: React.CSSProperties = {
+  ...thStyle,
+  textAlign: 'center',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '6px 6px',
+  verticalAlign: 'middle',
+  minWidth: 0,
+};
+
+const tdCenterStyle: React.CSSProperties = {
+  ...tdStyle,
+  textAlign: 'center',
+};
+
+const clipTextStyle: React.CSSProperties = {
+  display: 'block',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+};
+
+const miniActionButtonStyle: React.CSSProperties = {
+  padding: '5px 8px',
+  fontSize: 11,
+  fontWeight: 700,
+  lineHeight: 1.1,
+};
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
