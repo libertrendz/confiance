@@ -229,12 +229,18 @@ export default function PontoPage() {
 
         const { data: profile, error: profError } = await supa
           .from('profiles')
-          .select('empresa_id, nome_exibicao, nome')
+          .select('empresa_id, nome_exibicao, nome, papel')
           .eq('user_id', uid)
           .maybeSingle();
 
         if (profError) throw profError;
         if (!profile) throw new Error('Perfil não encontrado. Contacte o administrador.');
+
+        const papel = String((profile as any).papel || '').toLowerCase();
+        if (papel === 'admin' || papel === 'gestor') {
+          window.location.replace('/adm/dashboard');
+          return;
+        }
 
         setEmpresaId(profile.empresa_id);
         setNome(profile.nome_exibicao || profile.nome || null);
@@ -284,8 +290,10 @@ export default function PontoPage() {
         )
         .eq('empresa_id', empresaId)
         .eq('usuario_id', usuarioId)
-        .lte('data_dia', hojeStr)
-        .or(`data_fim.is.null,data_fim.gte.${hojeStr}`)
+        // Dia único: data_dia = hoje e data_fim null.
+        // Intervalo: data_dia <= hoje <= data_fim.
+        // Evita trazer roteiro antigo concluído quando muda o dia.
+        .or(`and(data_dia.eq.${hojeStr},data_fim.is.null),and(data_dia.lte.${hojeStr},data_fim.gte.${hojeStr})`)
         .in('status', ['planeado', 'em_andamento', 'executado', 'ativo'])
         .order('data_dia', { ascending: false })
         .limit(50);
@@ -485,16 +493,12 @@ export default function PontoPage() {
     setMsg(null);
 
     try {
-      if (!jornada.anyCheckinToday) {
-        throw new Error('almoco_requires_checkin_today');
-      }
-
       const g = await obterGeo();
       if (!g) return;
 
-      // almoço amarrado ao último check-in do dia
+      // Almoço é do dia: pode existir sem atividade/check-in.
+      // Quando houver check-in/roteiro, mantém contexto no meta.
       const roteiroIdParaRpc = jornada.lastCheckinRoteiroId || roteirosHoje[0]?.id || null;
-      if (!roteiroIdParaRpc) throw new Error('roteiro_required');
 
       const meta: Record<string, any> = {
         origem: 'externo-web',
@@ -503,8 +507,11 @@ export default function PontoPage() {
         lon: g.lon,
         accuracy: g.accuracy,
         jornada_dia: true,
-        roteiro_id: roteiroIdParaRpc,
       };
+
+      if (roteiroIdParaRpc) {
+        meta.roteiro_id = roteiroIdParaRpc;
+      }
 
       if (tipo === 'retorno_almoco' && justificativaAlmoco.trim()) {
         meta.justificativa = justificativaAlmoco.trim();
@@ -525,7 +532,7 @@ export default function PontoPage() {
 
       // mapeamento consistente (sem “mensagem crua”)
       if (m.includes('almoco_requires_checkin_today')) {
-        setErr('Para registar o almoço, é necessário ter pelo menos um Check-in hoje.');
+        setErr('O backend ainda exige Check-in para almoço. Atualize a RPC para almoço do dia sem atividade.');
       } else if (m.includes('almoco_retorno_sem_saida') || m.includes('almoco_out_required_before_return')) {
         setErr('Registe primeiro a Saída do almoço antes do Retorno.');
       } else if (m.includes('almoco_saida_ja_registada')) {
@@ -536,7 +543,7 @@ export default function PontoPage() {
         // Se aparecer na SAÍDA, é backend desatualizado. Com a migration abaixo isso some.
         setErr('Duração do almoço fora de 60–65 min: informe justificativa no Retorno. (Se isto apareceu na Saída, atualize o RPC com a migration.)');
       } else if (m.includes('roteiro_required')) {
-        setErr('Para registar o almoço, faça primeiro um Check-in numa atividade.');
+        setErr('O backend ainda exige roteiro para almoço. Atualize a RPC para aceitar p_roteiro_id nulo no almoço do dia.');
       } else {
         setErr(e?.message || 'Falha ao registar o almoço.');
       }
@@ -734,7 +741,7 @@ export default function PontoPage() {
         {(loadingRoteiros || loadingPontos) && <p className="muted" style={{ marginTop: 10 }}>A carregar…</p>}
 
         {!loadingRoteiros && !roteirosHoje.length && (
-          <p className="muted" style={{ marginTop: 10 }}>Nenhuma atividade atribuída para hoje.</p>
+          <p className="muted" style={{ marginTop: 10 }}>Nenhuma atividade atribuída para hoje. Ainda pode registar a pausa de almoço do dia.</p>
         )}
 
         {!!roteirosHoje.length && (
@@ -834,16 +841,16 @@ export default function PontoPage() {
       <section className="card" style={{ marginBottom: 12, maxWidth: 680 }}>
         <div style={{ fontSize: 13, fontWeight: 900, color: '#0e3258', marginBottom: 8 }}>Pausa de almoço (do dia)</div>
         <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
-          O almoço é registado <strong>uma vez por dia</strong> e só fica disponível após existir pelo menos um <strong>Check-in</strong> hoje.
+          O almoço é registado <strong>uma vez por dia</strong> e não depende de atividade atribuída.
         </p>
 
         <div style={{ display: 'grid', gap: 10 }}>
           <StepRow
             title="Saída almoço"
-            desc={jornada.anyCheckinToday ? '' : 'Faça pelo menos um Check-in hoje para liberar o almoço.'}
+            desc=""
             done={jornada.almocoOut}
             actionLabel="Registar saída"
-            disabled={!jornada.anyCheckinToday || jornada.almocoOut || batendo}
+            disabled={jornada.almocoOut || batendo}
             onClick={() => executarAlmoco('saida_almoco')}
           />
 
@@ -1066,3 +1073,4 @@ const radioLabelStyle: React.CSSProperties = {
   fontSize: 13,
   cursor: 'pointer',
 };
+
