@@ -703,6 +703,17 @@ export default function RoteirosPage() {
             />
           </div>
 
+          <div style={formActionSlotStyle}>
+            {editId && (
+              <button type="button" className="btn btn-ghost" onClick={resetForm} style={formSecondaryButtonStyle}>
+                Cancelar
+              </button>
+            )}
+            <button className="btn btn-primary" type="submit" disabled={salvando || !empresaId || loadingEmpresa} style={formPrimaryButtonStyle}>
+              {salvando ? 'A salvar…' : editId ? 'Salvar alterações' : 'Criar roteiro'}
+            </button>
+          </div>
+
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="muted">Observações (opcional)</label>
             <textarea
@@ -719,16 +730,6 @@ export default function RoteirosPage() {
             </p>
           )}
 
-          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            {editId && (
-              <button type="button" className="btn btn-ghost" onClick={resetForm}>
-                Cancelar
-              </button>
-            )}
-            <button className="btn btn-primary" type="submit" disabled={salvando || !empresaId || loadingEmpresa}>
-              {salvando ? 'A salvar…' : editId ? 'Salvar alterações' : 'Criar roteiro'}
-            </button>
-          </div>
         </form>
       </section>
 
@@ -1160,6 +1161,28 @@ const modalTextStyle: React.CSSProperties = {
   color: '#0f172a',
   fontSize: 13,
   lineHeight: 1.5,
+};
+
+const formActionSlotStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'end',
+  justifyContent: 'flex-end',
+  gap: 8,
+  minWidth: 0,
+};
+
+const formPrimaryButtonStyle: React.CSSProperties = {
+  minHeight: 41,
+  padding: '10px 14px',
+  fontWeight: 900,
+  whiteSpace: 'nowrap',
+};
+
+const formSecondaryButtonStyle: React.CSSProperties = {
+  minHeight: 41,
+  padding: '10px 12px',
+  fontWeight: 800,
+  whiteSpace: 'nowrap',
 };
 
 const inputStyle: React.CSSProperties = {
