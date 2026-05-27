@@ -741,6 +741,7 @@ export default function RoteirosPage() {
         {!lista.length && !loading && <p className="muted">Sem roteiros registados.</p>}
 
         {!!lista.length && (
+          <>
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
               <colgroup>
@@ -875,6 +876,9 @@ export default function RoteirosPage() {
           {textoModal ? (
             <TextModal titulo={textoModal.titulo} texto={textoModal.texto} onClose={() => setTextoModal(null)} />
           ) : null}
+          </>
+        )}
+
         {loading && <p className="muted" style={{ marginTop: 8 }}>A carregar roteiros…</p>}
       </section>
     </main>
