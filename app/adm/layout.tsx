@@ -123,12 +123,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <aside style={sidebarStyle}>
         {/* Logo */}
         <div style={logoRowStyle}>
-          <img src="/app-novo.png" alt="CONFIANCE" style={{ height: 56, width: 'auto', display: 'block' }} />
+          <img src="/app-novo.png" alt="CONFIANCE" style={{ height: 42, width: 'auto', display: 'block' }} />
           <span style={brandStyle}>CONFIANCE</span>
         </div>
 
         {/* Menu */}
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <nav style={navStyle}>
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -151,13 +151,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   ...(disabled ? linkDisabledStyle : null),
                 }}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, width: '100%' }}>
                   <span
                     style={{
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      fontWeight: isActive ? 800 : 600,
+                      fontWeight: isActive ? 800 : 650,
+                      minWidth: 0,
                     }}
                   >
                     {item.label}
@@ -170,7 +171,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div style={{ flex: 1 }} />
+        <div style={{ flex: 1, minHeight: 8 }} />
 
         {/* Footer */}
         <div style={footerStyle}>
@@ -182,18 +183,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             Sair
           </button>
 
-          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2 }}>
             <img
               src="/powered_by_libertrendzt.png"
               alt="Powered by Libertrendz"
               style={{
                 display: 'block',
                 width: '100%',
-                maxWidth: 220,
+                maxWidth: 176,
                 height: 'auto',
-                maxHeight: 46,
+                maxHeight: 32,
                 objectFit: 'contain',
-                opacity: 0.9,
+                opacity: 0.82,
               }}
             />
           </div>
@@ -209,11 +210,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
 const shellStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '260px minmax(0, 1fr)',
+  gridTemplateColumns: '232px minmax(0, 1fr)',
   minHeight: '100vh',
   width: '100%',
   maxWidth: '100vw',
   overflow: 'hidden',
+  background: '#f8fafc',
 };
 
 const sidebarStyle: CSSProperties = {
@@ -222,13 +224,14 @@ const sidebarStyle: CSSProperties = {
   alignSelf: 'start',
   display: 'flex',
   flexDirection: 'column',
-  height: '100vh',
+  height: '100dvh',
   background: '#071c34',
   color: '#fff',
-  padding: 16,
-  gap: 10,
+  padding: '10px 12px',
+  gap: 8,
   overflowY: 'auto',
   overscrollBehavior: 'contain',
+  boxSizing: 'border-box',
 };
 
 const contentShellStyle: CSSProperties = {
@@ -243,67 +246,78 @@ const contentShellStyle: CSSProperties = {
 const contentInnerStyle: CSSProperties = {
   width: '100%',
   minWidth: 0,
-  padding: 16,
+  padding: '18px 20px',
   boxSizing: 'border-box',
 };
 
 const logoRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 10,
-  paddingBottom: 12,
-  marginBottom: 6,
+  gap: 9,
+  paddingBottom: 10,
+  marginBottom: 4,
   borderBottom: '1px solid rgba(255,255,255,.12)',
 };
 
 const brandStyle: CSSProperties = {
   fontWeight: 900,
-  fontSize: 18,
+  fontSize: 16,
   letterSpacing: 1,
   textTransform: 'uppercase',
   whiteSpace: 'nowrap',
   lineHeight: 1,
 };
 
+const navStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+};
+
 const linkBaseStyle: CSSProperties = {
-  padding: '10px 10px',
-  borderRadius: 10,
+  display: 'flex',
+  alignItems: 'center',
+  minHeight: 34,
+  padding: '7px 10px',
+  borderRadius: 9,
   color: '#fff',
   textDecoration: 'none',
-  opacity: 0.92,
-  fontSize: 13,
+  opacity: 0.9,
+  fontSize: 12.5,
+  lineHeight: 1.2,
   border: '1px solid transparent',
   background: 'transparent',
+  boxSizing: 'border-box',
 };
 
 const linkActiveStyle: CSSProperties = {
-  background: 'rgba(255,255,255,0.08)',
-  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(255,255,255,0.095)',
+  border: '1px solid rgba(255,255,255,0.14)',
   opacity: 1,
 };
 
 const linkDisabledStyle: CSSProperties = {
-  opacity: 0.45,
+  opacity: 0.42,
   cursor: 'not-allowed',
 };
 
 const hintStyle: CSSProperties = {
   marginLeft: 'auto',
-  fontSize: 11,
-  opacity: 0.65,
-  fontWeight: 600,
+  fontSize: 10.5,
+  opacity: 0.62,
+  fontWeight: 650,
   whiteSpace: 'nowrap',
 };
 
 const footerStyle: CSSProperties = {
-  borderTop: '1px solid rgba(255,255,255,.15)',
-  paddingTop: 10,
+  borderTop: '1px solid rgba(255,255,255,.14)',
+  paddingTop: 8,
 };
 
 const emailStyle: CSSProperties = {
-  fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 8,
+  fontSize: 11.5,
+  opacity: 0.82,
+  marginBottom: 7,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -311,12 +325,12 @@ const emailStyle: CSSProperties = {
 
 const logoutButtonStyle: CSSProperties = {
   width: '100%',
-  height: 40,
+  height: 34,
   background: '#F2B705',
   color: '#071c34',
-  borderRadius: 10,
+  borderRadius: 9,
   border: 'none',
-  fontWeight: 800,
+  fontWeight: 850,
   cursor: 'pointer',
-  marginBottom: 10,
+  marginBottom: 8,
 };
