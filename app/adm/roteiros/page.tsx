@@ -858,12 +858,24 @@ export default function RoteirosPage() {
                       </td>
 
                       <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button className="btn btn-ghost" type="button" onClick={() => preencherParaEditar(r)} style={miniActionButtonStyle}>
-                            Editar
+                        <div style={actionIconWrapStyle}>
+                          <button
+                            type="button"
+                            onClick={() => preencherParaEditar(r)}
+                            style={editIconButtonStyle}
+                            title="Editar roteiro"
+                            aria-label="Editar roteiro"
+                          >
+                            ✎
                           </button>
-                          <button className="btn btn-ghost" type="button" onClick={() => excluirRoteiro(r.id)} style={miniActionButtonStyle}>
-                            Excluir
+                          <button
+                            type="button"
+                            onClick={() => excluirRoteiro(r.id)}
+                            style={deleteIconButtonStyle}
+                            title="Excluir roteiro"
+                            aria-label="Excluir roteiro"
+                          >
+                            🗑
                           </button>
                         </div>
                       </td>
@@ -873,15 +885,15 @@ export default function RoteirosPage() {
               </tbody>
             </table>
           </div>
-
-          {textoModal ? (
-            <TextModal titulo={textoModal.titulo} texto={textoModal.texto} onClose={() => setTextoModal(null)} />
-          ) : null}
           </>
         )}
 
         {loading && <p className="muted" style={{ marginTop: 8 }}>A carregar roteiros…</p>}
       </section>
+
+      {textoModal ? (
+        <TextModal titulo={textoModal.titulo} texto={textoModal.texto} onClose={() => setTextoModal(null)} />
+      ) : null}
     </main>
   );
 }
@@ -1106,18 +1118,44 @@ const emptyTextFlagStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-const miniActionButtonStyle: React.CSSProperties = {
-  padding: '6px 9px',
-  fontSize: 11,
-  fontWeight: 800,
-  lineHeight: 1.1,
-  borderRadius: 9,
+const actionIconWrapStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  gap: 6,
+  flexWrap: 'nowrap',
+};
+
+const actionIconButtonBaseStyle: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  display: 'inline-grid',
+  placeItems: 'center',
+  borderRadius: 10,
+  fontSize: 14,
+  fontWeight: 900,
+  lineHeight: 1,
+  cursor: 'pointer',
+};
+
+const editIconButtonStyle: React.CSSProperties = {
+  ...actionIconButtonBaseStyle,
+  border: '1px solid #F6D365',
+  background: '#FFF7D6',
+  color: '#0e3258',
+};
+
+const deleteIconButtonStyle: React.CSSProperties = {
+  ...actionIconButtonBaseStyle,
+  border: '1px solid #FDA4AF',
+  background: '#FFF1F2',
+  color: '#B42318',
 };
 
 const modalBackdropStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 80,
+  zIndex: 9999,
   display: 'grid',
   placeItems: 'center',
   padding: 18,
