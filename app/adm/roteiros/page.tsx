@@ -123,6 +123,8 @@ export default function RoteirosPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [textoModal, setTextoModal] = useState<{ titulo: string; texto: string } | null>(null);
+
   // ✅ mapa almoço (do dia) por colaborador+data
   // key: `${usuario_id}|${YYYY-MM-DD}`
   const [almocoMap, setAlmocoMap] = useState<Record<string, AlmocoAgg>>({});
@@ -597,8 +599,9 @@ export default function RoteirosPage() {
           onSubmit={salvarRoteiro}
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 12,
+            alignItems: 'end',
           }}
         >
           <div>
@@ -741,39 +744,29 @@ export default function RoteirosPage() {
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
               <colgroup>
-                <col style={{ width: '9.5%' }} />
-                <col style={{ width: '9.5%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '11%' }} />
                 <col style={{ width: '9%' }} />
-                <col style={{ width: '5.8%' }} />
-                <col style={{ width: '5.8%' }} />
+                <col style={{ width: '21%' }} />
+                <col style={{ width: '7%' }} />
                 <col style={{ width: '10%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '6.2%' }} />
-                <col style={{ width: '6.2%' }} />
-                <col style={{ width: '6.2%' }} />
-                <col style={{ width: '6.2%' }} />
-                <col style={{ width: '6.8%' }} />
-                <col style={{ width: '8.8%' }} />
-                <col style={{ width: '7%' }} />
+                <col style={{ width: '11%' }} />
               </colgroup>
+
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                   <th style={thStyle}>Colaborador</th>
-                  <th style={thStyle}>Tarefa</th>
-                  <th style={thStyle}>Local</th>
-                  <th style={thStyle}>Início</th>
-                  <th style={thStyle}>Fim</th>
-                  <th style={thStyle}>Obs.</th>
+                  <th style={thStyle}>Tarefa / Local</th>
+                  <th style={thStyle}>Período</th>
                   <th style={thStyle}>Status</th>
-                  <th style={thCenterStyle}>Check-in</th>
-                  <th style={thCenterStyle}>S. almoço</th>
-                  <th style={thCenterStyle}>R. almoço</th>
-                  <th style={thCenterStyle}>Check-out</th>
-                  <th style={thStyle}>Concl.</th>
-                  <th style={thStyle}>Justif.</th>
+                  <th style={thCenterStyle}>Registos</th>
+                  <th style={thCenterStyle}>Obs.</th>
+                  <th style={thStyle}>Resultado</th>
                   <th style={thStyle}>Ações</th>
                 </tr>
               </thead>
+
               <tbody>
                 {lista.map((r) => {
                   const bucket = r.foto_bucket || 'ponto-fotos';
@@ -781,30 +774,38 @@ export default function RoteirosPage() {
                   const hasIn = !!r.foto_checkin_path;
                   const hasOut = !!r.foto_checkout_path;
 
-                  // ✅ almoço do dia via view:
                   const dia = safeDateOnly(r.data_dia) || '';
                   const key = `${r.usuario_id}|${dia}`;
                   const agg = almocoMap[key];
 
-                  // fallback: se ainda populam colunas do roteiro, respeita também
                   const hasAlmocoOut = !!(agg?.out || r.almoco_saida_at);
                   const hasAlmocoIn = !!(agg?.in || r.almoco_retorno_at);
+
+                  const obsTexto = (r.observacoes || '').trim();
+                  const justTexto = (r.justificativa || '').trim();
 
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
                       <td style={tdStyle} title={colabNomePorId[r.usuario_id] ?? r.usuario_id}>
-                        <span style={clipTextStyle}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</span>
+                        <span style={mainCellTextStyle}>{colabNomePorId[r.usuario_id] ?? r.usuario_id}</span>
                       </td>
-                      <td style={tdStyle} title={r.tarefa_nome || '—'}>
-                        <span style={clipTextStyle}>{r.tarefa_nome || '—'}</span>
+
+                      <td style={tdStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <span style={mainCellTextStyle} title={r.tarefa_nome || '—'}>
+                            {r.tarefa_nome || '—'}
+                          </span>
+                          <span style={subCellTextStyle} title={r.local_nome || r.local_label || '—'}>
+                            {r.local_nome || r.local_label || '—'}
+                          </span>
+                        </div>
                       </td>
-                      <td style={tdStyle} title={r.local_nome || r.local_label || '—'}>
-                        <span style={clipTextStyle}>{r.local_nome || r.local_label || '—'}</span>
-                      </td>
-                      <td style={tdStyle}>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</td>
-                      <td style={tdStyle}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</td>
-                      <td style={tdStyle} title={r.observacoes || '—'}>
-                        <span style={clipTextStyle}>{r.observacoes || '—'}</span>
+
+                      <td style={tdStyle}>
+                        <div style={periodCellStyle}>
+                          <span>{r.data_dia ? new Date(r.data_dia).toLocaleDateString() : '—'}</span>
+                          <span style={{ color: '#64748b' }}>{r.data_fim ? new Date(r.data_fim).toLocaleDateString() : '—'}</span>
+                        </div>
                       </td>
 
                       <td style={tdStyle}>
@@ -812,60 +813,46 @@ export default function RoteirosPage() {
                       </td>
 
                       <td style={tdCenterStyle}>
-                        {hasIn ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() => abrirFoto(bucket, r.foto_checkin_path as string)}
-                            style={{
-                              padding: '5px 8px',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              background: '#ECFDF3',
-                              border: '1px solid #A6F4C5',
-                              color: '#067647',
-                            }}
-                          >
-                            Ver foto
-                          </button>
-                        ) : (
-                          <CellClock done={false} />
-                        )}
+                        <div style={registersWrapStyle}>
+                          <RegisterItem
+                            label="IN"
+                            done={hasIn}
+                            photoPath={r.foto_checkin_path}
+                            onPhotoClick={() => abrirFoto(bucket, r.foto_checkin_path as string)}
+                          />
+                          <RegisterItem label="ALM" done={hasAlmocoOut} />
+                          <RegisterItem label="RET" done={hasAlmocoIn} />
+                          <RegisterItem
+                            label="OUT"
+                            done={hasOut}
+                            photoPath={r.foto_checkout_path}
+                            onPhotoClick={() => abrirFoto(bucket, r.foto_checkout_path as string)}
+                          />
+                        </div>
                       </td>
 
                       <td style={tdCenterStyle}>
-                        <CellClock done={hasAlmocoOut} />
+                        <TextFlagButton
+                          filled={!!obsTexto}
+                          emptyLabel="—"
+                          filledLabel="Ver"
+                          onClick={() => setTextoModal({ titulo: 'Observações', texto: obsTexto })}
+                        />
                       </td>
 
-                      <td style={tdCenterStyle}>
-                        <CellClock done={hasAlmocoIn} />
-                      </td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+                          <span style={resultTextStyle}>
+                            {r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Concluída' : 'Não concluída'}
+                          </span>
 
-                      <td style={tdCenterStyle}>
-                        {hasOut ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            onClick={() => abrirFoto(bucket, r.foto_checkout_path as string)}
-                            style={{
-                              padding: '5px 8px',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              background: '#ECFDF3',
-                              border: '1px solid #A6F4C5',
-                              color: '#067647',
-                            }}
-                          >
-                            Ver foto
-                          </button>
-                        ) : (
-                          <CellClock done={false} />
-                        )}
-                      </td>
-
-                      <td style={tdStyle}>{r.tarefa_concluida === null ? '—' : r.tarefa_concluida ? 'Sim' : 'Não'}</td>
-                      <td style={tdStyle} title={r.justificativa || '—'}>
-                        <span style={clipTextStyle}>{r.justificativa || '—'}</span>
+                          <TextFlagButton
+                            filled={!!justTexto}
+                            emptyLabel="Justif.: —"
+                            filledLabel="Justif.: Ver"
+                            onClick={() => setTextoModal({ titulo: 'Justificativa', texto: justTexto })}
+                          />
+                        </div>
                       </td>
 
                       <td style={tdStyle}>
@@ -884,36 +871,108 @@ export default function RoteirosPage() {
               </tbody>
             </table>
           </div>
-        )}
 
+          {textoModal ? (
+            <TextModal titulo={textoModal.titulo} texto={textoModal.texto} onClose={() => setTextoModal(null)} />
+          ) : null}
         {loading && <p className="muted" style={{ marginTop: 8 }}>A carregar roteiros…</p>}
       </section>
     </main>
   );
 }
 
+function RegisterItem({
+  label,
+  done,
+  photoPath,
+  onPhotoClick,
+}: {
+  label: string;
+  done: boolean;
+  photoPath?: string | null;
+  onPhotoClick?: () => void;
+}) {
+  const canOpenPhoto = !!photoPath && !!onPhotoClick;
+
+  return (
+    <div style={registerItemStyle} title={done ? `${label}: OK` : `${label}: Pendente`}>
+      <span style={registerLabelStyle}>{label}</span>
+
+      {canOpenPhoto ? (
+        <button type="button" onClick={onPhotoClick} style={photoMiniButtonStyle}>
+          Foto
+        </button>
+      ) : (
+        <span style={done ? registerOkStyle : registerPendingStyle}>{done ? '✓' : '—'}</span>
+      )}
+    </div>
+  );
+}
+
+function TextFlagButton({
+  filled,
+  emptyLabel,
+  filledLabel,
+  onClick,
+}: {
+  filled: boolean;
+  emptyLabel: string;
+  filledLabel: string;
+  onClick: () => void;
+}) {
+  if (!filled) {
+    return <span style={emptyTextFlagStyle}>{emptyLabel}</span>;
+  }
+
+  return (
+    <button type="button" onClick={onClick} style={textFlagButtonStyle}>
+      {filledLabel}
+    </button>
+  );
+}
+
+function TextModal({ titulo, texto, onClose }: { titulo: string; texto: string; onClose: () => void }) {
+  return (
+    <div style={modalBackdropStyle} role="dialog" aria-modal="true">
+      <div style={modalCardStyle}>
+        <div style={modalHeaderStyle}>
+          <h3 style={{ margin: 0, fontSize: 16, color: '#0e3258' }}>{titulo}</h3>
+          <button type="button" onClick={onClose} style={modalCloseButtonStyle}>
+            Fechar
+          </button>
+        </div>
+
+        <div style={modalTextStyle}>{texto}</div>
+      </div>
+    </div>
+  );
+}
+
 const tableWrapStyle: React.CSSProperties = {
   width: '100%',
-  overflowX: 'auto',
+  overflowX: 'hidden',
   border: '1px solid var(--border)',
-  borderRadius: 12,
+  borderRadius: 14,
+  background: '#fff',
 };
 
 const tableStyle: React.CSSProperties = {
   width: '100%',
-  minWidth: 1080,
-  borderCollapse: 'collapse',
+  borderCollapse: 'separate',
+  borderSpacing: 0,
   tableLayout: 'fixed',
   fontSize: 12,
 };
 
 const thStyle: React.CSSProperties = {
-  padding: '7px 6px',
+  padding: '9px 8px',
   fontSize: 11,
-  fontWeight: 800,
+  fontWeight: 900,
   color: '#0e3258',
   whiteSpace: 'nowrap',
   verticalAlign: 'middle',
+  background: '#F8FAFC',
+  borderBottom: '1px solid var(--border)',
 };
 
 const thCenterStyle: React.CSSProperties = {
@@ -922,7 +981,7 @@ const thCenterStyle: React.CSSProperties = {
 };
 
 const tdStyle: React.CSSProperties = {
-  padding: '6px 6px',
+  padding: '10px 8px',
   verticalAlign: 'middle',
   minWidth: 0,
 };
@@ -932,19 +991,171 @@ const tdCenterStyle: React.CSSProperties = {
   textAlign: 'center',
 };
 
-const clipTextStyle: React.CSSProperties = {
+const mainCellTextStyle: React.CSSProperties = {
   display: 'block',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
   minWidth: 0,
+  fontWeight: 700,
+  color: '#0f172a',
+};
+
+const subCellTextStyle: React.CSSProperties = {
+  display: 'block',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+  marginTop: 3,
+  fontSize: 11,
+  color: '#64748b',
+};
+
+const periodCellStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: 3,
+  fontSize: 12,
+  color: '#0f172a',
+  lineHeight: 1.2,
+};
+
+const registersWrapStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  gap: 5,
+  alignItems: 'stretch',
+};
+
+const registerItemStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: 4,
+  alignItems: 'center',
+  justifyItems: 'center',
+  minWidth: 0,
+  padding: '5px 4px',
+  border: '1px solid #E2E8F0',
+  borderRadius: 10,
+  background: '#FFFFFF',
+};
+
+const registerLabelStyle: React.CSSProperties = {
+  fontSize: 9,
+  fontWeight: 900,
+  color: '#0e3258',
+  letterSpacing: 0.3,
+};
+
+const registerOkStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  lineHeight: 1,
+  color: '#067647',
+};
+
+const registerPendingStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 900,
+  lineHeight: 1,
+  color: '#94A3B8',
+};
+
+const photoMiniButtonStyle: React.CSSProperties = {
+  padding: '3px 6px',
+  borderRadius: 8,
+  border: '1px solid #A6F4C5',
+  background: '#ECFDF3',
+  color: '#067647',
+  fontSize: 10,
+  fontWeight: 800,
+  lineHeight: 1.1,
+  cursor: 'pointer',
+};
+
+const resultTextStyle: React.CSSProperties = {
+  display: 'block',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 12,
+  fontWeight: 700,
+  color: '#0f172a',
+};
+
+const textFlagButtonStyle: React.CSSProperties = {
+  padding: '4px 8px',
+  borderRadius: 999,
+  border: '1px solid #D7E3FF',
+  background: '#EEF3FF',
+  color: '#0e3258',
+  fontSize: 11,
+  fontWeight: 800,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const emptyTextFlagStyle: React.CSSProperties = {
+  color: '#64748b',
+  fontSize: 12,
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
 };
 
 const miniActionButtonStyle: React.CSSProperties = {
-  padding: '5px 8px',
+  padding: '6px 9px',
   fontSize: 11,
-  fontWeight: 700,
+  fontWeight: 800,
   lineHeight: 1.1,
+  borderRadius: 9,
+};
+
+const modalBackdropStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 80,
+  display: 'grid',
+  placeItems: 'center',
+  padding: 18,
+  background: 'rgba(15,23,42,0.38)',
+};
+
+const modalCardStyle: React.CSSProperties = {
+  width: 'min(620px, 100%)',
+  maxHeight: '80vh',
+  overflow: 'hidden',
+  borderRadius: 18,
+  background: '#fff',
+  border: '1px solid #E2E8F0',
+  boxShadow: '0 20px 50px rgba(15,23,42,0.22)',
+};
+
+const modalHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 10,
+  padding: '14px 16px',
+  borderBottom: '1px solid #E2E8F0',
+};
+
+const modalCloseButtonStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  borderRadius: 10,
+  border: '1px solid #D7E3FF',
+  background: '#fff',
+  color: '#0e3258',
+  fontWeight: 800,
+  cursor: 'pointer',
+};
+
+const modalTextStyle: React.CSSProperties = {
+  padding: 16,
+  whiteSpace: 'pre-wrap',
+  overflowY: 'auto',
+  maxHeight: 'calc(80vh - 64px)',
+  color: '#0f172a',
+  fontSize: 13,
+  lineHeight: 1.5,
 };
 
 const inputStyle: React.CSSProperties = {
