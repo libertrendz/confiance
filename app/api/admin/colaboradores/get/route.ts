@@ -10,7 +10,6 @@ try {
 const url = new URL(req.url);
 const id = url.searchParams.get('id');
 
-
 if (!id) {
   return NextResponse.json(
     { ok: false, error: 'ID em falta' },
@@ -27,39 +26,28 @@ const { data, error } = await supa
       'id',
       'empresa_id',
       'user_id',
-
       'codigo',
       'nome',
       'nif',
       'email',
       'telefone',
       'morada',
-
       'data_nasc',
-
       'funcao',
       'categoria',
-
       'tipo',
       'contrato_tipo',
-
       'salario_tipo',
       'salario_atual',
       'custo_hora',
-
       'iban',
-
       'data_admissao',
       'data_saida',
       'data_demissao',
-
       'notas',
-
       'ativo',
-
       'pode_aceder_sistema',
       'pode_registar_ponto',
-
       'exige_geo',
       'exige_foto',
     ].join(','),
@@ -82,7 +70,6 @@ if (!data) {
 }
 
 return NextResponse.json({ ok: true, record: data });
-```
 
 } catch (e: any) {
 return NextResponse.json(
@@ -90,4 +77,4 @@ return NextResponse.json(
 { status: 500 },
 );
 }
-
+}
