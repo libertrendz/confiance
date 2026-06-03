@@ -1,4 +1,17 @@
-// app/api/admin/colaboradores/update/route.ts
+/**
+ * ============================================================
+ * CONFIANCE ERP
+ * Arquivo: app/api/admin/colaboradores/update/route.ts
+ * Módulo: Colaboradores
+ * Endpoint: Atualizar Colaborador
+ *
+ * Objetivo:
+ * Atualizar dados cadastrais e contratuais do colaborador.
+ *
+ * Autor: Libertrendz
+ * ============================================================
+ */
+
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
@@ -10,6 +23,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
 
     const id = String(body?.id || '').trim();
+
     if (!id) {
       return NextResponse.json(
         { ok: false, error: 'ID obrigatório' },
@@ -21,12 +35,24 @@ export async function POST(req: Request) {
     const nif = body?.nif ? String(body.nif).trim() : null;
     const email = body?.email ? String(body.email).trim() : null;
     const telefone = body?.telefone ? String(body.telefone).trim() : null;
+
     const tipo = body?.tipo ? String(body.tipo).trim() : null;
-    const categoria = body?.categoria ? String(body.categoria).trim() : null;
+
+    const funcao = body?.funcao
+      ? String(body.funcao).trim()
+      : null;
+
+    const categoria = body?.categoria
+      ? String(body.categoria).trim()
+      : null;
+
     const contrato_tipo = body?.contrato_tipo
       ? String(body.contrato_tipo).trim()
       : null;
-    const iban = body?.iban ? String(body.iban).trim() : null;
+
+    const iban = body?.iban
+      ? String(body.iban).trim()
+      : null;
 
     const custo_hora =
       body?.custo_hora === null || body?.custo_hora === ''
@@ -34,14 +60,18 @@ export async function POST(req: Request) {
         : Number(body.custo_hora);
 
     const data_admissao =
-      body?.data_admissao && String(body.data_admissao).trim() !== ''
+      body?.data_admissao &&
+      String(body.data_admissao).trim() !== ''
         ? String(body.data_admissao)
         : null;
 
     const ativo = body?.ativo === false ? false : true;
 
-    const pode_aceder_sistema = body?.pode_aceder_sistema === true;
-    const pode_registar_ponto = body?.pode_registar_ponto === true;
+    const pode_aceder_sistema =
+      body?.pode_aceder_sistema === true;
+
+    const pode_registar_ponto =
+      body?.pode_registar_ponto === true;
 
     const supa = getServiceSupabase();
 
@@ -52,13 +82,19 @@ export async function POST(req: Request) {
         nif,
         email,
         telefone,
+
         tipo,
+        funcao,
         categoria,
         contrato_tipo,
+
         iban,
+
         custo_hora,
         data_admissao,
+
         ativo,
+
         pode_aceder_sistema,
         pode_registar_ponto,
       })
@@ -74,7 +110,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, error: e?.message || 'Erro inesperado' },
+      {
+        ok: false,
+        error: e?.message || 'Erro inesperado',
+      },
       { status: 500 },
     );
   }
