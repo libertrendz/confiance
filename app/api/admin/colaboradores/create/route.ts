@@ -1,4 +1,17 @@
-// app/api/admin/colaboradores/create/route.ts
+/**
+ * ============================================================
+ * CONFIANCE ERP
+ * Arquivo: app/api/admin/colaboradores/create/route.ts
+ * Módulo: Colaboradores
+ * Endpoint: Criar Colaborador
+ *
+ * Objetivo:
+ * Criar colaborador associado à empresa ativa do sistema.
+ *
+ * Autor: Libertrendz
+ * ============================================================
+ */
+
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
 
@@ -37,12 +50,23 @@ export async function POST(req: Request) {
       );
     }
 
+    const empresaId = process.env.CONF_EMPRESA_ID;
+
+    if (!empresaId) {
+      return NextResponse.json(
+        { ok: false, error: 'CONF_EMPRESA_ID em falta' },
+        { status: 500 },
+      );
+    }
+
     const supa = getServiceSupabase();
 
     const { data, error } = await supa
       .from('colaboradores')
       .insert([
         {
+          empresa_id: empresaId,
+
           nome,
           nif,
           email,
@@ -53,7 +77,6 @@ export async function POST(req: Request) {
           ativo,
           pode_aceder_sistema,
           pode_registar_ponto,
-          // empresa_id: default via função/DEFAULT da tabela
         },
       ])
       .select('id')
@@ -66,7 +89,10 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true, id: data.id });
+    return NextResponse.json({
+      ok: true,
+      id: data.id,
+    });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message || 'Erro inesperado' },
