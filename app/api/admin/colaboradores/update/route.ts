@@ -36,6 +36,20 @@ export async function POST(req: Request) {
     const email = body?.email ? String(body.email).trim() : null;
     const telefone = body?.telefone ? String(body.telefone).trim() : null;
 
+    const morada = body?.morada
+      ? String(body.morada).trim()
+      : null;
+
+    const data_nasc =
+      body?.data_nasc &&
+      String(body.data_nasc).trim() !== ''
+        ? String(body.data_nasc)
+        : null;
+
+    const notas = body?.notas
+      ? String(body.notas).trim()
+      : null;
+
     const tipo = body?.tipo ? String(body.tipo).trim() : null;
 
     const funcao = body?.funcao
@@ -82,6 +96,10 @@ export async function POST(req: Request) {
         nif,
         email,
         telefone,
+
+        morada,
+        data_nasc,
+        notas,
 
         tipo,
         funcao,
