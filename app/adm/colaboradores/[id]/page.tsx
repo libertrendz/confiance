@@ -55,12 +55,12 @@ type RecordColab = {
   salario_tipo?: string | null;
   salario_atual?: number | null;
   custo_hora?: number | null;
+  custo_dia?: number | null;
 
   iban?: string | null;
 
   data_admissao?: string | null;
   data_saida?: string | null;
-  data_demissao?: string | null;
 
   notas?: string | null;
 
@@ -377,28 +377,38 @@ export default function ColaboradorWorkspacePage({
             />
 
             <CardInfo
-              label="Salário Atual"
-              value={
-                record.salario_atual != null
-                  ? `${record.salario_atual} €`
-                  : '—'
-              }
-            />
+  label="Tipo de Remuneração"
+  value={record.salario_tipo || '—'}
+/>
 
-            <CardInfo
-              label="Tipo de Salário"
-              value={record.salario_tipo}
-            />
-
-            <CardInfo
-              label="Custo Hora"
-              value={
-                record.custo_hora != null
-                  ? `${record.custo_hora} €`
-                  : '—'
-              }
-            />
-
+<CardInfo
+  label={
+    record.salario_tipo === 'hora'
+      ? 'Custo Hora'
+      : record.salario_tipo === 'dia'
+      ? 'Custo Dia'
+      : 'Salário Mensal'
+  }
+  value={
+    record.salario_tipo === 'hora'
+      ? (
+          record.custo_hora != null
+            ? `${record.custo_hora} €`
+            : '—'
+        )
+      : record.salario_tipo === 'dia'
+      ? (
+          record.custo_dia != null
+            ? `${record.custo_dia} €`
+            : '—'
+        )
+      : (
+          record.salario_atual != null
+            ? `${record.salario_atual} €`
+            : '—'
+        )
+  }
+/>
             <CardInfo label="IBAN" value={record.iban} />
 
             <CardInfo
@@ -411,10 +421,7 @@ export default function ColaboradorWorkspacePage({
               value={fmtDate(record.data_saida)}
             />
 
-            <CardInfo
-              label="Data Demissão"
-              value={fmtDate(record.data_demissao)}
-            />
+        
           </section>
 
           <section
