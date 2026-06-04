@@ -8,6 +8,13 @@
  * Objetivo:
  * Criar colaborador associado à empresa ativa do sistema.
  *
+ * RH-003.5
+ * - salario_tipo: hora | dia | mensal
+ * - custo_hora
+ * - custo_dia
+ * - salario_atual
+ * - data_saida
+ *
  * Autor: Libertrendz
  * ============================================================
  */
@@ -18,48 +25,49 @@ import { getServiceSupabase } from '@/lib/supabaseServer';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+type SalarioTipo = 'hora' | 'dia' | 'mensal' | null;
+
+function cleanText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value).trim();
+
+  return text === '' ? null : text;
+}
+
+function cleanDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value).trim();
+
+  return text === '' ? null : text;
+}
+
+function cleanNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const num = Number(value);
+
+  return Number.isFinite(num) ? num : null;
+}
+
+function cleanSalarioTipo(value: unknown): SalarioTipo {
+  const text = cleanText(value);
+
+  if (text === 'hora' || text === 'dia' || text === 'mensal') {
+    return text;
+  }
+
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
 
-    const nome = String(body?.nome || '').trim();
-    const nif = body?.nif ? String(body.nif).trim() : null;
-    const email = body?.email ? String(body.email).trim() : null;
-    const telefone = body?.telefone ? String(body.telefone).trim() : null;
-
-    const morada = body?.morada ? String(body.morada).trim() : null;
-
-    const data_nasc =
-      body?.data_nasc && String(body.data_nasc).trim() !== ''
-        ? String(body.data_nasc)
-        : null;
-
-    const tipo = body?.tipo ? String(body.tipo).trim() : null;
-    const funcao = body?.funcao ? String(body.funcao).trim() : null;
-    const categoria = body?.categoria ? String(body.categoria).trim() : null;
-
-    const contrato_tipo = body?.contrato_tipo
-      ? String(body.contrato_tipo).trim()
-      : null;
-
-    const iban = body?.iban ? String(body.iban).trim() : null;
-
-    const custo_hora =
-      body?.custo_hora === null || body?.custo_hora === ''
-        ? null
-        : Number(body.custo_hora);
-
-    const data_admissao =
-      body?.data_admissao && String(body.data_admissao).trim() !== ''
-        ? String(body.data_admissao)
-        : null;
-
-    const notas = body?.notas ? String(body.notas).trim() : null;
-
-    const ativo = body?.ativo === false ? false : true;
-
-    const pode_aceder_sistema = body?.pode_aceder_sistema === true;
-    const pode_registar_ponto = body?.pode_registar_ponto === true;
+    const nome = cleanText(body?.nome);
 
     if (!nome) {
       return NextResponse.json(
@@ -67,6 +75,57 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    const nif = cleanText(body?.nif);
+    const email = cleanText(body?.email);
+    const telefone = cleanText(body?.telefone);
+
+    const morada = cleanText(body?.morada);
+    const data_nasc = cleanDate(body?.data_nasc);
+
+    const tipo = cleanText(body?.tipo);
+    const funcao = cleanText(body?.funcao);
+    const categoria = cleanText(body?.categoria);
+    const contrato_tipo = cleanText(body?.contrato_tipo);
+
+    const salario_tipo = cleanSalarioTipo(body?.salario_tipo);
+
+    let custo_hora = cleanNumber(body?.custo_hora);
+    let custo_dia = cleanNumber(body?.custo_dia);
+    let salario_atual = cleanNumber(body?.salario_atual);
+
+    if (salario_tipo === 'hora') {
+      custo_dia = null;
+      salario_atual = null;
+    }
+
+    if (salario_tipo === 'dia') {
+      custo_hora = null;
+      salario_atual = null;
+    }
+
+    if (salario_tipo === 'mensal') {
+      custo_hora = null;
+      custo_dia = null;
+    }
+
+    if (!salario_tipo) {
+      custo_hora = null;
+      custo_dia = null;
+      salario_atual = null;
+    }
+
+    const iban = cleanText(body?.iban);
+
+    const data_admissao = cleanDate(body?.data_admissao);
+    const data_saida = cleanDate(body?.data_saida);
+
+    const notas = cleanText(body?.notas);
+
+    const ativo = body?.ativo === false ? false : true;
+
+    const pode_aceder_sistema = body?.pode_aceder_sistema === true;
+    const pode_registar_ponto = body?.pode_registar_ponto === true;
 
     const empresaId = process.env.CONF_EMPRESA_ID;
 
@@ -89,6 +148,7 @@ export async function POST(req: Request) {
           nif,
           email,
           telefone,
+
           morada,
           data_nasc,
 
@@ -97,13 +157,20 @@ export async function POST(req: Request) {
           categoria,
           contrato_tipo,
 
+          salario_tipo,
           custo_hora,
+          custo_dia,
+          salario_atual,
+
           iban,
+
           data_admissao,
+          data_saida,
 
           notas,
 
           ativo,
+
           pode_aceder_sistema,
           pode_registar_ponto,
         },
@@ -113,7 +180,10 @@ export async function POST(req: Request) {
 
     if (error) {
       return NextResponse.json(
-        { ok: false, error: error.message },
+        {
+          ok: false,
+          error: error.message,
+        },
         { status: 400 },
       );
     }
@@ -124,7 +194,10 @@ export async function POST(req: Request) {
     });
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, error: e?.message || 'Erro inesperado' },
+      {
+        ok: false,
+        error: e?.message || 'Erro inesperado',
+      },
       { status: 500 },
     );
   }
