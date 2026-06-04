@@ -1,23 +1,23 @@
 /**
-
-* ============================================================
-* CONFIANCE ERP
-* Arquivo: app/api/admin/colaboradores/update/route.ts
-* Módulo: Colaboradores
-* Endpoint: Atualizar Colaborador
-*
-* Objetivo:
-* Atualizar dados cadastrais, contratuais e operacionais.
-*
-* RH-003.5
-* * salario_tipo (horista | mensalista)
-* * salario_atual
-* * custo_hora condicionado
-* * data_saida
-*
-* Autor: Libertrendz
-* ============================================================
-  */
+ * ============================================================
+ * CONFIANCE ERP
+ * Arquivo: app/api/admin/colaboradores/update/route.ts
+ * Módulo: Colaboradores
+ * Endpoint: Atualizar Colaborador
+ *
+ * Objetivo:
+ * Atualizar dados cadastrais, contratuais e operacionais.
+ *
+ * RH-003.5:
+ * - salario_tipo: hora | dia | mensal
+ * - custo_hora para remuneração por hora
+ * - custo_dia para remuneração por dia
+ * - salario_atual para remuneração mensal
+ * - data_saida
+ *
+ * Autor: Libertrendz
+ * ============================================================
+ */
 
 import { NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabaseServer';
@@ -25,157 +25,153 @@ import { getServiceSupabase } from '@/lib/supabaseServer';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+type SalarioTipo = 'hora' | 'dia' | 'mensal' | null;
+
+function cleanText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text === '' ? null : text;
+}
+
+function cleanDate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text === '' ? null : text;
+}
+
+function cleanNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function cleanSalarioTipo(value: unknown): SalarioTipo {
+  const text = cleanText(value);
+
+  if (text === 'hora' || text === 'dia' || text === 'mensal') {
+    return text;
+  }
+
+  return null;
+}
+
 export async function POST(req: Request) {
-try {
-const body = await req.json().catch(() => ({}));
+  try {
+    const body = await req.json().catch(() => ({}));
 
-const id = String(body?.id || '').trim();
+    const id = cleanText(body?.id);
 
-if (!id) {
-  return NextResponse.json(
-    { ok: false, error: 'ID obrigatório' },
-    { status: 400 },
-  );
-}
+    if (!id) {
+      return NextResponse.json(
+        { ok: false, error: 'ID obrigatório' },
+        { status: 400 },
+      );
+    }
 
-const nome = body?.nome ? String(body.nome).trim() : null;
-const nif = body?.nif ? String(body.nif).trim() : null;
-const email = body?.email ? String(body.email).trim() : null;
-const telefone = body?.telefone ? String(body.telefone).trim() : null;
+    const nome = cleanText(body?.nome);
+    const nif = cleanText(body?.nif);
+    const email = cleanText(body?.email);
+    const telefone = cleanText(body?.telefone);
 
-const morada =
-  body?.morada ? String(body.morada).trim() : null;
+    const morada = cleanText(body?.morada);
+    const data_nasc = cleanDate(body?.data_nasc);
 
-const data_nasc =
-  body?.data_nasc &&
-  String(body.data_nasc).trim() !== ''
-    ? String(body.data_nasc)
-    : null;
+    const tipo = cleanText(body?.tipo);
+    const funcao = cleanText(body?.funcao);
+    const categoria = cleanText(body?.categoria);
+    const contrato_tipo = cleanText(body?.contrato_tipo);
 
-const notas =
-  body?.notas ? String(body.notas).trim() : null;
+    const salario_tipo = cleanSalarioTipo(body?.salario_tipo);
 
-const tipo =
-  body?.tipo ? String(body.tipo).trim() : null;
+    let custo_hora = cleanNumber(body?.custo_hora);
+    let custo_dia = cleanNumber(body?.custo_dia);
+    let salario_atual = cleanNumber(body?.salario_atual);
 
-const funcao =
-  body?.funcao ? String(body.funcao).trim() : null;
+    if (salario_tipo === 'hora') {
+      custo_dia = null;
+      salario_atual = null;
+    }
 
-const categoria =
-  body?.categoria
-    ? String(body.categoria).trim()
-    : null;
+    if (salario_tipo === 'dia') {
+      custo_hora = null;
+      salario_atual = null;
+    }
 
-const contrato_tipo =
-  body?.contrato_tipo
-    ? String(body.contrato_tipo).trim()
-    : null;
+    if (salario_tipo === 'mensal') {
+      custo_hora = null;
+      custo_dia = null;
+    }
 
-const salario_tipo =
-  body?.salario_tipo
-    ? String(body.salario_tipo).trim()
-    : null;
+    if (!salario_tipo) {
+      custo_hora = null;
+      custo_dia = null;
+      salario_atual = null;
+    }
 
-const salario_atual =
-  body?.salario_atual === null ||
-  body?.salario_atual === ''
-    ? null
-    : Number(body.salario_atual);
+    const iban = cleanText(body?.iban);
 
-let custo_hora =
-  body?.custo_hora === null ||
-  body?.custo_hora === ''
-    ? null
-    : Number(body.custo_hora);
+    const data_admissao = cleanDate(body?.data_admissao);
+    const data_saida = cleanDate(body?.data_saida);
 
-let salarioAtualFinal = salario_atual;
+    const notas = cleanText(body?.notas);
 
-if (salario_tipo === 'horista') {
-  salarioAtualFinal = null;
-}
+    const ativo = body?.ativo === false ? false : true;
 
-if (salario_tipo === 'mensalista') {
-  custo_hora = null;
-}
+    const pode_aceder_sistema = body?.pode_aceder_sistema === true;
+    const pode_registar_ponto = body?.pode_registar_ponto === true;
 
-const iban =
-  body?.iban ? String(body.iban).trim() : null;
+    const supa = getServiceSupabase();
 
-const data_admissao =
-  body?.data_admissao &&
-  String(body.data_admissao).trim() !== ''
-    ? String(body.data_admissao)
-    : null;
+    const { error } = await supa
+      .from('colaboradores')
+      .update({
+        nome,
+        nif,
+        email,
+        telefone,
 
-const data_saida =
-  body?.data_saida &&
-  String(body.data_saida).trim() !== ''
-    ? String(body.data_saida)
-    : null;
+        morada,
+        data_nasc,
 
-const ativo =
-  body?.ativo === false ? false : true;
+        tipo,
+        funcao,
+        categoria,
+        contrato_tipo,
 
-const pode_aceder_sistema =
-  body?.pode_aceder_sistema === true;
+        salario_tipo,
+        custo_hora,
+        custo_dia,
+        salario_atual,
 
-const pode_registar_ponto =
-  body?.pode_registar_ponto === true;
+        iban,
 
-const supa = getServiceSupabase();
+        data_admissao,
+        data_saida,
 
-const { error } = await supa
-  .from('colaboradores')
-  .update({
-    nome,
-    nif,
-    email,
-    telefone,
+        notas,
 
-    morada,
-    data_nasc,
+        ativo,
 
-    tipo,
-    funcao,
-    categoria,
-    contrato_tipo,
+        pode_aceder_sistema,
+        pode_registar_ponto,
+      })
+      .eq('id', id);
 
-    salario_tipo,
-    salario_atual: salarioAtualFinal,
-    custo_hora,
+    if (error) {
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: 400 },
+      );
+    }
 
-    iban,
-
-    data_admissao,
-    data_saida,
-
-    notas,
-
-    ativo,
-
-    pode_aceder_sistema,
-    pode_registar_ponto,
-  })
-  .eq('id', id);
-
-if (error) {
-  return NextResponse.json(
-    { ok: false, error: error.message },
-    { status: 400 },
-  );
-}
-
-return NextResponse.json({
-  ok: true,
-});
-
-} catch (e: any) {
-return NextResponse.json(
-{
-ok: false,
-error: e?.message || 'Erro inesperado',
-},
-{ status: 500 },
-);
-}
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: e?.message || 'Erro inesperado',
+      },
+      { status: 500 },
+    );
+  }
 }
