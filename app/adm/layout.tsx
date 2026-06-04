@@ -99,7 +99,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const navItems: NavItem[] = [
     { href: '/adm/dashboard', label: 'Início', visible: isAdmin || isGestor },
     { href: '/adm/utilizadores', label: 'Utilizadores', visible: isAdmin || isGestor },
-    { href: '/adm/colaboradores', label: 'Colaboradores', visible: isAdmin, disabled: true, hint: 'Em breve' },
+    { href: '/adm/colaboradores', label: 'Colaboradores', visible: isAdmin || isGestor },
     { href: '/adm/roteiros', label: 'Roteiros e Tarefas', visible: isAdmin || isGestor },
     { href: '/adm/ponto', label: 'Registos de Ponto', visible: isAdmin || isGestor },
     { href: '/adm/clientes', label: 'Clientes', visible: isAdmin, disabled: true, hint: 'Em breve' },
