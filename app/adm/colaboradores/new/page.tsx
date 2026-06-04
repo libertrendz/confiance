@@ -19,6 +19,7 @@
 import { useState } from 'react';
 
 type PerfilAcesso = '' | 'externo_ponto' | 'interno_total';
+type SalarioTipo = 'hora' | 'dia' | 'mensal';
 
 type FormState = {
   nome: string;
@@ -33,9 +34,14 @@ type FormState = {
   categoria: string;
   contrato_tipo: string;
 
+  salario_tipo: SalarioTipo;
   custo_hora: string;
+  custo_dia: string;
+  salario_atual: string;
+
   iban: string;
   data_admissao: string;
+  data_saida: string;
 
   notas: string;
 
@@ -52,6 +58,12 @@ function mapPerfilToFlags(perfil: PerfilAcesso) {
     default:
       return { pode_aceder_sistema: false, pode_registar_ponto: false };
   }
+}
+
+function toNumberOrNull(value: string) {
+  if (!value || value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -86,9 +98,14 @@ export default function ColaboradorNewPage() {
     categoria: '',
     contrato_tipo: '',
 
+    salario_tipo: 'mensal',
     custo_hora: '',
+    custo_dia: '',
+    salario_atual: '',
+
     iban: '',
     data_admissao: '',
+    data_saida: '',
 
     notas: '',
 
@@ -120,9 +137,24 @@ export default function ColaboradorNewPage() {
         categoria: form.categoria || null,
         contrato_tipo: form.contrato_tipo || null,
 
-        custo_hora: form.custo_hora ? Number(form.custo_hora) : null,
+        salario_tipo: form.salario_tipo,
+        custo_hora:
+          form.salario_tipo === 'hora'
+            ? toNumberOrNull(form.custo_hora)
+            : null,
+        custo_dia:
+          form.salario_tipo === 'dia'
+            ? toNumberOrNull(form.custo_dia)
+            : null,
+        salario_atual:
+          form.salario_tipo === 'mensal'
+            ? toNumberOrNull(form.salario_atual)
+            : null,
+
         iban: form.iban || null,
+
         data_admissao: form.data_admissao || null,
+        data_saida: form.data_saida || null,
 
         notas: form.notas || null,
 
@@ -300,16 +332,24 @@ export default function ColaboradorNewPage() {
 
         <div style={grid2}>
           <div>
-            <label className="muted">Custo hora (€)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.custo_hora}
+            <label className="muted">Tipo de remuneração</label>
+            <select
+              value={form.salario_tipo}
               onChange={(e) =>
-                setForm((f) => ({ ...f, custo_hora: e.target.value }))
+                setForm((f) => ({
+                  ...f,
+                  salario_tipo: e.target.value as SalarioTipo,
+                  custo_hora: '',
+                  custo_dia: '',
+                  salario_atual: '',
+                }))
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+            >
+              <option value="hora">Hora</option>
+              <option value="dia">Dia</option>
+              <option value="mensal">Mensal</option>
+            </select>
           </div>
 
           <div>
@@ -323,6 +363,68 @@ export default function ColaboradorNewPage() {
               style={inputStyle}
             />
           </div>
+        </div>
+
+        <div style={grid2}>
+          <div>
+            <label className="muted">Data de saída</label>
+            <input
+              type="date"
+              value={form.data_saida}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, data_saida: e.target.value }))
+              }
+              style={inputStyle}
+            />
+          </div>
+
+          {form.salario_tipo === 'hora' && (
+            <div>
+              <label className="muted">Custo hora (€)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.custo_hora}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, custo_hora: e.target.value }))
+                }
+                style={inputStyle}
+              />
+            </div>
+          )}
+
+          {form.salario_tipo === 'dia' && (
+            <div>
+              <label className="muted">Custo dia (€)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.custo_dia}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, custo_dia: e.target.value }))
+                }
+                style={inputStyle}
+              />
+            </div>
+          )}
+
+          {form.salario_tipo === 'mensal' && (
+            <div>
+              <label className="muted">Salário mensal (€)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.salario_atual}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    salario_atual: e.target.value,
+                  }))
+                }
+                style={inputStyle}
+              />
+            </div>
+          )}
         </div>
 
         <div>
