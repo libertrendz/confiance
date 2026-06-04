@@ -169,7 +169,6 @@ if (error) {
 return NextResponse.json({
   ok: true,
 });
-```
 
 } catch (e: any) {
 return NextResponse.json(
