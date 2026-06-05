@@ -16,10 +16,15 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type PerfilAcesso = '' | 'externo_ponto' | 'interno_total';
 type SalarioTipo = 'hora' | 'dia' | 'mensal';
+
+type CatalogItem = {
+  id: string;
+  nome: string;
+};
 
 type FormState = {
   nome: string;
@@ -66,6 +71,23 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(n) ? n : null;
 }
 
+async function fetchCatalog(endpoint: string): Promise<CatalogItem[]> {
+  const res = await fetch(endpoint, { cache: 'no-store' });
+  const ct = res.headers.get('content-type') || '';
+
+  if (!ct.includes('application/json')) {
+    throw new Error(`Resposta inválida do servidor (${res.status})`);
+  }
+
+  const j = await res.json();
+
+  if (!j.ok) {
+    throw new Error(j.error || 'Falha ao carregar catálogo RH');
+  }
+
+  return j.rows || [];
+}
+
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: 10,
@@ -82,6 +104,12 @@ const grid2: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
   gap: 12,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontWeight: 700,
+  marginTop: 6,
+  marginBottom: 2,
 };
 
 export default function ColaboradorNewPage() {
@@ -113,8 +141,41 @@ export default function ColaboradorNewPage() {
     perfil_acesso: 'externo_ponto',
   });
 
+  const [funcoes, setFuncoes] = useState<CatalogItem[]>([]);
+  const [categorias, setCategorias] = useState<CatalogItem[]>([]);
+  const [contratos, setContratos] = useState<CatalogItem[]>([]);
+
+  const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const [f, c, t] = await Promise.all([
+          fetchCatalog('/api/admin/rh/funcoes/list'),
+          fetchCatalog('/api/admin/rh/categorias/list'),
+          fetchCatalog('/api/admin/rh/contratos/list'),
+        ]);
+
+        if (alive) {
+          setFuncoes(f);
+          setCategorias(c);
+          setContratos(t);
+        }
+      } catch (e: any) {
+        if (alive) setErr(e?.message || 'Falha ao carregar catálogos RH');
+      } finally {
+        if (alive) setLoadingCatalogs(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -201,6 +262,8 @@ export default function ColaboradorNewPage() {
         className="card"
         style={{ display: 'grid', gap: 12, maxWidth: 860 }}
       >
+        <div style={sectionTitleStyle}>Dados pessoais</div>
+
         <div>
           <label className="muted">Nome *</label>
           <input
@@ -276,6 +339,8 @@ export default function ColaboradorNewPage() {
           />
         </div>
 
+        <div style={sectionTitleStyle}>Dados profissionais</div>
+
         <div style={grid2}>
           <div>
             <label className="muted">Tipo</label>
@@ -293,31 +358,47 @@ export default function ColaboradorNewPage() {
 
           <div>
             <label className="muted">Função</label>
-            <input
+            <select
               value={form.funcao}
               onChange={(e) =>
                 setForm((f) => ({ ...f, funcao: e.target.value }))
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+              disabled={loadingCatalogs}
+            >
+              <option value="">—</option>
+              {funcoes.map((item) => (
+                <option key={item.id} value={item.nome}>
+                  {item.nome}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div style={grid2}>
           <div>
             <label className="muted">Categoria</label>
-            <input
+            <select
               value={form.categoria}
               onChange={(e) =>
                 setForm((f) => ({ ...f, categoria: e.target.value }))
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+              disabled={loadingCatalogs}
+            >
+              <option value="">—</option>
+              {categorias.map((item) => (
+                <option key={item.id} value={item.nome}>
+                  {item.nome}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="muted">Tipo de contrato</label>
-            <input
+            <select
               value={form.contrato_tipo}
               onChange={(e) =>
                 setForm((f) => ({
@@ -325,10 +406,20 @@ export default function ColaboradorNewPage() {
                   contrato_tipo: e.target.value,
                 }))
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+              disabled={loadingCatalogs}
+            >
+              <option value="">—</option>
+              {contratos.map((item) => (
+                <option key={item.id} value={item.nome}>
+                  {item.nome}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
+
+        <div style={sectionTitleStyle}>Contrato</div>
 
         <div style={grid2}>
           <div>
@@ -350,32 +441,6 @@ export default function ColaboradorNewPage() {
               <option value="dia">Dia</option>
               <option value="mensal">Mensal</option>
             </select>
-          </div>
-
-          <div>
-            <label className="muted">Data de admissão</label>
-            <input
-              type="date"
-              value={form.data_admissao}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, data_admissao: e.target.value }))
-              }
-              style={inputStyle}
-            />
-          </div>
-        </div>
-
-        <div style={grid2}>
-          <div>
-            <label className="muted">Data de saída</label>
-            <input
-              type="date"
-              value={form.data_saida}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, data_saida: e.target.value }))
-              }
-              style={inputStyle}
-            />
           </div>
 
           {form.salario_tipo === 'hora' && (
@@ -427,6 +492,32 @@ export default function ColaboradorNewPage() {
           )}
         </div>
 
+        <div style={grid2}>
+          <div>
+            <label className="muted">Data de admissão</label>
+            <input
+              type="date"
+              value={form.data_admissao}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, data_admissao: e.target.value }))
+              }
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label className="muted">Data de saída</label>
+            <input
+              type="date"
+              value={form.data_saida}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, data_saida: e.target.value }))
+              }
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
         <div>
           <label className="muted">IBAN</label>
           <input
@@ -437,6 +528,8 @@ export default function ColaboradorNewPage() {
             style={inputStyle}
           />
         </div>
+
+        <div style={sectionTitleStyle}>Acessos</div>
 
         <div>
           <label className="muted">Perfil de acesso</label>
@@ -457,18 +550,6 @@ export default function ColaboradorNewPage() {
         </div>
 
         <div>
-          <label className="muted">Notas</label>
-          <textarea
-            value={form.notas}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, notas: e.target.value }))
-            }
-            rows={4}
-            style={{ ...inputStyle, resize: 'vertical' }}
-          />
-        </div>
-
-        <div>
           <label className="muted">
             <input
               type="checkbox"
@@ -480,6 +561,20 @@ export default function ColaboradorNewPage() {
             />
             Ativo
           </label>
+        </div>
+
+        <div style={sectionTitleStyle}>Observações</div>
+
+        <div>
+          <label className="muted">Notas</label>
+          <textarea
+            value={form.notas}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, notas: e.target.value }))
+            }
+            rows={4}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
         </div>
 
         {err && <p style={{ color: 'crimson' }}>{err}</p>}
