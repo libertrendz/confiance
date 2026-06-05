@@ -29,15 +29,15 @@ const cards: Card[] = [
     status: 'ativo',
   },
   {
-    title: 'Fornecedores',
-    desc: 'Gestão de fornecedores da Confiance, por empresa.',
-    href: '/adm/fornecedores',
-    status: 'ativo',
-  },
-  {
     title: 'Colaboradores',
     desc: 'Cadastro completo: dados de pagamento, contrato e integração com utilizadores.',
     href: '/adm/colaboradores',
+    status: 'ativo',
+  },
+  {
+    title: 'Fornecedores',
+    desc: 'Gestão de fornecedores da Confiance, por empresa.',
+    href: '/adm/fornecedores',
     status: 'ativo',
   },
   {
