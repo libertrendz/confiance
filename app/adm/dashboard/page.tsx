@@ -37,7 +37,8 @@ const cards: Card[] = [
   {
     title: 'Colaboradores',
     desc: 'Cadastro completo: dados de pagamento, contrato e integração com utilizadores.',
-    status: 'embreve',
+    href: '/adm/colaboradores',
+    status: 'ativo',
   },
   {
     title: 'Clientes',
