@@ -20,6 +20,11 @@ import { useEffect, useState } from 'react';
 type PerfilAcesso = '' | 'externo_ponto' | 'interno_total';
 type SalarioTipo = 'hora' | 'dia' | 'mensal';
 
+type CatalogItem = {
+  id: string;
+  nome: string;
+};
+
 type RecordColab = {
   id: string;
   nome: string | null;
@@ -83,6 +88,42 @@ function normalizeSalarioTipo(value: string | null): SalarioTipo {
   return 'mensal';
 }
 
+async function fetchCatalog(endpoint: string): Promise<CatalogItem[]> {
+  const res = await fetch(endpoint, { cache: 'no-store' });
+  const ct = res.headers.get('content-type') || '';
+
+  if (!ct.includes('application/json')) {
+    throw new Error(`Resposta inválida do servidor (${res.status})`);
+  }
+
+  const j = await res.json();
+
+  if (!j.ok) {
+    throw new Error(j.error || 'Falha ao carregar catálogo RH');
+  }
+
+  return j.rows || [];
+}
+
+function ensureOption(
+  items: CatalogItem[],
+  value: string | null | undefined,
+): CatalogItem[] {
+  if (!value) return items;
+
+  if (items.some((item) => item.nome === value)) {
+    return items;
+  }
+
+  return [
+    {
+      id: `legacy-${value}`,
+      nome: value,
+    },
+    ...items,
+  ];
+}
+
 export default function ColaboradorEditPage({
   params,
 }: {
@@ -91,7 +132,13 @@ export default function ColaboradorEditPage({
   const id = params?.id;
 
   const [record, setRecord] = useState<RecordColab | null>(null);
+
+  const [funcoes, setFuncoes] = useState<CatalogItem[]>([]);
+  const [categorias, setCategorias] = useState<CatalogItem[]>([]);
+  const [contratos, setContratos] = useState<CatalogItem[]>([]);
+
   const [loading, setLoading] = useState(true);
+  const [loadingCatalogs, setLoadingCatalogs] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -147,6 +194,38 @@ export default function ColaboradorEditPage({
       alive = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const [f, c, t] = await Promise.all([
+          fetchCatalog('/api/admin/rh/funcoes/list'),
+          fetchCatalog('/api/admin/rh/categorias/list'),
+          fetchCatalog('/api/admin/rh/contratos/list'),
+        ]);
+
+        if (alive) {
+          setFuncoes(f);
+          setCategorias(c);
+          setContratos(t);
+        }
+      } catch (e: any) {
+        if (alive) {
+          setErr(e?.message || 'Falha ao carregar catálogos RH');
+        }
+      } finally {
+        if (alive) {
+          setLoadingCatalogs(false);
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -245,6 +324,8 @@ export default function ColaboradorEditPage({
         className="card"
         style={{ display: 'grid', gap: 12, maxWidth: 860 }}
       >
+        <div style={sectionTitleStyle}>Dados pessoais</div>
+
         <div>
           <label className="muted">Nome *</label>
           <input
@@ -332,6 +413,8 @@ export default function ColaboradorEditPage({
           />
         </div>
 
+        <div style={sectionTitleStyle}>Dados profissionais</div>
+
         <div style={grid2}>
           <div>
             <label className="muted">Tipo</label>
@@ -352,45 +435,73 @@ export default function ColaboradorEditPage({
 
           <div>
             <label className="muted">Função</label>
-            <input
+            <select
               value={record.funcao || ''}
               onChange={(e) =>
                 setRecord((r) =>
-                  r ? { ...r, funcao: e.target.value } : r,
+                  r ? { ...r, funcao: e.target.value || null } : r,
                 )
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+              disabled={loadingCatalogs}
+            >
+              <option value="">—</option>
+              {ensureOption(funcoes, record.funcao).map((item) => (
+                <option key={item.id} value={item.nome}>
+                  {item.nome}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div style={grid2}>
           <div>
             <label className="muted">Categoria</label>
-            <input
+            <select
               value={record.categoria || ''}
               onChange={(e) =>
                 setRecord((r) =>
-                  r ? { ...r, categoria: e.target.value } : r,
+                  r ? { ...r, categoria: e.target.value || null } : r,
                 )
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+              disabled={loadingCatalogs}
+            >
+              <option value="">—</option>
+              {ensureOption(categorias, record.categoria).map((item) => (
+                <option key={item.id} value={item.nome}>
+                  {item.nome}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="muted">Tipo de contrato</label>
-            <input
+            <select
               value={record.contrato_tipo || ''}
               onChange={(e) =>
                 setRecord((r) =>
-                  r ? { ...r, contrato_tipo: e.target.value } : r,
+                  r
+                    ? { ...r, contrato_tipo: e.target.value || null }
+                    : r,
                 )
               }
-              style={inputStyle}
-            />
+              style={selectStyle}
+              disabled={loadingCatalogs}
+            >
+              <option value="">—</option>
+              {ensureOption(contratos, record.contrato_tipo).map((item) => (
+                <option key={item.id} value={item.nome}>
+                  {item.nome}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
+
+        <div style={sectionTitleStyle}>Contrato</div>
 
         <div style={grid2}>
           <div>
@@ -416,38 +527,6 @@ export default function ColaboradorEditPage({
               <option value="dia">Dia</option>
               <option value="mensal">Mensal</option>
             </select>
-          </div>
-
-          <div>
-            <label className="muted">Data de admissão</label>
-            <input
-              type="date"
-              value={record.data_admissao?.slice(0, 10) || ''}
-              onChange={(e) =>
-                setRecord((r) =>
-                  r
-                    ? { ...r, data_admissao: e.target.value || null }
-                    : r,
-                )
-              }
-              style={inputStyle}
-            />
-          </div>
-        </div>
-
-        <div style={grid2}>
-          <div>
-            <label className="muted">Data de saída</label>
-            <input
-              type="date"
-              value={record.data_saida?.slice(0, 10) || ''}
-              onChange={(e) =>
-                setRecord((r) =>
-                  r ? { ...r, data_saida: e.target.value || null } : r,
-                )
-              }
-              style={inputStyle}
-            />
           </div>
 
           {salarioTipo === 'hora' && (
@@ -526,6 +605,38 @@ export default function ColaboradorEditPage({
           )}
         </div>
 
+        <div style={grid2}>
+          <div>
+            <label className="muted">Data de admissão</label>
+            <input
+              type="date"
+              value={record.data_admissao?.slice(0, 10) || ''}
+              onChange={(e) =>
+                setRecord((r) =>
+                  r
+                    ? { ...r, data_admissao: e.target.value || null }
+                    : r,
+                )
+              }
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label className="muted">Data de saída</label>
+            <input
+              type="date"
+              value={record.data_saida?.slice(0, 10) || ''}
+              onChange={(e) =>
+                setRecord((r) =>
+                  r ? { ...r, data_saida: e.target.value || null } : r,
+                )
+              }
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
         <div>
           <label className="muted">IBAN</label>
           <input
@@ -538,6 +649,8 @@ export default function ColaboradorEditPage({
             style={inputStyle}
           />
         </div>
+
+        <div style={sectionTitleStyle}>Acessos</div>
 
         <div>
           <label className="muted">Perfil de acesso</label>
@@ -562,20 +675,6 @@ export default function ColaboradorEditPage({
         </div>
 
         <div>
-          <label className="muted">Notas</label>
-          <textarea
-            value={record.notas || ''}
-            onChange={(e) =>
-              setRecord((r) =>
-                r ? { ...r, notas: e.target.value } : r,
-              )
-            }
-            rows={4}
-            style={{ ...inputStyle, resize: 'vertical' }}
-          />
-        </div>
-
-        <div>
           <label className="muted">
             <input
               type="checkbox"
@@ -589,6 +688,22 @@ export default function ColaboradorEditPage({
             />
             Ativo
           </label>
+        </div>
+
+        <div style={sectionTitleStyle}>Observações</div>
+
+        <div>
+          <label className="muted">Notas</label>
+          <textarea
+            value={record.notas || ''}
+            onChange={(e) =>
+              setRecord((r) =>
+                r ? { ...r, notas: e.target.value } : r,
+              )
+            }
+            rows={4}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
         </div>
 
         {err && <p style={{ color: 'crimson' }}>{err}</p>}
@@ -623,4 +738,10 @@ const grid2: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
   gap: 12,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontWeight: 700,
+  marginTop: 6,
+  marginBottom: 2,
 };
